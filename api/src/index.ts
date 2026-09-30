@@ -73,13 +73,13 @@ export class AdminApi extends WorkerEntrypoint<Env> implements AdminApiRpc {
   ) {
     const identity = await authenticateAdmin(this.env, this.ctx, token);
     if (!identity) return unauthorized;
-    return this.workspace(identity).adminList(caller(identity), options);
+    return workspaceFor(this.env, identity).adminList(caller(identity), options);
   }
 
   async readConversation(token: string, options: { conversation: string; before?: number; limit?: number }) {
     const identity = await authenticateAdmin(this.env, this.ctx, token);
     if (!identity) return unauthorized;
-    return this.workspace(identity).adminRead(caller(identity), options);
+    return workspaceFor(this.env, identity).adminRead(caller(identity), options);
   }
 
   async search(
@@ -88,7 +88,7 @@ export class AdminApi extends WorkerEntrypoint<Env> implements AdminApiRpc {
   ): Promise<AdminResult<{ matches: SearchMatch[]; nextCursor?: string }>> {
     const identity = await authenticateAdmin(this.env, this.ctx, token);
     if (!identity) return unauthorized;
-    const found = await this.workspace(identity).adminSearch(caller(identity), options);
+    const found = await workspaceFor(this.env, identity).adminSearch(caller(identity), options);
     if (!found.ok) return found;
     const matches = found.value.matches.map((match) => ({
       ...match,
@@ -96,10 +96,11 @@ export class AdminApi extends WorkerEntrypoint<Env> implements AdminApiRpc {
     }));
     return { ok: true, value: { ...found.value, matches } };
   }
+}
 
-  private workspace(identity: AdminIdentity) {
-    return this.env.WORKSPACE.get(this.env.WORKSPACE.idFromName(identity.workspaceId));
-  }
+// Module scope, not a method: RPC exposes every method, TypeScript `private` included.
+function workspaceFor(env: Env, identity: AdminIdentity) {
+  return env.WORKSPACE.get(env.WORKSPACE.idFromName(identity.workspaceId));
 }
 
 const caller = (identity: AdminIdentity) => ({ sub: identity.sub, grantId: identity.grantId });

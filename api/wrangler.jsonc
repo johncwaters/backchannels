@@ -49,5 +49,5 @@
   "workflows": [{ "name": "backchannels-reindex", "binding": "REINDEX", "class_name": "ReindexWorkflow" }],
   "r2_buckets": [{ "binding": "FILES", "bucket_name": "backchannels-files" }],
   "triggers": { "crons": ["17 3 * * *"] },
-  "observability": { "enabled": true }
+  "observability": { "enabled": true, "redact_query_string": true }
 }

@@ -9,5 +9,5 @@
   "assets": { "directory": "./dist", "binding": "ASSETS" },
   "kv_namespaces": [{ "binding": "SESSION", "id": "fd9b111ca70f414f976c5e4f3403551e" }],
   "services": [{ "binding": "ADMIN_API", "service": "backchannels-api", "entrypoint": "AdminApi" }],
-  "observability": { "enabled": true }
+  "observability": { "enabled": true, "redact_query_string": true }
 }

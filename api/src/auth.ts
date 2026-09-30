@@ -11,7 +11,7 @@ import {
   type TokenExchangeCallbackOptions,
 } from "@cloudflare/workers-oauth-provider";
 import { recordChecked, recordInstallation, recordRevoked, recordSignIn } from "./directory";
-import { GoogleSignInError, authorizeUrl, exchangeCode, recheck } from "./google";
+import { GoogleSignInError, allowedDomains, authorizeUrl, exchangeCode, recheck } from "./google";
 import { randomToken } from "./ids";
 import { LIMITS } from "./limits";
 import { serveMcp } from "./mcp";
@@ -96,6 +96,10 @@ async function tokenExchangeCallback({ grantType, grantId, clientId, props, env 
   }
   if (grantType !== "refresh_token") return;
 
+  if (!allowedDomains(env).includes(grant.domain)) {
+    await recordRevoked(env.DB, grantId, "hd_mismatch");
+    throw new OAuthError("invalid_grant", { description: "This workspace's domain is no longer allowed. Sign in again." });
+  }
   if (Date.now() - grant.google_checked_at < LIMITS.googleRecheckMs) return { accessTokenProps: accessProps(grant) };
   const result = await recheck(env, grant.google_refresh_token, grant.domain);
   if (!result.ok && result.revoke) {
