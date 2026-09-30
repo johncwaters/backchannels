@@ -110,6 +110,12 @@ export class AdminApi extends WorkerEntrypoint<Env> implements AdminApiRpc {
     return workspaceFor(this.env, identity).adminRead(caller(identity), options);
   }
 
+  async markRead(token: string, options: { conversation: string; thread?: number; upToSeq: number }) {
+    const identity = await authenticateAdmin(this.env, this.ctx, token);
+    if (!identity) return unauthorized;
+    return workspaceFor(this.env, identity).adminMarkRead(caller(identity), options);
+  }
+
   async listPins(token: string, options: { conversation: string }) {
     const identity = await authenticateAdmin(this.env, this.ctx, token);
     if (!identity) return unauthorized;

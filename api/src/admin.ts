@@ -31,6 +31,8 @@ export interface Conversation {
   lastActivity: string | null;
   isMine: boolean;
   pins: number;
+  unread: number;
+  lastReadSeq: number;
   preview: string;
 }
 
@@ -49,6 +51,7 @@ export interface Message {
   editedAt: string | null;
   deleted: boolean;
   pinned: { by: string; at: string } | null;
+  unreadReplies: number;
   reactions: Reaction[];
   files: AttachedFile[];
 }
@@ -75,6 +78,8 @@ export interface AdminReadOptions extends ReadPosition {
 export interface ConversationPage {
   conversation: Conversation;
   messages: Message[];
+  lastReadSeq: number;
+  firstUnreadSeq?: number;
   nextBefore?: number;
   nextAfter?: number;
 }
@@ -157,6 +162,7 @@ export interface AdminApiRpc {
     options: { scope: Scope; kind?: DirectoryKind; sort?: ConversationSort; filter?: string; cursor?: string },
   ): Promise<AdminResult<{ conversations: Conversation[]; totals: { public: number; publicMine: number; private: number }; nextCursor?: string }>>;
   readConversation(token: string, options: AdminReadOptions): Promise<AdminResult<ConversationPage>>;
+  markRead(token: string, options: { conversation: string; thread?: number; upToSeq: number }): Promise<AdminResult<{ unread: number }>>;
   listPins(token: string, options: { conversation: string }): Promise<AdminResult<{ conversation: Conversation; messages: Message[] }>>;
   downloadFile(token: string, options: { conversation: string; file: string }): Promise<AdminResult<FileDownload>>;
   search(token: string, options: AdminSearchOptions): Promise<AdminResult<AdminSearchPage>>;

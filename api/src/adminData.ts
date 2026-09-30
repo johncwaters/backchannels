@@ -2,7 +2,7 @@ import type { AdminReadOptions, AdminResult, AdminSearchOptions, AttachedFile, C
 import { matchOffsets, searchAsViewer, viewerMatchNote, type Searcher, type ViewerSearch } from "./search";
 import { SEARCH } from "./search/config";
 import { parseQuery, type FreeTerm } from "./search/query";
-import { ToolError, all, one, type AgentRow, type ConversationRow, type MessageRow, type Scope as ToolScope } from "./store";
+import { ToolError, all, one, run, type AgentRow, type ConversationRow, type MessageRow, type Scope as ToolScope } from "./store";
 
 const LIST_PAGE_SIZE = 100;
 const SEARCH_PAGE_SIZE = 50;
@@ -28,6 +28,9 @@ type ListedRow = ConversationRow & {
   people: number;
   is_mine: number;
   pin_count: number;
+  read_marker: number | null;
+  last_read_seq_effective: number;
+  unread: number;
 };
 type AuthoredMessageRow = MessageRow & {
   handle: string | null;
@@ -53,6 +56,11 @@ const MEMBER_HANDLES = `SELECT a.handle FROM members m JOIN agents a ON a.id = m
 const ownConversations = (subParameter: string) => `own_conversations AS (
   SELECT DISTINCT mb.conversation_id FROM members mb JOIN agents own ON own.id = mb.agent_id
   WHERE own.owner_sub = ${subParameter} AND own.revoked_at IS NULL)`;
+const SEQ_BEFORE_FIRST_VISIT = (conversationColumn: string) =>
+  `(SELECT max(before.seq) FROM messages before WHERE before.conversation_id = ${conversationColumn}
+     AND before.created_at <= (SELECT first_seen_at FROM viewers WHERE owner_sub = ?2))`;
+const UNREAD_MESSAGE = (subParameter: string) =>
+  `m.deleted_at IS NULL AND m.author_id NOT IN (SELECT id FROM agents WHERE owner_sub = ${subParameter})`;
 const LIVE_REPLIES = `(SELECT count(*) FROM messages reply WHERE reply.thread_root_id = m.id AND reply.deleted_at IS NULL)`;
 const LAST_LIVE_REPLY_AT = `(SELECT max(reply.created_at) FROM messages reply WHERE reply.thread_root_id = m.id AND reply.deleted_at IS NULL)`;
 const MESSAGE_COLUMNS = `m.*, a.handle, a.owner_email, a.owner_sub, ${LIVE_REPLIES} AS live_replies, ${LAST_LIVE_REPLY_AT} AS last_live_reply_at,
@@ -61,7 +69,12 @@ const MESSAGE_COLUMNS = `m.*, a.handle, a.owner_email, a.owner_sub, ${LIVE_REPLI
 const MESSAGE_JOINS = `LEFT JOIN agents a ON a.id = m.author_id LEFT JOIN pins pin ON pin.message_id = m.id`;
 const MESSAGE_SELECT = `SELECT ${MESSAGE_COLUMNS} FROM messages m ${MESSAGE_JOINS}`;
 
+function rememberViewer(context: AdminContext): void {
+  run(context.sql, "INSERT OR IGNORE INTO viewers (owner_sub, first_seen_at) VALUES (?, ?)", context.sub, context.now);
+}
+
 function listedConversations(context: AdminContext, condition: string, ...bindings: (string | number)[]): ListedRow[] {
+  rememberViewer(context);
   return all<ListedRow>(
     context.sql,
     `WITH ${ownConversations("?2")},
@@ -74,10 +87,19 @@ function listedConversations(context: AdminContext, condition: string, ...bindin
          (SELECT count(*) FROM messages m WHERE m.conversation_id = c.id AND m.deleted_at IS NULL AND m.created_at > ?1) AS messages_today,
          (SELECT count(DISTINCT a.owner_sub) FROM members m JOIN agents a ON a.id = m.agent_id WHERE m.conversation_id = c.id) AS people,
          (SELECT count(*) FROM pins p JOIN messages pm ON pm.id = p.message_id WHERE pm.conversation_id = c.id AND pm.deleted_at IS NULL) AS pin_count,
-         c.id IN (SELECT conversation_id FROM own_conversations) AS is_mine
+         c.id IN (SELECT conversation_id FROM own_conversations) AS is_mine,
+         (SELECT vr.last_read_seq FROM viewer_reads vr WHERE vr.owner_sub = ?2 AND vr.conversation_id = c.id) AS read_marker
        FROM conversations c WHERE c.archived_at IS NULL
+     ),
+     marked AS (
+       SELECT listed.*, coalesce(read_marker, ${SEQ_BEFORE_FIRST_VISIT("listed.id")}, 0) AS last_read_seq_effective FROM listed
      )
-     SELECT * FROM listed WHERE (kind = 'public' OR is_mine = 1) AND ${condition}`,
+     SELECT marked.*,
+       CASE WHEN is_mine = 1 OR read_marker IS NOT NULL
+         THEN (SELECT count(*) FROM messages m WHERE m.conversation_id = marked.id AND m.seq > marked.last_read_seq_effective
+           AND ${UNREAD_MESSAGE("?2")} AND (m.thread_root_id IS NULL OR m.also_in_channel = 1))
+         ELSE 0 END AS unread
+     FROM marked WHERE (kind = 'public' OR is_mine = 1) AND ${condition}`,
     context.now - DAY_MS,
     context.sub,
     ...bindings,
@@ -104,6 +126,8 @@ function viewConversation(context: AdminContext, row: ListedRow): Conversation {
     lastActivity: row.last_message_at === null ? null : new Date(row.last_message_at).toISOString(),
     isMine: row.is_mine === 1,
     pins: row.pin_count,
+    unread: row.unread,
+    lastReadSeq: row.last_read_seq_effective,
     preview: latest ? `${latest.handle ?? "unknown"}: ${latest.text}` : row.display_topic,
   };
 }
@@ -145,16 +169,35 @@ function filesByMessageId(context: AdminContext, rows: AuthoredMessageRow[]): Ma
   return filesById;
 }
 
-function viewMessages<Row extends AuthoredMessageRow>(context: AdminContext, rows: Row[]): Message[] {
+function unreadRepliesByRootId(context: AdminContext, rows: AuthoredMessageRow[], channelLastReadSeq: number): Map<number, number> {
+  const rootIds = rows.filter((row) => row.thread_root_id === null && row.live_replies > 0).map((row) => row.id);
+  if (rootIds.length === 0) return new Map();
+  const counts = all<{ root_id: number; unread: number }>(
+    context.sql,
+    `SELECT m.thread_root_id AS root_id, count(*) AS unread FROM messages m
+     LEFT JOIN viewer_thread_reads tr ON tr.owner_sub = ?1 AND tr.root_id = m.thread_root_id
+     WHERE m.thread_root_id IN (SELECT value FROM json_each(?2)) AND m.seq > coalesce(tr.last_read_seq, ?3) AND ${UNREAD_MESSAGE("?1")}
+     GROUP BY m.thread_root_id`,
+    context.sub,
+    JSON.stringify(rootIds),
+    channelLastReadSeq,
+  );
+  return new Map(counts.map((count) => [count.root_id, count.unread]));
+}
+
+function viewMessages<Row extends AuthoredMessageRow>(context: AdminContext, rows: Row[], unreadReplies: Map<number, number> = new Map()): Message[] {
   const reactionsById = reactionsByMessageId(context, rows);
   const filesById = filesByMessageId(context, rows);
-  return rows.map((row) => viewMessage(row, context.sub, reactionsById.get(row.id) ?? [], filesById.get(row.id) ?? []));
+  return rows.map((row) => ({
+    ...viewMessage(row, context.sub, reactionsById.get(row.id) ?? [], filesById.get(row.id) ?? []),
+    unreadReplies: unreadReplies.get(row.id) ?? 0,
+  }));
 }
 
 const isoTime = (epochMs: number | null) => (epochMs === null ? null : new Date(epochMs).toISOString());
 const agentName = (handle: string) => handle.slice(handle.indexOf("/") + 1);
 
-function viewMessage(row: AuthoredMessageRow, sub: string, reactions: Reaction[], files: AttachedFile[]): Message {
+function viewMessage(row: AuthoredMessageRow, sub: string, reactions: Reaction[], files: AttachedFile[]): Omit<Message, "unreadReplies"> {
   const email = row.owner_email ?? "";
   const handle = row.handle ?? "unknown";
   return {
@@ -299,16 +342,89 @@ export function adminRead(context: AdminContext, options: AdminReadOptions): Adm
   const scopeCondition = threadRoot
     ? "(m.id = ?1 OR m.thread_root_id = ?1)"
     : "m.conversation_id = ?1 AND (m.thread_root_id IS NULL OR m.also_in_channel = 1)";
-  const { rows, hasOlder, hasNewer } = readStream(context, scopeCondition, threadRoot?.id ?? row.id, options, limit);
+  const scopeId = threadRoot?.id ?? row.id;
+  const lastReadSeq = threadRoot ? threadLastReadSeq(context, threadRoot.id, row.last_read_seq_effective) : row.last_read_seq_effective;
+  const firstUnreadSeq = firstUnreadInStream(context, scopeCondition, scopeId, lastReadSeq);
+  const opensAtFirstUnread = positions.length === 0 && firstUnreadSeq !== null && streamCountFrom(context, scopeCondition, scopeId, firstUnreadSeq) > limit;
+  const position: ReadPosition = opensAtFirstUnread ? { around: firstUnreadSeq } : options;
+  const { rows, hasOlder, hasNewer } = readStream(context, scopeCondition, scopeId, position, limit);
+  const unreadReplies = threadRoot ? new Map<number, number>() : unreadRepliesByRootId(context, rows, row.last_read_seq_effective);
   return {
     ok: true,
     value: {
       conversation: viewConversation(context, row),
-      messages: viewMessages(context, rows),
+      messages: viewMessages(context, rows, unreadReplies),
+      lastReadSeq,
+      ...(firstUnreadSeq !== null ? { firstUnreadSeq } : {}),
       ...(hasOlder && rows.length ? { nextBefore: rows[0].seq } : {}),
       ...(hasNewer && rows.length ? { nextAfter: rows.at(-1)!.seq } : {}),
     },
   };
+}
+
+function threadLastReadSeq(context: AdminContext, rootId: number, channelLastReadSeq: number): number {
+  const marker = one<{ last_read_seq: number }>(
+    context.sql,
+    "SELECT last_read_seq FROM viewer_thread_reads WHERE owner_sub = ? AND root_id = ?",
+    context.sub,
+    rootId,
+  );
+  return marker?.last_read_seq ?? channelLastReadSeq;
+}
+
+function firstUnreadInStream(context: AdminContext, scopeCondition: string, scopeId: number, lastReadSeq: number): number | null {
+  const first = one<{ seq: number | null }>(
+    context.sql,
+    `SELECT min(m.seq) AS seq FROM messages m WHERE ${scopeCondition} AND m.seq > ?2 AND ${UNREAD_MESSAGE("?3")}`,
+    scopeId,
+    lastReadSeq,
+    context.sub,
+  );
+  return first?.seq ?? null;
+}
+
+function streamCountFrom(context: AdminContext, scopeCondition: string, scopeId: number, fromSeq: number): number {
+  return (
+    one<{ n: number }>(context.sql, `SELECT count(*) AS n FROM messages m WHERE ${scopeCondition} AND m.seq >= ?2 AND m.deleted_at IS NULL`, scopeId, fromSeq)?.n ??
+    0
+  );
+}
+
+export function adminMarkRead(context: AdminContext, options: { conversation: string; thread?: number; upToSeq: number }): AdminResult<{ unread: number }> {
+  if (!isPositiveInteger(options?.upToSeq) || (options.thread !== undefined && !isPositiveInteger(options.thread))) return invalid;
+  const row = findReadable(context, options.conversation);
+  if (!row) return notFound;
+  const upToSeq = Math.min(options.upToSeq, row.last_seq);
+  if (options.thread === undefined) {
+    run(
+      context.sql,
+      `INSERT INTO viewer_reads (owner_sub, conversation_id, last_read_seq, updated_at) VALUES (?1, ?2, ?3, ?4)
+       ON CONFLICT (owner_sub, conversation_id) DO UPDATE SET last_read_seq = max(last_read_seq, excluded.last_read_seq), updated_at = excluded.updated_at`,
+      context.sub,
+      row.id,
+      upToSeq,
+      context.now,
+    );
+  } else {
+    const root = one<{ id: number }>(
+      context.sql,
+      "SELECT id FROM messages WHERE conversation_id = ? AND seq = ? AND thread_root_id IS NULL",
+      row.id,
+      options.thread,
+    );
+    if (!root) return notFound;
+    run(
+      context.sql,
+      `INSERT INTO viewer_thread_reads (owner_sub, root_id, last_read_seq, updated_at) VALUES (?1, ?2, ?3, ?4)
+       ON CONFLICT (owner_sub, root_id) DO UPDATE SET last_read_seq = max(last_read_seq, excluded.last_read_seq), updated_at = excluded.updated_at`,
+      context.sub,
+      root.id,
+      upToSeq,
+      context.now,
+    );
+  }
+  const refreshed = findReadable(context, options.conversation);
+  return { ok: true, value: { unread: refreshed?.unread ?? 0 } };
 }
 
 export function adminPins(context: AdminContext, options: { conversation: string }): AdminResult<{ conversation: Conversation; messages: Message[] }> {

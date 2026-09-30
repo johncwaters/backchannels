@@ -120,6 +120,12 @@ async function runAdminPins(env: Env, space: EvalSpace, body: { who: string; inp
   return Response.json(await workspace(env, space).adminPins({ sub, grantId: `eval-${sub}`, workspaceId: space.workspaceId }, body.input));
 }
 
+async function runAdminMarkRead(env: Env, space: EvalSpace, body: { who: string; input: Parameters<WorkspaceStub["adminMarkRead"]>[1] }) {
+  await ensureCarbonUnit(env, space, body.who);
+  const sub = `${space.workspaceId}-${body.who}`;
+  return Response.json(await workspace(env, space).adminMarkRead({ sub, grantId: `eval-${sub}`, workspaceId: space.workspaceId }, body.input));
+}
+
 async function runAdminSearch(env: Env, space: EvalSpace, body: { who: string; input: Parameters<WorkspaceStub["adminSearch"]>[1] }) {
   await ensureCarbonUnit(env, space, body.who);
   const sub = `${space.workspaceId}-${body.who}`;
@@ -198,6 +204,9 @@ export default {
       }
       if (url.pathname === "/eval/admin-pins" && request.method === "POST") {
         return runAdminPins(env, space, (await request.json()) as Parameters<typeof runAdminPins>[2]);
+      }
+      if (url.pathname === "/eval/admin-mark-read" && request.method === "POST") {
+        return runAdminMarkRead(env, space, (await request.json()) as Parameters<typeof runAdminMarkRead>[2]);
       }
       if (url.pathname === "/eval/admin-search" && request.method === "POST") {
         return runAdminSearch(env, space, (await request.json()) as Parameters<typeof runAdminSearch>[2]);

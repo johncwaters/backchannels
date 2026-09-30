@@ -189,3 +189,59 @@ describe("admin reading positions and message state", () => {
     assert.deepEqual(texts(pins), ["message 6", "message 1"]);
   });
 });
+
+function adminMarkRead(who, input) {
+  return evalRequest(`/eval/admin-mark-read?space=${SPACE}`, "POST", { who, input });
+}
+
+describe("admin read state per person", () => {
+  const run = Date.now().toString(36);
+  const channel = `unread-${run}`;
+  const reader = mcpClient("unreadreader", undefined, SPACE);
+  const poster = mcpClient("unreadposter", undefined, SPACE);
+  const readerAgent = { agent: `reader-${run}` };
+  const posterAgent = { agent: `poster-${run}` };
+  const seqOf = (ref) => Number(ref.split("/").at(-1));
+  let rootRef;
+
+  test("messages from before the first visit count as read", async () => {
+    await expectOutput(reader.call("register_agent", { name: readerAgent.agent, description: "Admin unread check" }));
+    await expectOutput(poster.call("register_agent", { name: posterAgent.agent, description: "Admin unread check" }));
+    await expectOutput(reader.call("create_channel", { ...readerAgent, name: channel, purpose: "admin unread check" }));
+    await expectOutput(poster.call("join_channel", { ...posterAgent, channel: `#${channel}` }));
+    rootRef = (await expectOutput(poster.call("send_message", { ...posterAgent, to: `#${channel}`, text: "before the first visit" }))).message;
+    const firstVisit = await adminRead("unreadreader", { conversation: channel });
+    assert.equal(firstVisit.value.conversation.unread, 0);
+    assert.equal(firstVisit.value.firstUnreadSeq, undefined);
+  });
+
+  test("new messages from other people are unread; the viewer's own agents' are not", async () => {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const fromPoster = (await expectOutput(poster.call("send_message", { ...posterAgent, to: `#${channel}`, text: "after the first visit" }))).message;
+    await expectOutput(reader.call("send_message", { ...readerAgent, to: `#${channel}`, text: "my own agent" }));
+    await expectOutput(poster.call("send_message", { ...posterAgent, to: `#${channel}`, text: "a reply", reply_to: rootRef }));
+    const page = await adminRead("unreadreader", { conversation: channel });
+    assert.equal(page.value.conversation.unread, 1);
+    assert.equal(page.value.firstUnreadSeq, seqOf(fromPoster));
+    const root = page.value.messages.find((message) => message.seq === seqOf(rootRef));
+    assert.equal(root.unreadReplies, 1);
+
+    const marked = await adminMarkRead("unreadreader", { conversation: channel, upToSeq: seqOf(fromPoster) });
+    assert.deepEqual(marked, { ok: true, value: { unread: 0 } });
+    const backwards = await adminMarkRead("unreadreader", { conversation: channel, upToSeq: 1 });
+    assert.deepEqual(backwards, { ok: true, value: { unread: 0 } });
+    const afterReading = await adminRead("unreadreader", { conversation: channel });
+    assert.equal(afterReading.value.firstUnreadSeq, undefined);
+    assert.ok(afterReading.value.lastReadSeq >= seqOf(fromPoster));
+  });
+
+  test("threads keep their own read position", async () => {
+    const thread = await adminRead("unreadreader", { conversation: channel, thread: seqOf(rootRef) });
+    assert.ok(thread.value.firstUnreadSeq > seqOf(rootRef));
+    await adminMarkRead("unreadreader", { conversation: channel, thread: seqOf(rootRef), upToSeq: thread.value.firstUnreadSeq });
+    const channelView = await adminRead("unreadreader", { conversation: channel });
+    assert.equal(channelView.value.messages.find((message) => message.seq === seqOf(rootRef)).unreadReplies, 0);
+    const otherPerson = await adminRead("unreadposter", { conversation: channel });
+    assert.equal(otherPerson.value.conversation.unread, 0);
+  });
+});

@@ -11,7 +11,7 @@ import {
   updateChannel,
 } from "./conversations";
 import type { AdminReadOptions, AdminResult, AdminSearchOptions, ConversationSort, FileDownload, DirectoryKind, Scope as AdminScope } from "./admin";
-import { adminFile, adminList, adminPins, adminRead, adminSearch, type AdminContext } from "./adminData";
+import { adminFile, adminList, adminMarkRead, adminPins, adminRead, adminSearch, type AdminContext } from "./adminData";
 import { checkInbox, getNotificationPrefs, markRead, setNotificationPrefs } from "./inbox";
 import { RATE_LIMITS } from "./limits";
 import { deleteMessage, editMessage, followThread, pin, react, readMessages, save, sendMessage } from "./messages";
@@ -224,6 +224,10 @@ export class WorkspaceDO extends DurableObject<Env> {
 
   async adminRead(caller: AdminCaller, options: AdminReadOptions) {
     return adminRead(this.adminContext(caller), options);
+  }
+
+  async adminMarkRead(caller: AdminCaller, options: { conversation: string; thread?: number; upToSeq: number }) {
+    return this.ctx.storage.transactionSync(() => adminMarkRead(this.adminContext(caller), options));
   }
 
   async adminPins(caller: AdminCaller, options: { conversation: string }) {

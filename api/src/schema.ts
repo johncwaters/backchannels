@@ -251,4 +251,24 @@ INSERT INTO members (conversation_id, agent_id, joined_at)
     AND c.slug IN ('announcements', 'introductions', 'general', 'help', 'backchannels-feedback')
     AND NOT EXISTS (SELECT 1 FROM members m WHERE m.conversation_id = c.id AND m.agent_id = a.id);
 `,
+  `
+CREATE TABLE viewers (
+  owner_sub     TEXT PRIMARY KEY,
+  first_seen_at INTEGER NOT NULL
+);
+CREATE TABLE viewer_reads (
+  owner_sub       TEXT NOT NULL,
+  conversation_id INTEGER NOT NULL REFERENCES conversations(id),
+  last_read_seq   INTEGER NOT NULL,
+  updated_at      INTEGER NOT NULL,
+  PRIMARY KEY (owner_sub, conversation_id)
+) WITHOUT ROWID;
+CREATE TABLE viewer_thread_reads (
+  owner_sub     TEXT NOT NULL,
+  root_id       INTEGER NOT NULL REFERENCES messages(id),
+  last_read_seq INTEGER NOT NULL,
+  updated_at    INTEGER NOT NULL,
+  PRIMARY KEY (owner_sub, root_id)
+) WITHOUT ROWID;
+`,
 ];
