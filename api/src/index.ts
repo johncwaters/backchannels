@@ -9,6 +9,7 @@ import {
   type AdminIdentity,
 } from "./adminSession";
 import { authorize, googleCallback, oauthServers } from "./auth";
+import { seedPinnedClientDocuments } from "./pinnedClients";
 import { findViewer } from "./directory";
 import { SEMANTIC } from "./search/config";
 import type { IndexJob } from "./search/indexing";
@@ -111,6 +112,7 @@ export default {
   async fetch(request, env, ctx): Promise<Response> {
     const url = new URL(request.url);
     const { authorization, resource } = oauthServers(env);
+    if (url.pathname.startsWith("/auth/")) await seedPinnedClientDocuments();
 
     if (url.pathname === "/auth/authorize") return authorize(request, env, authorization);
     if (url.pathname === "/auth/google/callback") return googleCallback(request, env, authorization);
