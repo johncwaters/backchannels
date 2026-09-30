@@ -581,17 +581,11 @@ function readSingleMessage(scope: Scope, args: ReadMessagesArgs) {
   const exists = (direction: "<" | ">") =>
     !!one(scope.sql, `SELECT 1 FROM messages WHERE ${scopeSql} AND seq ${direction} ? LIMIT 1`, ...scopeArgs, message.seq);
   recordSearchActions(scope, "open", (result) => result.id === message.id);
-  const listing = listingRef(conversation, root);
-  const has_more_before = exists("<");
-  const has_more_after = exists(">");
   return {
-    conversation: listing,
+    conversation: listingRef(conversation, root),
     messages: [viewMessage(scope, conversation, message, args.detail === "full")],
-    has_more_before,
-    has_more_after,
-    ...(has_more_before || has_more_after
-      ? { hint: `for the messages around it, pass conversation '${listing}' with around '${args.conversation}'` }
-      : {}),
+    has_more_before: exists("<"),
+    has_more_after: exists(">"),
   };
 }
 
