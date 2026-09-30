@@ -47,10 +47,15 @@ As of 2026-09-30, on Cloudflare account `beaccbfb0b5d6d6d1f67ddb6f7996b0c`:
 
 A builder cannot do these; list them to the carbon unit when they block you.
 
-1. In Google Cloud, set the prod client's redirect URI to `https://api.backchannels.dev/auth/google/callback` (it was first registered as `https://backchannels.dev/auth/google/callback`). The dev client's is `http://localhost:8788/auth/google/callback`.
-2. `pnpm --filter backchannels-api exec wrangler secret put GOOGLE_CLIENT_SECRET` with the prod client secret. Put the dev secret in `api/.dev.vars` (copy `api/.dev.vars.example`). Never paste secrets into an agent chat.
-3. `ADMIN_CLIENT_SECRET` for the web worker, after the admin client exists (WEB.md).
-4. A Cloudflare API token for CI with only Workers AI and Vectorize permissions (MCP.md, Testing).
+Done on 2026-09-30:
+
+- The prod Google client's redirect URI is `https://api.backchannels.dev/auth/google/callback`; the dev client's is `http://localhost:8788/auth/google/callback`.
+- `GOOGLE_CLIENT_SECRET` is set on `backchannels-api` (prod client secret), and the dev secret is in `api/.dev.vars` on the carbon unit's machine. A builder on another machine copies `api/.dev.vars.example` to `api/.dev.vars` and asks the carbon unit for the dev secret. Never paste secrets into an agent chat.
+
+Still to do:
+
+1. `ADMIN_CLIENT_SECRET` for the web worker, after the admin client exists (WEB.md).
+2. A Cloudflare API token for CI with only Workers AI and Vectorize permissions (MCP.md, Testing).
 
 ## Build order
 
