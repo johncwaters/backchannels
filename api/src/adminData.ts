@@ -1,10 +1,11 @@
-import type { AdminResult, Conversation, ConversationSort, DirectoryKind, Message, Reaction, Scope, SearchMatch } from "./admin";
-import { all, one, type ConversationRow, type MessageRow } from "./store";
+import type { AdminResult, AdminSearchOptions, AdminSearchPage, Conversation, ConversationSort, DirectoryKind, Message, Reaction, Scope, SearchMatch, SearchSort } from "./admin";
+import { matchOffsets, searchAsViewer, viewerMatchNote, type Searcher, type ViewerSearch } from "./search";
+import { SEARCH } from "./search/config";
+import { parseQuery, type FreeTerm } from "./search/query";
+import { ToolError, all, one, type AgentRow, type ConversationRow, type MessageRow, type Scope as ToolScope } from "./store";
 
 const LIST_PAGE_SIZE = 100;
 const SEARCH_PAGE_SIZE = 50;
-const MAX_QUERY_LENGTH = 200;
-const MAX_QUERY_TERMS = 16;
 const DEFAULT_READ_LIMIT = 100;
 const MAX_READ_LIMIT = 200;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -17,6 +18,7 @@ export interface AdminContext {
   now: number;
   sub: string;
   audit: (tool: string, conversationId?: number) => void;
+  searchScope: (agent: AgentRow) => ToolScope;
 }
 
 type ListedRow = ConversationRow & {
@@ -30,6 +32,7 @@ type AuthoredMessageRow = MessageRow & { handle: string | null; owner_email: str
 
 const SCOPES: readonly Scope[] = ["mine", "everyone"];
 const KINDS: readonly DirectoryKind[] = ["public", "private"];
+const SEARCH_SORTS: readonly SearchSort[] = ["relevant", "recent"];
 const SORT_ORDER: Record<ConversationSort, string> = {
   active: "messages_today DESC, last_message_at IS NULL, last_message_at DESC",
   recent: "last_message_at IS NULL, last_message_at DESC",
@@ -238,94 +241,57 @@ export function adminRead(
   };
 }
 
-function queryTerms(query: string): string[] | null {
-  if (query.length > MAX_QUERY_LENGTH) return null;
-  const termsByFoldedCase = new Map<string, string>();
-  for (const word of query.split(/\s+/)) {
-    const term = word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
-    if (term.length > 0 && !termsByFoldedCase.has(term.toLowerCase())) termsByFoldedCase.set(term.toLowerCase(), term);
-  }
-  if (termsByFoldedCase.size === 0 || termsByFoldedCase.size > MAX_QUERY_TERMS) return null;
-  return [...termsByFoldedCase.values()];
-}
+const ADMIN_SEARCH_LOG_PREFIX = "admin:";
 
-const quoteForFts = (term: string) => `"${term.replaceAll('"', '""')}"`;
-const escapeRegExp = (term: string) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+type SearchedRow = AuthoredMessageRow & { conversation_slug: string; conversation_kind: ConversationRow["kind"] };
 
-const HIGHLIGHT_OPEN = "\u0001";
-const HIGHLIGHT_CLOSE = "\u0002";
-
-function highlightedRanges(text: string, highlighted: string | null): [number, number][] | null {
-  if (highlighted === null || text.includes(HIGHLIGHT_OPEN) || text.includes(HIGHLIGHT_CLOSE)) return null;
-  const ranges: [number, number][] = [];
-  let plainText = "";
-  let openedAt: number | null = null;
-  for (const character of highlighted) {
-    if (character === HIGHLIGHT_OPEN && openedAt === null) {
-      openedAt = plainText.length;
-      continue;
-    }
-    if (character === HIGHLIGHT_CLOSE && openedAt !== null) {
-      ranges.push([openedAt, plainText.length]);
-      openedAt = null;
-      continue;
-    }
-    plainText += character;
-  }
-  if (openedAt !== null || plainText !== text) return null;
-  return ranges.filter(([start, end]) => end > start);
-}
-
-function literalRanges(text: string, terms: string[]): [number, number][] {
-  const occurrences = terms
-    .flatMap((term) => [...text.matchAll(new RegExp(escapeRegExp(term), "giu"))])
-    .map((match): [number, number] => [match.index, match.index + match[0].length])
-    .sort((first, second) => first[0] - second[0] || first[1] - second[1]);
-  const merged: [number, number][] = [];
-  for (const [start, end] of occurrences) {
-    const previous = merged.at(-1);
-    if (previous && start < previous[1]) {
-      previous[1] = Math.max(previous[1], end);
-      continue;
-    }
-    merged.push([start, end]);
-  }
-  return merged;
-}
-
-export function adminSearch(
-  context: AdminContext,
-  options: { query: string; scope: Scope; cursor?: string },
-): AdminResult<{ matches: SearchMatch[]; nextCursor?: string }> {
-  const offset = parseOffset(options?.cursor);
-  if (typeof options?.query !== "string" || !isOneOf(SCOPES, options.scope) || offset === null) return invalid;
-  const terms = queryTerms(options.query);
-  if (terms === null) return invalid;
-
-  context.audit("admin_search");
-  const rows = all<
-    AuthoredMessageRow & { conversation_slug: string; conversation_kind: ConversationRow["kind"]; highlighted: string | null }
-  >(
+function ownAgents(context: AdminContext): AgentRow[] {
+  return all<AgentRow>(
     context.sql,
-    `WITH ${ownConversations("?3")}
-     SELECT m.*, a.handle, a.owner_email, a.owner_sub, ${LIVE_REPLIES} AS live_replies, ${LAST_LIVE_REPLY_AT} AS last_live_reply_at, c.slug AS conversation_slug, c.kind AS conversation_kind,
-       highlight(messages_fts, 0, ?6, ?7) AS highlighted
-     FROM messages_fts JOIN messages m ON m.id = messages_fts.rowid
+    "SELECT * FROM agents WHERE owner_sub = ? AND revoked_at IS NULL ORDER BY last_active_at DESC",
+    context.sub,
+  );
+}
+
+function viewerAgent(context: AdminContext, agents: AgentRow[]): AgentRow {
+  return (
+    agents[0] ?? {
+      id: `${ADMIN_SEARCH_LOG_PREFIX}${context.sub}`,
+      handle: "",
+      name: "",
+      description: "",
+      owner_sub: context.sub,
+      owner_email: "",
+      owner_name: "",
+      created_at: context.now,
+      last_active_at: context.now,
+      revoked_at: null,
+    }
+  );
+}
+
+function ownConversationIds(context: AdminContext): number[] {
+  return all<{ conversation_id: number }>(
+    context.sql,
+    `WITH ${ownConversations("?")} SELECT conversation_id FROM own_conversations`,
+    context.sub,
+  ).map((row) => row.conversation_id);
+}
+
+function searchMatches(context: AdminContext, ids: number[], terms: FreeTerm[]): SearchMatch[] {
+  if (!ids.length) return [];
+  const rows = all<SearchedRow>(
+    context.sql,
+    `SELECT m.*, a.handle, a.owner_email, a.owner_sub, ${LIVE_REPLIES} AS live_replies, ${LAST_LIVE_REPLY_AT} AS last_live_reply_at, c.slug AS conversation_slug, c.kind AS conversation_kind
+     FROM json_each(?1) j JOIN messages m ON m.id = j.value
        JOIN conversations c ON c.id = m.conversation_id
        LEFT JOIN agents a ON a.id = m.author_id
-     WHERE messages_fts MATCH ?1 AND m.deleted_at IS NULL AND c.archived_at IS NULL
-       AND ((?2 = 0 AND c.kind = 'public') OR c.id IN (SELECT conversation_id FROM own_conversations))
-     ORDER BY messages_fts.rank, m.id DESC LIMIT ?4 OFFSET ?5`,
-    terms.map(quoteForFts).join(" "),
-    options.scope === "mine" ? 1 : 0,
-    context.sub,
-    SEARCH_PAGE_SIZE + 1,
-    offset,
-    HIGHLIGHT_OPEN,
-    HIGHLIGHT_CLOSE,
+     WHERE m.deleted_at IS NULL
+     ORDER BY j.key`,
+    JSON.stringify(ids),
   );
   const namesByConversationId = new Map<number, string>();
-  const conversationName = (row: (typeof rows)[number]) => {
+  const conversationName = (row: SearchedRow) => {
     if (row.conversation_kind === "public" || row.conversation_kind === "private") return `#${row.conversation_slug}`;
     const cached = namesByConversationId.get(row.conversation_id);
     if (cached) return cached;
@@ -334,15 +300,82 @@ export function adminSearch(
     namesByConversationId.set(row.conversation_id, name);
     return name;
   };
-  const pageRows = rows.slice(0, SEARCH_PAGE_SIZE);
-  const pageMessages = viewMessages(context, pageRows);
-  const matches = pageRows.map((row, index) => ({
+  const messages = viewMessages(context, rows);
+  return rows.map((row, index) => ({
     conversation: { id: row.conversation_slug, name: conversationName(row), isPrivate: row.conversation_kind !== "public" },
-    message: pageMessages[index],
-    ranges: highlightedRanges(row.text, row.highlighted) ?? literalRanges(row.text, terms),
+    message: messages[index],
+    ranges: matchOffsets(row.text, terms),
   }));
+}
+
+function parseSearchCursor(cursor: string): { searchId: number; offset: number } | null {
+  const match = /^s(\d{1,12})\.(\d{1,9})$/.exec(cursor);
+  return match ? { searchId: Number(match[1]), offset: Number(match[2]) } : null;
+}
+
+function searchPage(context: AdminContext, searchId: number, ordered: number[], terms: FreeTerm[], offset: number) {
+  const nextOffset = offset + SEARCH_PAGE_SIZE;
   return {
-    ok: true,
-    value: { matches, ...(rows.length > SEARCH_PAGE_SIZE ? { nextCursor: String(offset + SEARCH_PAGE_SIZE) } : {}) },
+    matches: searchMatches(context, ordered.slice(offset, nextOffset), terms),
+    ...(nextOffset < ordered.length ? { nextCursor: `s${searchId}.${nextOffset}` } : {}),
   };
+}
+
+export async function adminSearch(context: AdminContext, options: AdminSearchOptions): Promise<AdminResult<AdminSearchPage>> {
+  const sort = options?.sort ?? "relevant";
+  if (typeof options?.query !== "string" || !isOneOf(SCOPES, options.scope) || !isOneOf(SEARCH_SORTS, sort)) return invalid;
+  if (options.cursor !== undefined && typeof options.cursor !== "string") return invalid;
+  const logOwner = `${ADMIN_SEARCH_LOG_PREFIX}${context.sub}`;
+
+  if (options.cursor !== undefined) {
+    const cursor = parseSearchCursor(options.cursor);
+    if (!cursor) return invalid;
+    const log = one<{ query: string; results: string; created_at: number }>(
+      context.sql,
+      "SELECT query, results, created_at FROM search_log WHERE id = ? AND agent_id = ?",
+      cursor.searchId,
+      logOwner,
+    );
+    if (!log || context.now - log.created_at > SEARCH.cursorTtlMs) {
+      return { ok: true, value: { matches: [], problem: "These results expired after 10 minutes. Search again to see more." } };
+    }
+    context.audit("admin_search");
+    return { ok: true, value: searchPage(context, cursor.searchId, JSON.parse(log.results), parseQuery(log.query).include, cursor.offset) };
+  }
+
+  const agents = ownAgents(context);
+  const scope = context.searchScope(viewerAgent(context, agents));
+  const ownIds = ownConversationIds(context);
+  const privateIds = all<{ id: number }>(
+    context.sql,
+    "SELECT id FROM conversations WHERE kind <> 'public' AND archived_at IS NULL AND id IN (SELECT value FROM json_each(?))",
+    JSON.stringify(ownIds),
+  ).map((row) => row.id);
+  const searcher: Searcher = {
+    privateIds,
+    selfIds: agents.map((agent) => agent.id),
+    hideArchived: true,
+    ...(options.scope === "mine" ? { onlyIn: ownIds } : {}),
+  };
+  let searched: ViewerSearch;
+  try {
+    searched = await searchAsViewer(scope, searcher, options.query, sort);
+  } catch (error) {
+    if (error instanceof ToolError) return { ok: true, value: { matches: [], problem: error.message } };
+    throw error;
+  }
+  context.audit("admin_search");
+  const searchId = one<{ id: number }>(
+    context.sql,
+    "INSERT INTO search_log (agent_id, query, sort, results, created_at) VALUES (?, ?, ?, ?, ?) RETURNING id",
+    logOwner,
+    options.query.trim(),
+    sort,
+    JSON.stringify(searched.ordered),
+    context.now,
+  )!.id;
+  const firstPage = searchPage(context, searchId, searched.ordered, searched.terms, 0);
+  const note = sort === "relevant" ? viewerMatchNote(searched.terms, firstPage.matches.map((match) => match.message.text)) : undefined;
+  const top = searched.top ? searchMatches(context, searched.top, searched.terms) : undefined;
+  return { ok: true, value: { ...firstPage, ...(note ? { note } : {}), ...(top?.length ? { top } : {}) } };
 }

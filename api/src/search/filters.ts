@@ -59,19 +59,23 @@ function ownerAgentIds(scope: Scope, owner: string): string[] {
   throw new ToolError(`no agents owned by '${owner}'${hint ? `; did you mean @${hint}?` : ""}`);
 }
 
-function authorIds(scope: Scope, value: string): string[] {
-  if (value.toLowerCase() === "me") return [scope.agent.id];
+function authorIds(scope: Scope, value: string, selfIds: string[]): string[] {
+  if (value.toLowerCase() === "me") return selfIds;
   const ref = value.replace(/^@/, "").toLowerCase();
   return ref.includes("/") ? [findAgent(scope, ref).id] : ownerAgentIds(scope, ref);
 }
 
-function conversationIdFor(scope: Scope, value: string): number | null {
+function conversationIdsFor(scope: Scope, value: string, selfIds: string[]): number[] {
   if (value.startsWith("@")) {
     const other = findAgent(scope, value);
-    const memberKey = [scope.agent.id, other.id].sort().join(",");
-    return one<{ id: number }>(scope.sql, "SELECT id FROM conversations WHERE member_key = ?", memberKey)?.id ?? null;
+    const memberKeys = selfIds.map((selfId) => [selfId, other.id].sort().join(","));
+    return all<{ id: number }>(
+      scope.sql,
+      "SELECT id FROM conversations WHERE member_key IN (SELECT value FROM json_each(?))",
+      JSON.stringify(memberKeys),
+    ).map((row) => row.id);
   }
-  return findConversation(scope, value).id;
+  return [findConversation(scope, value).id];
 }
 
 function placeholders(count: number): string {
@@ -86,7 +90,7 @@ const HAS_CLAUSES: Record<string, string> = {
   reaction: "m.reaction_count > 0",
 };
 
-export function buildFilters(scope: Scope, modifiers: Modifier[]): Filters {
+export function buildFilters(scope: Scope, modifiers: Modifier[], selfIds: string[] = [scope.agent.id]): Filters {
   const filters: Filters = { clauses: [], params: [], matchesNothing: false, vector: {} };
   const narrowDays = (from: number, before: number) => {
     const fromDay = Math.floor(from / DAY_MS);
@@ -103,7 +107,7 @@ export function buildFilters(scope: Scope, modifiers: Modifier[]): Filters {
 
   const inValues = byKey.get("in");
   if (inValues) {
-    const ids = inValues.map((value) => conversationIdFor(scope, value)).filter((id): id is number => id !== null);
+    const ids = [...new Set(inValues.flatMap((value) => conversationIdsFor(scope, value, selfIds)))];
     if (!ids.length) filters.matchesNothing = true;
     else add(`m.conversation_id IN (${placeholders(ids.length)})`, ...ids);
     filters.vector.conversationIds = ids;
@@ -111,8 +115,9 @@ export function buildFilters(scope: Scope, modifiers: Modifier[]): Filters {
 
   const fromValues = byKey.get("from");
   if (fromValues) {
-    const ids = [...new Set(fromValues.flatMap((value) => authorIds(scope, value)))];
-    add(`m.author_id IN (${placeholders(ids.length)})`, ...ids);
+    const ids = [...new Set(fromValues.flatMap((value) => authorIds(scope, value, selfIds)))];
+    if (!ids.length) filters.matchesNothing = true;
+    else add(`m.author_id IN (${placeholders(ids.length)})`, ...ids);
     filters.vector.authorIds = ids;
   }
 
@@ -130,10 +135,12 @@ export function buildFilters(scope: Scope, modifiers: Modifier[]): Filters {
   for (const value of byKey.get("to") ?? []) {
     if (value.toLowerCase() !== "me") throw new ToolError(`to: takes only 'me', not '${value}'; use in: or with: for other agents`);
     add(
-      `(EXISTS (SELECT 1 FROM mentions x WHERE x.message_id = m.id AND x.agent_id = ?)
-        OR (c.kind IN ('dm', 'group') AND m.author_id != ?))`,
-      scope.agent.id,
-      scope.agent.id,
+      `(EXISTS (SELECT 1 FROM mentions x WHERE x.message_id = m.id AND x.agent_id IN (SELECT value FROM json_each(?)))
+        OR (c.kind IN ('dm', 'group') AND m.author_id NOT IN (SELECT value FROM json_each(?))
+          AND EXISTS (SELECT 1 FROM members self WHERE self.conversation_id = c.id AND self.agent_id IN (SELECT value FROM json_each(?)))))`,
+      JSON.stringify(selfIds),
+      JSON.stringify(selfIds),
+      JSON.stringify(selfIds),
     );
   }
 
@@ -160,7 +167,7 @@ export function buildFilters(scope: Scope, modifiers: Modifier[]): Filters {
   for (const value of byKey.get("is") ?? []) {
     const flag = value.toLowerCase();
     if (flag === "thread") add("(m.thread_root_id IS NOT NULL OR m.reply_count > 0)");
-    else if (flag === "saved") add("EXISTS (SELECT 1 FROM saves s WHERE s.message_id = m.id AND s.agent_id = ?)", scope.agent.id);
+    else if (flag === "saved") add("EXISTS (SELECT 1 FROM saves s WHERE s.message_id = m.id AND s.agent_id IN (SELECT value FROM json_each(?)))", JSON.stringify(selfIds));
     else throw new ToolError(`is: takes thread or saved, not '${value}'`);
   }
   return filters;

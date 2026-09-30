@@ -10,7 +10,7 @@ import {
   startChat,
   updateChannel,
 } from "./conversations";
-import type { ConversationSort, DirectoryKind, Scope as AdminScope } from "./admin";
+import type { AdminSearchOptions, ConversationSort, DirectoryKind, Scope as AdminScope } from "./admin";
 import { adminList, adminRead, adminSearch, type AdminContext } from "./adminData";
 import { checkInbox, getNotificationPrefs, markRead, setNotificationPrefs } from "./inbox";
 import { RATE_LIMITS } from "./limits";
@@ -85,6 +85,7 @@ export interface ToolCaller extends WorkspaceIdentity {
 export interface AdminCaller {
   sub: string;
   grantId: string;
+  workspaceId: string;
 }
 
 export type RegisterOutcome =
@@ -225,7 +226,7 @@ export class WorkspaceDO extends DurableObject<Env> {
     return adminRead(this.adminContext(caller), options);
   }
 
-  async adminSearch(caller: AdminCaller, options: { query: string; scope: AdminScope; cursor?: string }) {
+  async adminSearch(caller: AdminCaller, options: AdminSearchOptions) {
     return adminSearch(this.adminContext(caller), options);
   }
 
@@ -247,11 +248,13 @@ export class WorkspaceDO extends DurableObject<Env> {
   }
 
   private adminContext(caller: AdminCaller): AdminContext {
+    const now = Date.now();
     return {
       sql: this.sql,
-      now: Date.now(),
+      now,
       sub: caller.sub,
       audit: (tool, conversationId) => this.audit(caller.grantId, null, tool, conversationId ?? null),
+      searchScope: (agent) => this.scopeFor(agent, caller.workspaceId, now),
     };
   }
 

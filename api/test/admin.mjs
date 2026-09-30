@@ -78,3 +78,51 @@ describe("admin thread reading", () => {
     assert.deepEqual(await adminRead("threadowner", { conversation: channel, thread: 0 }), { ok: false, error: "invalid" });
   });
 });
+
+function adminSearch(who, input) {
+  return evalRequest(`/eval/admin-search?space=${SPACE}`, "POST", { who, input });
+}
+
+describe("admin search", () => {
+  const run = Date.now().toString(36);
+  const word = `zyx${run}`;
+  const ownChannel = `search-own-${run}`;
+  const otherChannel = `search-other-${run}`;
+  const owner = mcpClient("searchowner", undefined, SPACE);
+  const stranger = mcpClient("searchstranger", undefined, SPACE);
+  const ownAgent = { agent: `finder-${run}` };
+  const strangerAgent = { agent: `other-${run}` };
+
+  test("setup", async () => {
+    await expectOutput(owner.call("register_agent", { name: ownAgent.agent, description: "Admin search check" }));
+    await expectOutput(stranger.call("register_agent", { name: strangerAgent.agent, description: "Admin search check" }));
+    await expectOutput(owner.call("create_channel", { ...ownAgent, name: ownChannel, purpose: "admin search check" }));
+    await expectOutput(stranger.call("create_channel", { ...strangerAgent, name: otherChannel, purpose: "admin search check" }));
+    await expectOutput(owner.call("send_message", { ...ownAgent, to: `#${ownChannel}`, text: `first ${word} note` }));
+    await expectOutput(owner.call("send_message", { ...ownAgent, to: `#${ownChannel}`, text: `second ${word} note` }));
+    await expectOutput(stranger.call("send_message", { ...strangerAgent, to: `#${otherChannel}`, text: `stranger ${word} note` }));
+  });
+
+  test("mine finds only conversations the viewer's agents are in; everyone adds every public channel", async () => {
+    const mine = await adminSearch("searchowner", { query: word, scope: "mine" });
+    assert.ok(mine.ok, JSON.stringify(mine));
+    assert.deepEqual(new Set(mine.value.matches.map((match) => match.conversation.id)), new Set([ownChannel]));
+    const everyone = await adminSearch("searchowner", { query: word, scope: "everyone" });
+    assert.deepEqual(new Set(everyone.value.matches.map((match) => match.conversation.id)), new Set([ownChannel, otherChannel]));
+    assert.ok(everyone.value.matches.every((match) => match.ranges.length > 0));
+  });
+
+  test("modifiers resolve against the viewer's own agents", async () => {
+    const fromMe = await adminSearch("searchowner", { query: `${word} from:me`, scope: "everyone" });
+    assert.deepEqual(fromMe.value.matches.map((match) => match.message.isOwn), [true, true]);
+    const recent = await adminSearch("searchowner", { query: `in:#${ownChannel}`, scope: "everyone", sort: "recent" });
+    assert.deepEqual(recent.value.matches.map((match) => match.message.text), [`second ${word} note`, `first ${word} note`]);
+  });
+
+  test("an unknown channel explains itself instead of failing", async () => {
+    const unknown = await adminSearch("searchowner", { query: `in:#nowhere-${run}`, scope: "everyone" });
+    assert.ok(unknown.ok, JSON.stringify(unknown));
+    assert.deepEqual(unknown.value.matches, []);
+    assert.match(unknown.value.problem, /not found/);
+  });
+});

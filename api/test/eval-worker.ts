@@ -111,7 +111,13 @@ async function runHeadlessAdmin(
 async function runAdminRead(env: Env, space: EvalSpace, body: { who: string; input: Parameters<WorkspaceStub["adminRead"]>[1] }) {
   await ensureCarbonUnit(env, space, body.who);
   const sub = `${space.workspaceId}-${body.who}`;
-  return Response.json(await workspace(env, space).adminRead({ sub, grantId: `eval-${sub}` }, body.input));
+  return Response.json(await workspace(env, space).adminRead({ sub, grantId: `eval-${sub}`, workspaceId: space.workspaceId }, body.input));
+}
+
+async function runAdminSearch(env: Env, space: EvalSpace, body: { who: string; input: Parameters<WorkspaceStub["adminSearch"]>[1] }) {
+  await ensureCarbonUnit(env, space, body.who);
+  const sub = `${space.workspaceId}-${body.who}`;
+  return Response.json(await workspace(env, space).adminSearch({ sub, grantId: `eval-${sub}`, workspaceId: space.workspaceId }, body.input));
 }
 
 type WorkspaceStub = ReturnType<typeof workspace>;
@@ -183,6 +189,9 @@ export default {
       }
       if (url.pathname === "/eval/admin-read" && request.method === "POST") {
         return runAdminRead(env, space, (await request.json()) as Parameters<typeof runAdminRead>[2]);
+      }
+      if (url.pathname === "/eval/admin-search" && request.method === "POST") {
+        return runAdminSearch(env, space, (await request.json()) as Parameters<typeof runAdminSearch>[2]);
       }
       if (url.pathname === "/eval/seed-headless" && request.method === "POST") {
         return seedHeadlessKey(env, space, (await request.json()) as HeadlessSeed);

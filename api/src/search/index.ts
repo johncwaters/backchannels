@@ -91,9 +91,31 @@ async function withCrossEncoder(scope: Scope, ranked: Ranked[], freeText: string
   }
 }
 
-async function orderedIds(scope: Scope, parsed: ParsedQuery, sort: SortOrder, visibleIds: number[], tuning: Tuning): Promise<number[]> {
+export interface Searcher {
+  privateIds: number[];
+  selfIds: string[];
+  onlyIn?: number[];
+  hideArchived?: boolean;
+}
+
+function searcherFilters(scope: Scope, parsed: ParsedQuery, searcher: Searcher): Filters {
+  const filters = buildFilters(scope, parsed.modifiers, searcher.selfIds);
+  if (searcher.hideArchived) filters.clauses.push("c.archived_at IS NULL");
+  if (!searcher.onlyIn) return filters;
+  const allowed = new Set(searcher.onlyIn);
+  if (filters.vector.conversationIds) {
+    filters.vector.conversationIds = filters.vector.conversationIds.filter((id) => allowed.has(id));
+    if (!filters.vector.conversationIds.length) filters.matchesNothing = true;
+  }
+  filters.clauses.push("m.conversation_id IN (SELECT value FROM json_each(?))");
+  filters.params.push(JSON.stringify(searcher.onlyIn));
+  return filters;
+}
+
+async function orderedIds(scope: Scope, parsed: ParsedQuery, sort: SortOrder, searcher: Searcher, tuning: Tuning): Promise<number[]> {
   const startedAt = Date.now();
-  const filters = buildFilters(scope, parsed.modifiers);
+  const visibleIds = searcher.privateIds;
+  const filters = searcherFilters(scope, parsed, searcher);
   const excludeMatch = parsed.exclude.length ? ftsMatch(parsed.exclude, "OR") : null;
   if (sort === "recent" || !parsed.include.length) {
     return lexicalCandidates(scope, visibleIds, {
@@ -116,9 +138,9 @@ async function orderedIds(scope: Scope, parsed: ParsedQuery, sort: SortOrder, vi
   return (await withCrossEncoder(scope, ranked, parsed.freeText, startedAt, tuning)).map((item) => item.id);
 }
 
-async function topForRecent(scope: Scope, parsed: ParsedQuery, recent: number[], visibleIds: number[], tuning: Tuning): Promise<number[] | undefined> {
+async function topForRecent(scope: Scope, parsed: ParsedQuery, recent: number[], searcher: Searcher, tuning: Tuning): Promise<number[] | undefined> {
   if (!parsed.include.length) return undefined;
-  const top = (await orderedIds(scope, parsed, "relevant", visibleIds, tuning)).slice(0, SEARCH.topForRecent);
+  const top = (await orderedIds(scope, parsed, "relevant", searcher, tuning)).slice(0, SEARCH.topForRecent);
   const firstRecent = new Set(recent.slice(0, SEARCH.topHiddenWhenInFirstRecent));
   if (top.length < SEARCH.topForRecent || top.every((id) => firstRecent.has(id))) return undefined;
   return top;
@@ -258,9 +280,9 @@ export async function searchMessages(scope: Scope, args: SearchArgs) {
     throw new ToolError("query is empty; describe the problem in words, or use modifiers such as in:#deploys or from:@ian.m");
   }
   const sort = args.sort ?? "relevant";
-  const visibleIds = privateConversationIds(scope);
+  const searcher: Searcher = { privateIds: privateConversationIds(scope), selfIds: [scope.agent.id] };
   const tuning = searchTuning(scope);
-  const ordered = await orderedIds(scope, parsed, sort, visibleIds, tuning);
+  const ordered = await orderedIds(scope, parsed, sort, searcher, tuning);
   const searchId = one<{ id: number }>(
     scope.sql,
     "INSERT INTO search_log (agent_id, query, sort, results, created_at) VALUES (?, ?, ?, ?, ?) RETURNING id",
@@ -277,7 +299,7 @@ export async function searchMessages(scope: Scope, args: SearchArgs) {
     const note = weakMatchNote(withoutStopWords(parsed.include), missingPerResult);
     if (note) return { note, ...firstPage };
   }
-  const top = sort === "recent" ? await topForRecent(scope, parsed, ordered, visibleIds, tuning) : undefined;
+  const top = sort === "recent" ? await topForRecent(scope, parsed, ordered, searcher, tuning) : undefined;
   if (!top) return firstPage;
   const topRows = loadRows(scope, top);
   const topSnippets = snippets(scope, top, parsed.include);
@@ -288,4 +310,26 @@ export async function searchMessages(scope: Scope, args: SearchArgs) {
     }),
     ...firstPage,
   };
+}
+
+export interface ViewerSearch {
+  ordered: number[];
+  top?: number[];
+  terms: FreeTerm[];
+}
+
+export async function searchAsViewer(scope: Scope, searcher: Searcher, query: string, sort: SortOrder): Promise<ViewerSearch> {
+  const parsed = parseQuery(query.trim());
+  if (!parsed.include.length && !parsed.exclude.length && !parsed.modifiers.length) {
+    throw new ToolError("Search for at least one word, or use a modifier such as in:#deploys or from:@ian.m.");
+  }
+  const tuning = searchTuning(scope);
+  const ordered = await orderedIds(scope, parsed, sort, searcher, tuning);
+  const top = sort === "recent" ? await topForRecent(scope, parsed, ordered, searcher, tuning) : undefined;
+  return { ordered, top, terms: parsed.include };
+}
+
+export function viewerMatchNote(terms: FreeTerm[], texts: string[]): string | undefined {
+  const counted = withoutStopWords(terms);
+  return weakMatchNote(counted, texts.map((text) => missingTerms(text, counted)));
 }

@@ -57,6 +57,23 @@ export interface SearchMatch {
 	ranges: [number, number][];
 }
 
+export type SearchSort = 'relevant' | 'recent';
+
+export interface AdminSearchOptions {
+	query: string;
+	scope: Scope;
+	sort?: SearchSort;
+	cursor?: string;
+}
+
+export interface AdminSearchPage {
+	matches: SearchMatch[];
+	top?: SearchMatch[];
+	note?: string;
+	problem?: string;
+	nextCursor?: string;
+}
+
 export interface Installation {
 	grantId: string;
 	clientName: string | null;
@@ -103,10 +120,7 @@ export interface AdminApiRpc {
 		token: string,
 		options: { conversation: string; thread?: number; before?: number; limit?: number },
 	): Promise<AdminResult<{ conversation: Conversation; messages: Message[]; nextBefore?: number }>>;
-	search(
-		token: string,
-		options: { query: string; scope: Scope; cursor?: string },
-	): Promise<AdminResult<{ matches: SearchMatch[]; nextCursor?: string }>>;
+	search(token: string, options: AdminSearchOptions): Promise<AdminResult<AdminSearchPage>>;
 	listInstallations(token: string): Promise<AdminResult<{ installations: Installation[] }>>;
 	revokeInstallation(token: string, options: { grantId: string }): Promise<AdminResult<null>>;
 	listHeadlessKeys(

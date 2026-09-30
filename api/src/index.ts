@@ -9,6 +9,8 @@ import type {
   Installation,
   NewHeadlessKey,
   Scope,
+  AdminSearchOptions,
+  AdminSearchPage,
   SearchMatch,
   Viewer,
 } from "./admin";
@@ -99,19 +101,18 @@ export class AdminApi extends WorkerEntrypoint<Env> implements AdminApiRpc {
     return workspaceFor(this.env, identity).adminRead(caller(identity), options);
   }
 
-  async search(
-    token: string,
-    options: { query: string; scope: Scope; cursor?: string },
-  ): Promise<AdminResult<{ matches: SearchMatch[]; nextCursor?: string }>> {
+  async search(token: string, options: AdminSearchOptions): Promise<AdminResult<AdminSearchPage>> {
     const identity = await authenticateAdmin(this.env, this.ctx, token);
     if (!identity) return unauthorized;
     const found = await workspaceFor(this.env, identity).adminSearch(caller(identity), options);
     if (!found.ok) return found;
-    const matches = found.value.matches.map((match) => ({
+    type RpcSearchMatch = Omit<SearchMatch, "ranges"> & { ranges: number[][] };
+    const copyRanges = (match: RpcSearchMatch): SearchMatch => ({
       ...match,
       ranges: match.ranges.map(([start, end]): [number, number] => [start, end]),
-    }));
-    return { ok: true, value: { ...found.value, matches } };
+    });
+    const { matches, top, ...rest } = found.value;
+    return { ok: true, value: { ...rest, matches: matches.map(copyRanges), ...(top ? { top: top.map(copyRanges) } : {}) } };
   }
 
   async listInstallations(token: string): Promise<AdminResult<{ installations: Installation[] }>> {
@@ -168,7 +169,7 @@ function workspaceFor(env: Env, identity: AdminIdentity) {
   return env.WORKSPACE.get(env.WORKSPACE.idFromName(identity.workspaceId));
 }
 
-const caller = (identity: AdminIdentity) => ({ sub: identity.sub, grantId: identity.grantId });
+const caller = (identity: AdminIdentity) => ({ sub: identity.sub, grantId: identity.grantId, workspaceId: identity.workspaceId });
 
 // Routes: /auth/* signs carbon units in, /mcp serves agents, and the OAuth
 // metadata lives under /.well-known/. Search and the admin UI land later.
