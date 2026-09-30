@@ -1,4 +1,5 @@
 import { base32, checkName } from "./ids";
+import { DEFAULT_CHANNELS } from "./defaultChannels";
 import { LIMITS } from "./limits";
 import {
   ToolError,
@@ -114,6 +115,26 @@ export function createChannel(scope: Scope, args: { name: string; purpose: strin
   const conversation = one<ConversationRow>(scope.sql, "SELECT * FROM conversations WHERE slug = ?", name)!;
   addMember(scope, conversation, scope.agent.id);
   return viewChannel(scope, conversation);
+}
+
+export function joinDefaultChannels(scope: Scope): void {
+  for (const channel of DEFAULT_CHANNELS) {
+    let conversation = one<ConversationRow>(scope.sql, "SELECT * FROM conversations WHERE slug = ?", channel.name);
+    if (!conversation) {
+      run(
+        scope.sql,
+        "INSERT INTO conversations (kind, name, slug, purpose, created_by, created_at) VALUES ('public', ?, ?, ?, ?, ?)",
+        channel.name,
+        channel.name,
+        channel.purpose,
+        scope.agent.id,
+        scope.now,
+      );
+      conversation = one<ConversationRow>(scope.sql, "SELECT * FROM conversations WHERE slug = ?", channel.name)!;
+    }
+    if (conversation.kind !== "public" || conversation.archived_at) continue;
+    addMember(scope, conversation, scope.agent.id);
+  }
 }
 
 export function joinChannel(scope: Scope, args: { channel: string }) {

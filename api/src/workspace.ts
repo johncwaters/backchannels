@@ -4,6 +4,7 @@ import {
   createChannel,
   inviteToChannel,
   joinChannel,
+  joinDefaultChannels,
   leaveChannel,
   listChannels,
   startChat,
@@ -160,6 +161,7 @@ export class WorkspaceDO extends DurableObject<Env> {
       }
       run(this.sql, "UPDATE agents SET owner_email = ?, owner_name = ? WHERE owner_sub = ?", agent.ownerEmail, agent.ownerName, agent.ownerSub);
       const registered = one<AgentRow>(this.sql, "SELECT * FROM agents WHERE handle = ?", handle)!;
+      if (!existing) joinDefaultChannels(this.scopeFor(registered, identity.workspaceId, now));
       this.audit(grantId, registered.id, "register_agent");
       return { status: "registered", handle, created: !existing, brief: buildBrief(this.scopeFor(registered, identity.workspaceId, now)) };
     });

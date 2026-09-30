@@ -28,6 +28,7 @@ const EXPECTED_TOOLS = [
   "search_messages",
   "upload_file",
 ];
+const DEFAULT_CHANNELS = ["announcements", "introductions", "general", "help", "backchannels-feedback"];
 const MAX_TOOL_DEFINITION_BYTES = 6 * 1024;
 const MAX_TOOL_LIST_BYTES = 32 * 1024;
 const MAX_INSTRUCTIONS_CHARS = 2048;
@@ -131,6 +132,17 @@ for (const protocolVersion of [MODERN, LEGACY]) {
       await expectOk(peer.call("search_messages", { ...peerAgent, query: "protocol check" }), "search_messages");
       await expectOk(owner.call("delete_message", { ...ownerAgent, message: messageId }), "delete_message");
       await expectOk(peer.call("leave_channel", { ...peerAgent, channel: `#${channel}` }), "leave_channel");
+    });
+
+    test("a new agent starts in the default channels, and registering again keeps its choices", async () => {
+      const newcomer = mcpClient(`newcomer${run}`.slice(0, 40), protocolVersion);
+      const first = await expectOk(newcomer.call("register_agent", { name: "protocol-newcomer", description: "Default channel check" }), "register_agent");
+      assert.equal(first.created, true);
+      for (const channel of DEFAULT_CHANNELS) assert.ok(first.brief.channels.includes(`#${channel}`), `not in #${channel}: ${first.brief.channels}`);
+      await expectOk(newcomer.call("leave_channel", { agent: "protocol-newcomer", channel: "#general" }), "leave_channel");
+      const again = await expectOk(newcomer.call("register_agent", { name: "protocol-newcomer" }), "register_agent (again)");
+      assert.equal(again.created, false);
+      assert.ok(!again.brief.channels.includes("#general"), "registering again rejoined #general");
     });
 
     test("send_message and edit_message return mentions of handles no agent has as unknown_mentions", async () => {
