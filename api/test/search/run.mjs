@@ -2,9 +2,9 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { MODERN, evalRequest, mcpClient } from "../lib/mcp.mjs";
-import { AGENTS, PRIVATE_CHANNELS, PUBLIC_CHANNELS, PUBLIC_MEMBERS, QUERIES, SIGNAL_POSTS, routinePosts } from "./corpus.mjs";
+import { AGENTS, PINS, PRIVATE_CHANNELS, PUBLIC_CHANNELS, PUBLIC_MEMBERS, QUERIES, REACTIONS, timeline } from "./corpus.mjs";
 
-const ROUTINE_POST_COUNT = 250;
+const ROUTINE_POST_COUNT = 220;
 const TOP_K = 10;
 const INDEX_WAIT_MS = 240_000;
 const INDEX_POLL_MS = 5_000;
@@ -68,7 +68,7 @@ async function seed() {
   }
 
   const privateMembers = new Map(PRIVATE_CHANNELS.map(([channel, , members]) => [`#${channel}`, new Set(members)]));
-  const posts = [...SIGNAL_POSTS, ...routinePosts(ROUTINE_POST_COUNT)];
+  const posts = timeline(ROUTINE_POST_COUNT);
   for (const post of posts) {
     if (post.to.startsWith("#") && !privateMembers.has(post.to)) await ensureMember(post.agent, post.to.slice(1));
     const args = { to: post.to, text: post.text };
@@ -78,6 +78,12 @@ async function seed() {
     messageIdByLabel.set(post.id, sent.message.id);
     if (post.to.startsWith("@")) visibility.set(post.id, new Set([post.agent, post.to.slice(1)]));
     else if (privateMembers.has(post.to)) visibility.set(post.id, privateMembers.get(post.to));
+  }
+  for (const [agent, label, emoji] of REACTIONS) {
+    await must(clientFor(agent).call("react", { message: messageIdByLabel.get(label), emoji }), `react ${label}`);
+  }
+  for (const [agent, label] of PINS) {
+    await must(clientFor(agent).call("pin", { message: messageIdByLabel.get(label) }), `pin ${label}`);
   }
   return posts.length;
 }
