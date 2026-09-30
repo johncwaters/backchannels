@@ -1,4 +1,4 @@
-import type { AdminResult, AdminSearchOptions, AdminSearchPage, Conversation, ConversationSort, DirectoryKind, Message, Reaction, Scope, SearchMatch, SearchSort } from "./admin";
+import type { AdminReadOptions, AdminResult, AdminSearchOptions, AttachedFile, ConversationPage, ReadPosition, AdminSearchPage, Conversation, ConversationSort, DirectoryKind, Message, Reaction, Scope, SearchMatch, SearchSort } from "./admin";
 import { matchOffsets, searchAsViewer, viewerMatchNote, type Searcher, type ViewerSearch } from "./search";
 import { SEARCH } from "./search/config";
 import { parseQuery, type FreeTerm } from "./search/query";
@@ -27,8 +27,18 @@ type ListedRow = ConversationRow & {
   messages_today: number;
   people: number;
   is_mine: number;
+  pin_count: number;
 };
-type AuthoredMessageRow = MessageRow & { handle: string | null; owner_email: string | null; owner_sub: string | null; live_replies: number; last_live_reply_at: number | null };
+type AuthoredMessageRow = MessageRow & {
+  handle: string | null;
+  owner_email: string | null;
+  owner_sub: string | null;
+  live_replies: number;
+  last_live_reply_at: number | null;
+  thread_root_seq: number | null;
+  pinned_at: number | null;
+  pinned_by: string | null;
+};
 
 const SCOPES: readonly Scope[] = ["mine", "everyone"];
 const KINDS: readonly DirectoryKind[] = ["public", "private"];
@@ -45,8 +55,11 @@ const ownConversations = (subParameter: string) => `own_conversations AS (
   WHERE own.owner_sub = ${subParameter} AND own.revoked_at IS NULL)`;
 const LIVE_REPLIES = `(SELECT count(*) FROM messages reply WHERE reply.thread_root_id = m.id AND reply.deleted_at IS NULL)`;
 const LAST_LIVE_REPLY_AT = `(SELECT max(reply.created_at) FROM messages reply WHERE reply.thread_root_id = m.id AND reply.deleted_at IS NULL)`;
-const MESSAGE_SELECT = `SELECT m.*, a.handle, a.owner_email, a.owner_sub, ${LIVE_REPLIES} AS live_replies, ${LAST_LIVE_REPLY_AT} AS last_live_reply_at
-  FROM messages m LEFT JOIN agents a ON a.id = m.author_id`;
+const MESSAGE_COLUMNS = `m.*, a.handle, a.owner_email, a.owner_sub, ${LIVE_REPLIES} AS live_replies, ${LAST_LIVE_REPLY_AT} AS last_live_reply_at,
+  (SELECT root.seq FROM messages root WHERE root.id = m.thread_root_id) AS thread_root_seq,
+  pin.pinned_at, (SELECT pinner.handle FROM agents pinner WHERE pinner.id = pin.pinned_by) AS pinned_by`;
+const MESSAGE_JOINS = `LEFT JOIN agents a ON a.id = m.author_id LEFT JOIN pins pin ON pin.message_id = m.id`;
+const MESSAGE_SELECT = `SELECT ${MESSAGE_COLUMNS} FROM messages m ${MESSAGE_JOINS}`;
 
 function listedConversations(context: AdminContext, condition: string, ...bindings: (string | number)[]): ListedRow[] {
   return all<ListedRow>(
@@ -60,6 +73,7 @@ function listedConversations(context: AdminContext, condition: string, ...bindin
          CASE WHEN c.kind NOT IN ('public', 'private') THEN '' WHEN c.topic <> '' THEN c.topic ELSE c.purpose END AS display_topic,
          (SELECT count(*) FROM messages m WHERE m.conversation_id = c.id AND m.deleted_at IS NULL AND m.created_at > ?1) AS messages_today,
          (SELECT count(DISTINCT a.owner_sub) FROM members m JOIN agents a ON a.id = m.agent_id WHERE m.conversation_id = c.id) AS people,
+         (SELECT count(*) FROM pins p JOIN messages pm ON pm.id = p.message_id WHERE pm.conversation_id = c.id AND pm.deleted_at IS NULL) AS pin_count,
          c.id IN (SELECT conversation_id FROM own_conversations) AS is_mine
        FROM conversations c WHERE c.archived_at IS NULL
      )
@@ -89,6 +103,7 @@ function viewConversation(context: AdminContext, row: ListedRow): Conversation {
     messagesToday: row.messages_today,
     lastActivity: row.last_message_at === null ? null : new Date(row.last_message_at).toISOString(),
     isMine: row.is_mine === 1,
+    pins: row.pin_count,
     preview: latest ? `${latest.handle ?? "unknown"}: ${latest.text}` : row.display_topic,
   };
 }
@@ -116,25 +131,49 @@ function reactionsByMessageId(context: AdminContext, rows: AuthoredMessageRow[])
   return reactionsById;
 }
 
-function viewMessages<Row extends AuthoredMessageRow>(context: AdminContext, rows: Row[]): Message[] {
-  const reactionsById = reactionsByMessageId(context, rows);
-  return rows.map((row) => viewMessage(row, context.sub, reactionsById.get(row.id) ?? []));
+function filesByMessageId(context: AdminContext, rows: AuthoredMessageRow[]): Map<number, AttachedFile[]> {
+  const idsWithFiles = rows.filter((row) => row.has_file && !row.deleted_at).map((row) => row.id);
+  const filesById = new Map<number, AttachedFile[]>();
+  if (idsWithFiles.length === 0) return filesById;
+  const fileRows = all<AttachedFile & { message_id: number }>(
+    context.sql,
+    `SELECT message_id, id, name, mime, size FROM files
+     WHERE message_id IN (SELECT value FROM json_each(?)) ORDER BY created_at, id`,
+    JSON.stringify(idsWithFiles),
+  );
+  for (const { message_id, ...file } of fileRows) filesById.set(message_id, [...(filesById.get(message_id) ?? []), file]);
+  return filesById;
 }
 
-function viewMessage(row: AuthoredMessageRow, sub: string, reactions: Reaction[]): Message {
+function viewMessages<Row extends AuthoredMessageRow>(context: AdminContext, rows: Row[]): Message[] {
+  const reactionsById = reactionsByMessageId(context, rows);
+  const filesById = filesByMessageId(context, rows);
+  return rows.map((row) => viewMessage(row, context.sub, reactionsById.get(row.id) ?? [], filesById.get(row.id) ?? []));
+}
+
+const isoTime = (epochMs: number | null) => (epochMs === null ? null : new Date(epochMs).toISOString());
+const agentName = (handle: string) => handle.slice(handle.indexOf("/") + 1);
+
+function viewMessage(row: AuthoredMessageRow, sub: string, reactions: Reaction[], files: AttachedFile[]): Message {
   const email = row.owner_email ?? "";
   const handle = row.handle ?? "unknown";
   return {
     seq: row.seq,
     person: email.split("@")[0],
     personEmail: email,
-    agent: handle.slice(handle.indexOf("/") + 1),
+    agent: agentName(handle),
     time: new Date(row.created_at).toISOString(),
     text: row.deleted_at ? "" : row.text,
     isOwn: row.owner_sub === sub,
     threadReplies: row.live_replies,
-    lastReplyAt: row.last_live_reply_at === null ? null : new Date(row.last_live_reply_at).toISOString(),
+    lastReplyAt: isoTime(row.last_live_reply_at),
+    threadRootSeq: row.thread_root_seq,
+    alsoInChannel: row.also_in_channel === 1,
+    editedAt: isoTime(row.edited_at),
+    deleted: row.deleted_at !== null,
+    pinned: row.pinned_at === null ? null : { by: row.pinned_by ?? "unknown", at: isoTime(row.pinned_at)! },
     reactions,
+    files,
   };
 }
 
@@ -193,17 +232,57 @@ export function adminList(
 
 const isPositiveInteger = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) > 0;
 
-export function adminRead(
-  context: AdminContext,
-  options: { conversation: string; thread?: number; before?: number; limit?: number },
-): AdminResult<{ conversation: Conversation; messages: Message[]; nextBefore?: number }> {
-  if (typeof options?.conversation !== "string") return invalid;
+function findReadable(context: AdminContext, conversation: unknown): ListedRow | undefined {
+  if (typeof conversation !== "string") return undefined;
+  return listedConversations(context, "slug = ?3", conversation)[0];
+}
+
+type StreamPage = { rows: AuthoredMessageRow[]; hasOlder: boolean; hasNewer: boolean };
+
+function readStream(context: AdminContext, scopeCondition: string, scopeId: number, position: ReadPosition, limit: number): StreamPage {
+  const streamSelect = (comparison: string, order: "ASC" | "DESC") => (pivot: number, count: number) =>
+    all<AuthoredMessageRow>(
+      context.sql,
+      `${MESSAGE_SELECT}
+       WHERE ${scopeCondition} AND (m.deleted_at IS NULL OR live_replies > 0) AND m.seq ${comparison} ?2
+       ORDER BY m.seq ${order} LIMIT ?3`,
+      scopeId,
+      pivot,
+      count,
+    );
+  const olderThan = streamSelect("<", "DESC");
+  const newerThan = streamSelect(">", "ASC");
+  const atOrNewer = streamSelect(">=", "ASC");
+
+  if (position.after !== undefined) {
+    const newer = newerThan(position.after, limit + 1);
+    return { rows: newer.slice(0, limit), hasOlder: true, hasNewer: newer.length > limit };
+  }
+  if (position.around !== undefined) {
+    const olderCount = Math.floor(limit / 2);
+    const older = olderThan(position.around, olderCount + 1);
+    const newer = atOrNewer(position.around, limit - olderCount + 1);
+    return {
+      rows: [...older.slice(0, olderCount).reverse(), ...newer.slice(0, limit - olderCount)],
+      hasOlder: older.length > olderCount,
+      hasNewer: newer.length > limit - olderCount,
+    };
+  }
+  const older = olderThan(position.before ?? Number.MAX_SAFE_INTEGER, limit + 1);
+  const page = older.slice(0, limit).reverse();
+  const hasNewer = position.before !== undefined && page.length > 0 && newerThan(page.at(-1)!.seq, 1).length > 0;
+  return { rows: page, hasOlder: older.length > limit, hasNewer };
+}
+
+export function adminRead(context: AdminContext, options: AdminReadOptions): AdminResult<ConversationPage> {
+  const positions = [options?.before, options?.after, options?.around].filter((value) => value !== undefined);
+  if (typeof options?.conversation !== "string" || positions.length > 1) return invalid;
   if (options.thread !== undefined && !isPositiveInteger(options.thread)) return invalid;
-  if (options.before !== undefined && !isPositiveInteger(options.before)) return invalid;
+  if (!positions.every(isPositiveInteger)) return invalid;
   if (options.limit !== undefined && !isPositiveInteger(options.limit)) return invalid;
   const limit = Math.min(options.limit ?? DEFAULT_READ_LIMIT, MAX_READ_LIMIT);
 
-  const row = listedConversations(context, "slug = ?3", options.conversation)[0];
+  const row = findReadable(context, options.conversation);
   if (!row) return notFound;
   const threadRoot =
     options.thread === undefined
@@ -220,25 +299,45 @@ export function adminRead(
   const scopeCondition = threadRoot
     ? "(m.id = ?1 OR m.thread_root_id = ?1)"
     : "m.conversation_id = ?1 AND (m.thread_root_id IS NULL OR m.also_in_channel = 1)";
-  const rows = all<AuthoredMessageRow>(
-    context.sql,
-    `${MESSAGE_SELECT}
-     WHERE ${scopeCondition}
-       AND (m.deleted_at IS NULL OR live_replies > 0) AND m.seq < ?2
-     ORDER BY m.seq DESC LIMIT ?3`,
-    threadRoot?.id ?? row.id,
-    options.before ?? Number.MAX_SAFE_INTEGER,
-    limit + 1,
-  );
-  const page = rows.slice(0, limit).reverse();
+  const { rows, hasOlder, hasNewer } = readStream(context, scopeCondition, threadRoot?.id ?? row.id, options, limit);
   return {
     ok: true,
     value: {
       conversation: viewConversation(context, row),
-      messages: viewMessages(context, page),
-      ...(rows.length > limit ? { nextBefore: page[0].seq } : {}),
+      messages: viewMessages(context, rows),
+      ...(hasOlder && rows.length ? { nextBefore: rows[0].seq } : {}),
+      ...(hasNewer && rows.length ? { nextAfter: rows.at(-1)!.seq } : {}),
     },
   };
+}
+
+export function adminPins(context: AdminContext, options: { conversation: string }): AdminResult<{ conversation: Conversation; messages: Message[] }> {
+  const row = findReadable(context, options?.conversation);
+  if (!row) return notFound;
+  context.audit("admin_pins", row.id);
+  const rows = all<AuthoredMessageRow>(
+    context.sql,
+    `${MESSAGE_SELECT} WHERE m.conversation_id = ? AND pin.message_id IS NOT NULL AND m.deleted_at IS NULL
+     ORDER BY pin.pinned_at DESC LIMIT ?`,
+    row.id,
+    MAX_READ_LIMIT,
+  );
+  return { ok: true, value: { conversation: viewConversation(context, row), messages: viewMessages(context, rows) } };
+}
+
+export function adminFile(context: AdminContext, options: { conversation: string; file: string }): AdminResult<{ name: string; mime: string; r2Key: string }> {
+  const row = findReadable(context, options?.conversation);
+  if (!row || typeof options.file !== "string") return notFound;
+  const file = one<{ name: string; mime: string; r2_key: string }>(
+    context.sql,
+    `SELECT f.name, f.mime, f.r2_key FROM files f JOIN messages m ON m.id = f.message_id
+     WHERE f.id = ? AND m.conversation_id = ? AND m.deleted_at IS NULL`,
+    options.file,
+    row.id,
+  );
+  if (!file) return notFound;
+  context.audit("admin_file", row.id);
+  return { ok: true, value: { name: file.name, mime: file.mime, r2Key: file.r2_key } };
 }
 
 const ADMIN_SEARCH_LOG_PREFIX = "admin:";
@@ -282,10 +381,10 @@ function searchMatches(context: AdminContext, ids: number[], terms: FreeTerm[]):
   if (!ids.length) return [];
   const rows = all<SearchedRow>(
     context.sql,
-    `SELECT m.*, a.handle, a.owner_email, a.owner_sub, ${LIVE_REPLIES} AS live_replies, ${LAST_LIVE_REPLY_AT} AS last_live_reply_at, c.slug AS conversation_slug, c.kind AS conversation_kind
+    `SELECT ${MESSAGE_COLUMNS}, c.slug AS conversation_slug, c.kind AS conversation_kind
      FROM json_each(?1) j JOIN messages m ON m.id = j.value
        JOIN conversations c ON c.id = m.conversation_id
-       LEFT JOIN agents a ON a.id = m.author_id
+       ${MESSAGE_JOINS}
      WHERE m.deleted_at IS NULL
      ORDER BY j.key`,
     JSON.stringify(ids),

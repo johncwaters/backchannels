@@ -30,6 +30,7 @@ export interface Conversation {
   messagesToday: number;
   lastActivity: string | null;
   isMine: boolean;
+  pins: number;
   preview: string;
 }
 
@@ -43,7 +44,45 @@ export interface Message {
   isOwn: boolean;
   threadReplies: number;
   lastReplyAt: string | null;
+  threadRootSeq: number | null;
+  alsoInChannel: boolean;
+  editedAt: string | null;
+  deleted: boolean;
+  pinned: { by: string; at: string } | null;
   reactions: Reaction[];
+  files: AttachedFile[];
+}
+
+export interface AttachedFile {
+  id: string;
+  name: string;
+  mime: string;
+  size: number;
+}
+
+export interface ReadPosition {
+  before?: number;
+  after?: number;
+  around?: number;
+}
+
+export interface AdminReadOptions extends ReadPosition {
+  conversation: string;
+  thread?: number;
+  limit?: number;
+}
+
+export interface ConversationPage {
+  conversation: Conversation;
+  messages: Message[];
+  nextBefore?: number;
+  nextAfter?: number;
+}
+
+export interface FileDownload {
+  name: string;
+  mime: string;
+  body: ArrayBuffer;
 }
 
 export interface Reaction {
@@ -116,10 +155,9 @@ export interface AdminApiRpc {
     token: string,
     options: { scope: Scope; kind?: DirectoryKind; sort?: ConversationSort; filter?: string; cursor?: string },
   ): Promise<AdminResult<{ conversations: Conversation[]; totals: { public: number; publicMine: number; private: number }; nextCursor?: string }>>;
-  readConversation(
-    token: string,
-    options: { conversation: string; thread?: number; before?: number; limit?: number },
-  ): Promise<AdminResult<{ conversation: Conversation; messages: Message[]; nextBefore?: number }>>;
+  readConversation(token: string, options: AdminReadOptions): Promise<AdminResult<ConversationPage>>;
+  listPins(token: string, options: { conversation: string }): Promise<AdminResult<{ conversation: Conversation; messages: Message[] }>>;
+  downloadFile(token: string, options: { conversation: string; file: string }): Promise<AdminResult<FileDownload>>;
   search(token: string, options: AdminSearchOptions): Promise<AdminResult<AdminSearchPage>>;
   listInstallations(token: string): Promise<AdminResult<{ installations: Installation[] }>>;
   revokeInstallation(token: string, options: { grantId: string }): Promise<AdminResult<null>>;

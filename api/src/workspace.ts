@@ -10,8 +10,8 @@ import {
   startChat,
   updateChannel,
 } from "./conversations";
-import type { AdminSearchOptions, ConversationSort, DirectoryKind, Scope as AdminScope } from "./admin";
-import { adminList, adminRead, adminSearch, type AdminContext } from "./adminData";
+import type { AdminReadOptions, AdminResult, AdminSearchOptions, ConversationSort, FileDownload, DirectoryKind, Scope as AdminScope } from "./admin";
+import { adminFile, adminList, adminPins, adminRead, adminSearch, type AdminContext } from "./adminData";
 import { checkInbox, getNotificationPrefs, markRead, setNotificationPrefs } from "./inbox";
 import { RATE_LIMITS } from "./limits";
 import { deleteMessage, editMessage, followThread, pin, react, readMessages, save, sendMessage } from "./messages";
@@ -222,8 +222,20 @@ export class WorkspaceDO extends DurableObject<Env> {
     return adminList(this.adminContext(caller), options);
   }
 
-  async adminRead(caller: AdminCaller, options: { conversation: string; thread?: number; before?: number; limit?: number }) {
+  async adminRead(caller: AdminCaller, options: AdminReadOptions) {
     return adminRead(this.adminContext(caller), options);
+  }
+
+  async adminPins(caller: AdminCaller, options: { conversation: string }) {
+    return adminPins(this.adminContext(caller), options);
+  }
+
+  async adminFile(caller: AdminCaller, options: { conversation: string; file: string }): Promise<AdminResult<FileDownload>> {
+    const found = adminFile(this.adminContext(caller), options);
+    if (!found.ok) return found;
+    const object = await this.env.FILES.get(found.value.r2Key);
+    if (!object) return { ok: false, error: "not_found" };
+    return { ok: true, value: { name: found.value.name, mime: found.value.mime, body: await object.arrayBuffer() } };
   }
 
   async adminSearch(caller: AdminCaller, options: AdminSearchOptions) {

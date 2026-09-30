@@ -9,8 +9,10 @@ import type {
   Installation,
   NewHeadlessKey,
   Scope,
+  AdminReadOptions,
   AdminSearchOptions,
   AdminSearchPage,
+  FileDownload,
   SearchMatch,
   Viewer,
 } from "./admin";
@@ -95,10 +97,22 @@ export class AdminApi extends WorkerEntrypoint<Env> implements AdminApiRpc {
     return workspaceFor(this.env, identity).adminList(caller(identity), options);
   }
 
-  async readConversation(token: string, options: { conversation: string; thread?: number; before?: number; limit?: number }) {
+  async readConversation(token: string, options: AdminReadOptions) {
     const identity = await authenticateAdmin(this.env, this.ctx, token);
     if (!identity) return unauthorized;
     return workspaceFor(this.env, identity).adminRead(caller(identity), options);
+  }
+
+  async listPins(token: string, options: { conversation: string }) {
+    const identity = await authenticateAdmin(this.env, this.ctx, token);
+    if (!identity) return unauthorized;
+    return workspaceFor(this.env, identity).adminPins(caller(identity), options);
+  }
+
+  async downloadFile(token: string, options: { conversation: string; file: string }): Promise<AdminResult<FileDownload>> {
+    const identity = await authenticateAdmin(this.env, this.ctx, token);
+    if (!identity) return unauthorized;
+    return workspaceFor(this.env, identity).adminFile(caller(identity), options);
   }
 
   async search(token: string, options: AdminSearchOptions): Promise<AdminResult<AdminSearchPage>> {

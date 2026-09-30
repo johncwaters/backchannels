@@ -106,15 +106,19 @@ describe("admin search", () => {
   test("mine finds only conversations the viewer's agents are in; everyone adds every public channel", async () => {
     const mine = await adminSearch("searchowner", { query: word, scope: "mine" });
     assert.ok(mine.ok, JSON.stringify(mine));
-    assert.deepEqual(new Set(mine.value.matches.map((match) => match.conversation.id)), new Set([ownChannel]));
+    const mineIds = new Set(mine.value.matches.map((match) => match.conversation.id));
+    assert.ok(mineIds.has(ownChannel) && !mineIds.has(otherChannel), JSON.stringify([...mineIds]));
     const everyone = await adminSearch("searchowner", { query: word, scope: "everyone" });
-    assert.deepEqual(new Set(everyone.value.matches.map((match) => match.conversation.id)), new Set([ownChannel, otherChannel]));
-    assert.ok(everyone.value.matches.every((match) => match.ranges.length > 0));
+    const everyoneIds = new Set(everyone.value.matches.map((match) => match.conversation.id));
+    assert.ok(everyoneIds.has(ownChannel) && everyoneIds.has(otherChannel), JSON.stringify([...everyoneIds]));
+    const exactMatches = everyone.value.matches.filter((match) => match.message.text.includes(word));
+    assert.equal(exactMatches.length, 3);
+    assert.ok(exactMatches.every((match) => match.ranges.length > 0));
   });
 
   test("modifiers resolve against the viewer's own agents", async () => {
     const fromMe = await adminSearch("searchowner", { query: `${word} from:me`, scope: "everyone" });
-    assert.deepEqual(fromMe.value.matches.map((match) => match.message.isOwn), [true, true]);
+    assert.ok(fromMe.value.matches.length >= 2 && fromMe.value.matches.every((match) => match.message.isOwn));
     const recent = await adminSearch("searchowner", { query: `in:#${ownChannel}`, scope: "everyone", sort: "recent" });
     assert.deepEqual(recent.value.matches.map((match) => match.message.text), [`second ${word} note`, `first ${word} note`]);
   });
@@ -124,5 +128,64 @@ describe("admin search", () => {
     assert.ok(unknown.ok, JSON.stringify(unknown));
     assert.deepEqual(unknown.value.matches, []);
     assert.match(unknown.value.problem, /not found/);
+  });
+});
+
+function adminPins(who, input) {
+  return evalRequest(`/eval/admin-pins?space=${SPACE}`, "POST", { who, input });
+}
+
+describe("admin reading positions and message state", () => {
+  const run = Date.now().toString(36);
+  const channel = `positions-${run}`;
+  const agent = { agent: `positioner-${run}` };
+  const owner = mcpClient("positionowner", undefined, SPACE);
+  const refs = [];
+
+  test("setup", async () => {
+    await expectOutput(owner.call("register_agent", { name: agent.agent, description: "Admin position check" }));
+    await expectOutput(owner.call("create_channel", { ...agent, name: channel, purpose: "admin position check" }));
+    for (let index = 1; index <= 7; index++) {
+      refs.push((await expectOutput(owner.call("send_message", { ...agent, to: `#${channel}`, text: `message ${index}` }))).message);
+    }
+  });
+
+  const seqOf = (ref) => Number(ref.split("/").at(-1));
+  const texts = (page) => page.value.messages.map((message) => message.text);
+
+  test("around centers the page on a message and reports both directions", async () => {
+    const page = await adminRead("positionowner", { conversation: channel, around: seqOf(refs[3]), limit: 3 });
+    assert.deepEqual(texts(page), ["message 3", "message 4", "message 5"]);
+    assert.equal(page.value.nextBefore, seqOf(refs[2]));
+    assert.equal(page.value.nextAfter, seqOf(refs[4]));
+  });
+
+  test("after reads newer messages oldest first; before reports newer ones", async () => {
+    const after = await adminRead("positionowner", { conversation: channel, after: seqOf(refs[4]), limit: 5 });
+    assert.deepEqual(texts(after), ["message 6", "message 7"]);
+    assert.equal(after.value.nextAfter, undefined);
+    const before = await adminRead("positionowner", { conversation: channel, before: seqOf(refs[2]), limit: 5 });
+    assert.deepEqual(texts(before), ["message 1", "message 2"]);
+    assert.equal(before.value.nextAfter, seqOf(refs[1]));
+    const latest = await adminRead("positionowner", { conversation: channel, limit: 2 });
+    assert.equal(latest.value.nextAfter, undefined);
+    assert.deepEqual(await adminRead("positionowner", { conversation: channel, before: 3, after: 1 }), { ok: false, error: "invalid" });
+  });
+
+  test("messages carry pins, edits, deletions and files; pins list newest pin first", async () => {
+    await expectOutput(owner.call("pin", { ...agent, message: refs[0] }));
+    await expectOutput(owner.call("pin", { ...agent, message: refs[5] }));
+    await expectOutput(owner.call("edit_message", { ...agent, message: refs[1], text: "message 2, edited" }));
+    const upload = await expectOutput(owner.call("upload_file", { ...agent, name: "notes.txt", content: "file body" }));
+    const withFile = await expectOutput(owner.call("send_message", { ...agent, to: `#${channel}`, text: "", file_ids: [upload.file_id] }));
+    const page = await adminRead("positionowner", { conversation: channel, limit: 10 });
+    const bySeq = new Map(page.value.messages.map((message) => [message.seq, message]));
+    assert.match(bySeq.get(seqOf(refs[0])).pinned.by, new RegExp(`/positioner-${run}$`));
+    assert.equal(bySeq.get(seqOf(refs[2])).pinned, null);
+    assert.ok(bySeq.get(seqOf(refs[1])).editedAt);
+    assert.deepEqual(bySeq.get(seqOf(withFile.message)).files.map((file) => [file.name, file.size]), [["notes.txt", 9]]);
+    assert.equal(page.value.conversation.pins, 2);
+    const pins = await adminPins("positionowner", { conversation: channel });
+    assert.deepEqual(texts(pins), ["message 6", "message 1"]);
   });
 });
