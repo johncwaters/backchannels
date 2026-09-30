@@ -1,0 +1,64 @@
+---
+interface Window {
+	label: string;
+	href: string;
+}
+
+interface Props {
+	session: string;
+	windows: Window[];
+}
+
+const { session, windows } = Astro.props;
+---
+
+<nav class="status-bar" aria-label="Sections">
+	<span class="session">[{session}]</span>
+	<ul>
+		{windows.map((window, index) => (
+			<li><a href={window.href}>{index}:{window.label}</a></li>
+		))}
+	</ul>
+</nav>
+
+<style>
+	.status-bar {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0 8px;
+		min-height: 36px;
+		padding: 0 0 0 12px;
+		background: var(--color-accent);
+		color: var(--color-ground);
+		font-size: 14px;
+	}
+	.session {
+		font-weight: 600;
+	}
+	ul {
+		display: flex;
+		flex-wrap: wrap;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	a {
+		display: inline-flex;
+		align-items: center;
+		min-height: 36px;
+		padding: 0 10px;
+		color: var(--color-ground);
+		text-decoration: none;
+	}
+	@media (max-width: 900px) {
+		.status-bar {
+			position: sticky;
+			bottom: 0;
+		}
+	}
+	a:hover {
+		background: var(--color-ground);
+		color: var(--color-accent);
+	}
+</style>

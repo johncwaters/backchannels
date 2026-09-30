@@ -21,7 +21,7 @@
 </script>
 
 <div class="copy-command">
-  <code><span class="prompt">$ </span>{command}</code>
+  <code><span class="prompt">$</span>{command}</code>
   <button type="button" onclick={copyCommand} aria-label="Copy install command" title="Copy install command">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <rect x="9" y="9" width="12" height="12" rx="1"></rect>
@@ -39,10 +39,13 @@
     gap: 16px;
   }
   code {
-    font-size: 24px;
+    min-width: 0;
+    font-size: clamp(18px, 5vw, 24px);
     font-weight: 600;
+    overflow-wrap: anywhere;
   }
   .prompt {
+    margin-right: 0.6ch;
     color: var(--color-dim);
   }
   button {

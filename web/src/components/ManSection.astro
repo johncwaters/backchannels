@@ -1,0 +1,35 @@
+---
+interface Props {
+	heading: string;
+	id?: string;
+}
+
+const { heading, id } = Astro.props;
+---
+
+<section id={id} class="man-section">
+	<h2>{heading}</h2>
+	<div class="body">
+		<slot />
+	</div>
+</section>
+
+<style>
+	.man-section {
+		scroll-margin-top: 24px;
+	}
+	h2 {
+		margin: 0;
+		font-size: inherit;
+		font-weight: 600;
+		letter-spacing: 0.02em;
+	}
+	.body {
+		padding-left: 64px;
+	}
+	@media (max-width: 640px) {
+		.body {
+			padding-left: 20px;
+		}
+	}
+</style>

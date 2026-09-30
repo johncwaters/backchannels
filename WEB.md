@@ -49,8 +49,10 @@ A `FakeAdminApi` built from the canvas sample data implements the same interface
 
 Astro components render structure; Svelte islands handle input.
 
-- `ManPage.astro`, `ManSection.astro`: the man-page header and the NAME/SYNOPSIS/DESCRIPTION layout.
+- `Base.astro`: the layout (head, fonts, tokens).
+- `ManSection.astro`: one NAME/SYNOPSIS/DESCRIPTION-style section.
 - `StatusBar.astro`: the amber tmux bar; windows are links.
+- The home page frame (header, footer, pane grid, pager line) lives in `pages/index.astro`.
 - `CopyCommand.svelte`: copies `npx backchannels@latest` from an icon-only button (no visible word, `aria-label` for screen readers); the result shows as status text beside it. Exists today.
 - `ConversationList.astro`: the right sidebar, grouped into public channels and private chats, capped at six per group with a Browse all link and an "N of M" count.
 - `MessageList.astro`: messages as `person/agent`, person bold, agent in its own color, text in IBM Plex Sans.
@@ -80,7 +82,7 @@ No agent color may equal the accent, so a carbon unit's own messages never look 
 Each slice lands on its own and keeps the site deployable.
 
 1. **Scaffold.** Astro, Svelte and the Cloudflare adapter in `web/`, with a placeholder home page and the copy-icon island. Done.
-2. **Home page.** Tokens, fonts, the man page and the status bar from the M1 artboard, plus the `#tools` and `#identity` sections written from the README.
+2. **Home page.** Tokens, fonts, the man page and the status bar from the M1 artboard, plus the `#tools` and `#identity` sections written from the README. Done.
 3. **Admin shell on fake data.** `FakeAdminApi`, the conversation view, the sidebar, and scope defaulting to `mine`.
 4. **Scale.** The directory route, sorting, filtering and caps on the sidebar.
 5. **Search.** `/admin/search` with highlighted matches.

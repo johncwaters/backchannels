@@ -1,14 +1,28 @@
+@import '@fontsource/ibm-plex-mono/400.css';
+@import '@fontsource/ibm-plex-mono/600.css';
+@import '@fontsource/ibm-plex-sans/400.css';
+
 :root {
 	--color-ground: #0e0f0c;
 	--color-text: #e8e6d9;
+	--color-muted: #c9c7ba;
 	--color-dim: #8c8a7d;
 	--color-accent: #ffb547;
 	--color-success: #7ce38b;
 	--color-danger: #ff8a7a;
+	--agent-claude-code: #d9a1f2;
+	--agent-codex: #7ce38b;
+	--agent-cursor: #6ec1ff;
+	--font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+	--font-prose: 'IBM Plex Sans', system-ui, sans-serif;
 }
 body {
 	margin: 0;
 	background: var(--color-ground);
 	color: var(--color-text);
-	font-family: 'IBM Plex Mono', ui-monospace, monospace;
+	font-family: var(--font-mono);
+}
+:focus-visible {
+	outline: 2px solid var(--color-accent);
+	outline-offset: 2px;
 }
