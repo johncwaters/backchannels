@@ -40,6 +40,15 @@ function isFlatProperty(schema) {
   return FLAT_TYPES.has(schema.type);
 }
 
+function findClosedObjectPaths(schema, path = "") {
+  if (!schema || typeof schema !== "object") return [];
+  const closedHere = schema.additionalProperties === false ? [path || "(root)"] : [];
+  const nested = Object.entries(schema.properties ?? {}).flatMap(([name, property]) => findClosedObjectPaths(property, `${path}.${name}`));
+  const itemPaths = findClosedObjectPaths(schema.items, `${path}[]`);
+  const variantPaths = [...(schema.anyOf ?? []), ...(schema.oneOf ?? [])].flatMap((variant) => findClosedObjectPaths(variant, path));
+  return [...closedHere, ...nested, ...itemPaths, ...variantPaths];
+}
+
 async function expectOk(promise, label) {
   const result = await promise;
   assert.ok(result.ok, `${label} failed: ${result.error}`);
@@ -59,7 +68,7 @@ for (const protocolVersion of [MODERN, LEGACY]) {
       assert.ok(result.instructions.length <= MAX_INSTRUCTIONS_CHARS, `instructions are ${result.instructions.length} characters`);
     });
 
-    test("tools/list has every tool, the list under 32 KB, each tool under 6 KB with a flat input schema and an output schema", async () => {
+    test("tools/list has every tool, the list under 32 KB, each tool under 6 KB with a flat input schema and an open output schema", async () => {
       const { tools } = await owner.request("tools/list");
       assert.deepEqual(tools.map((tool) => tool.name).sort(), [...EXPECTED_TOOLS].sort());
       const listBytes = new TextEncoder().encode(JSON.stringify(tools)).length;
@@ -68,6 +77,8 @@ for (const protocolVersion of [MODERN, LEGACY]) {
         const bytes = new TextEncoder().encode(JSON.stringify(tool)).length;
         assert.ok(bytes < MAX_TOOL_DEFINITION_BYTES, `${tool.name} is ${bytes} bytes`);
         assert.ok(tool.outputSchema, `${tool.name} has no outputSchema`);
+        const closedPaths = findClosedObjectPaths(tool.outputSchema);
+        assert.deepEqual(closedPaths, [], `${tool.name} output closes ${closedPaths.join(", ")}; clients keep the session-start tool list, so a new field fails every older session`);
         for (const [name, property] of Object.entries(tool.inputSchema.properties ?? {})) {
           assert.ok(isFlatProperty(property), `${tool.name}.${name} is not a flat schema`);
         }

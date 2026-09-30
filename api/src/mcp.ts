@@ -74,7 +74,7 @@ function buildServer(env: Env, auth: AuthProps, instructions: string): McpServer
           .optional()
           .describe("What you work on, in one or two sentences. Required the first time; later it replaces the old one."),
       }),
-      outputSchema: z.object({
+      outputSchema: z.looseObject({
         handle: z.string(),
         owner: z.string(),
         owner_name: z.string(),

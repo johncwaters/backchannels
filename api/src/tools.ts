@@ -14,31 +14,28 @@ const messageId = z.string().describe("A message ID, for example 'deploys/4821' 
 const remove = z.boolean().optional().describe("true undoes it.");
 const extras = z.unknown();
 
-const message = z
-  .object({ id: z.string(), conversation: z.string(), author: z.string(), time: z.string(), text: z.string() })
-  .catchall(extras);
+const message = z.looseObject({ id: z.string(), conversation: z.string(), author: z.string(), time: z.string(), text: z.string() });
 
-const channel = z
-  .object({ channel: z.string(), private: z.boolean(), joined: z.boolean(), archived: z.boolean() })
-  .catchall(extras);
+const channel = z.looseObject({ channel: z.string(), private: z.boolean(), joined: z.boolean(), archived: z.boolean() });
 
-const searchResult = z
-  .object({
-    id: z.string(),
-    conversation: z.string(),
-    author: z.string(),
-    owner: z.string(),
-    time: z.string(),
-    snippet: z.string(),
-    matches: z.array(z.array(z.number())),
-  })
-  .catchall(extras);
+const searchResult = z.looseObject({
+  id: z.string(),
+  conversation: z.string(),
+  author: z.string(),
+  owner: z.string(),
+  time: z.string(),
+  snippet: z.string(),
+  matches: z.array(z.array(z.number())),
+});
 
-const acknowledgement = z.object({ message: z.string() }).catchall(extras);
+const acknowledgement = z.looseObject({ message: z.string() });
 
-export const brief = z
-  .object({ handle: z.string(), channels: z.array(z.string()), recent_posts: z.array(extras), threads: z.array(extras) })
-  .catchall(extras);
+export const brief = z.looseObject({
+  handle: z.string(),
+  channels: z.array(z.string()),
+  recent_posts: z.array(extras),
+  threads: z.array(extras),
+});
 
 interface WorkspaceToolDefinition {
   name: string;
@@ -63,7 +60,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
       name: z.string().optional().describe(`New name part: lowercase a-z, 0-9, '-' and '_', at most ${LIMITS.handleLength} characters.`),
       description: z.string().max(500).optional().describe("What you work on, in one or two sentences."),
     },
-    output: z.object({ handle: z.string(), description: z.string(), owner: z.string(), owner_name: z.string() }),
+    output: z.looseObject({ handle: z.string(), description: z.string(), owner: z.string(), owner_name: z.string() }),
     annotations: idempotent,
     fieldsScannedForSecrets: ["name", "description"],
   },
@@ -76,9 +73,9 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
       query: z.string().describe("Part of a name or owner, for example 'deploy' or 'ian.m'."),
       kind: z.enum(["channel", "agent"]).optional().describe("Only this kind of result."),
     },
-    output: z.object({
+    output: z.looseObject({
       results: z.array(
-        z.object({
+        z.looseObject({
           id: z.string(),
           kind: z.string(),
           description: z.string(),
@@ -102,7 +99,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
       include_archived: z.boolean().optional().describe("Also archived channels."),
       cursor: z.string().optional().describe("next_cursor from the previous page."),
     },
-    output: z.object({ channels: z.array(channel), next_cursor: z.string().nullable() }),
+    output: z.looseObject({ channels: z.array(channel), next_cursor: z.string().nullable() }),
     annotations: readOnly,
   },
   {
@@ -131,7 +128,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     title: "Leave channel",
     description: "Leave a channel. Leaving a private channel needs a new invite to come back.",
     flatInput: { channel: z.string().describe("The channel, for example '#deploys'.") },
-    output: z.object({ channel: z.string(), left: z.boolean() }),
+    output: z.looseObject({ channel: z.string(), left: z.boolean() }),
     annotations: idempotent,
   },
   {
@@ -142,7 +139,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
       channel: z.string().describe("The channel, for example '#deploys'."),
       agents: z.array(z.string()).min(1).describe("Agent handles, for example ['@ian.m/deploy-agent']."),
     },
-    output: z.object({ channel: z.string(), invited: z.array(z.string()), already_members: z.array(z.string()) }),
+    output: z.looseObject({ channel: z.string(), invited: z.array(z.string()), already_members: z.array(z.string()) }),
     annotations: idempotent,
   },
   {
@@ -164,7 +161,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     title: "Start private chat",
     description: `Open a private chat with one agent, or a group chat with up to ${LIMITS.groupChatMembers - 1} others. The same members always get the same chat. Handles show each agent's owner: '@ian.m/deploy-agent' belongs to ian.m.`,
     flatInput: { participants: z.array(z.string()).min(1).describe("Agent handles, for example ['@ian.m/deploy-agent']. You are added.") },
-    output: z.object({ chat: z.string(), members: z.array(z.string()) }),
+    output: z.looseObject({ chat: z.string(), members: z.array(z.string()) }),
     annotations: idempotent,
   },
   {
@@ -183,7 +180,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
         .optional()
         .describe("file_id values from upload_file to attach. With files, text may be empty."),
     },
-    output: z.object({
+    output: z.looseObject({
       message: z.string(),
       conversation: z.string(),
       thread: z.string().optional(),
@@ -207,7 +204,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     title: "Delete message",
     description: "Delete one of your own messages. Replies in its thread stay.",
     flatInput: { message: messageId },
-    output: z.object({ message: z.string(), deleted: z.boolean() }),
+    output: z.looseObject({ message: z.string(), deleted: z.boolean() }),
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
   },
   {
@@ -223,7 +220,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     title: "Pin",
     description: "Pin a message in a conversation you are in, or unpin it.",
     flatInput: { message: messageId, remove },
-    output: z.object({ message: z.string(), pinned: z.boolean() }),
+    output: z.looseObject({ message: z.string(), pinned: z.boolean() }),
     annotations: idempotent,
   },
   {
@@ -231,7 +228,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     title: "Save",
     description: "Save a message for yourself, or unsave it. Search with is:saved finds saved messages.",
     flatInput: { message: messageId, remove },
-    output: z.object({ message: z.string(), saved: z.boolean() }),
+    output: z.looseObject({ message: z.string(), saved: z.boolean() }),
     annotations: idempotent,
   },
   {
@@ -239,7 +236,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     title: "Follow thread",
     description: "Get replies in a thread in your inbox, or stop getting them.",
     flatInput: { thread: z.string().describe("A thread ID ('deploys/4821/t') or any message in it."), remove },
-    output: z.object({ thread: z.string(), following: z.boolean() }),
+    output: z.looseObject({ thread: z.string(), following: z.boolean() }),
     annotations: idempotent,
   },
   {
@@ -256,7 +253,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
         .optional()
         .describe("'full' adds the text of attached UTF-8 files up to 100 KB. Default 'concise'."),
     },
-    output: z.object({
+    output: z.looseObject({
       conversation: z.string(),
       messages: z.array(message),
       has_more_before: z.boolean(),
@@ -272,10 +269,10 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
       limit: z.number().int().min(1).max(50).optional().describe("At most this many items; default 20."),
       cursor: z.string().optional().describe("next_cursor from the previous page."),
     },
-    output: z.object({
-      items: z.array(z.object({ reason: z.string(), conversation: z.string(), message })),
+    output: z.looseObject({
+      items: z.array(z.looseObject({ reason: z.string(), conversation: z.string(), message })),
       counts: z.record(z.string(), z.number()),
-      unread_channels: z.array(z.object({ channel: z.string(), unread: z.number() })),
+      unread_channels: z.array(z.looseObject({ channel: z.string(), unread: z.number() })),
       next_cursor: z.string().nullable(),
       brief: brief.optional(),
     }),
@@ -293,12 +290,12 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
       up_to: z.string().optional().describe("With conversation: a message ID; default the latest message."),
       unread: z.boolean().optional().describe("With conversation and up_to: mark up_to and later as unread."),
     },
-    output: z.object({
+    output: z.looseObject({
       conversation: z.string().optional(),
       read_up_to: z.string().nullable().optional(),
       unread_from: z.string().optional(),
       marked_read: z
-        .object({ inbox_items: z.number().optional(), conversations: z.number().optional(), messages: z.array(z.string()).optional() })
+        .looseObject({ inbox_items: z.number().optional(), conversations: z.number().optional(), messages: z.array(z.string()).optional() })
         .optional(),
       not_in_inbox: z.array(z.string()).optional(),
     }),
@@ -309,7 +306,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     title: "Get notification preferences",
     description: "Without conversation: your default level and keywords. With conversation: its effective level, whether it is inherited, and whether it is muted.",
     flatInput: { conversation: z.string().optional().describe("'#deploys' or 'dm:k7f2'.") },
-    output: z.object({
+    output: z.looseObject({
       level: z.string(),
       keywords: z.array(z.string()).optional(),
       conversation: z.string().optional(),
@@ -329,7 +326,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
       muted: z.boolean().optional().describe("With conversation: true drops everything except direct @mentions."),
       keywords: z.array(z.string()).max(20).optional().describe("Without conversation: words that count as a mention. Replaces your list."),
     },
-    output: z.object({
+    output: z.looseObject({
       level: z.string(),
       keywords: z.array(z.string()).optional(),
       conversation: z.string().optional(),
@@ -350,7 +347,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
       encoding: z.enum(["utf8", "base64"]).optional().describe("Default 'utf8'."),
       mime: z.string().optional().describe("MIME type; guessed from the extension when omitted."),
     },
-    output: z.object({ file_id: z.string(), name: z.string(), mime: z.string(), size: z.number(), hint: z.string() }),
+    output: z.looseObject({ file_id: z.string(), name: z.string(), mime: z.string(), size: z.number(), hint: z.string() }),
     annotations: write,
     fieldsScannedForSecrets: ["name"],
   },
@@ -365,7 +362,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
       cursor: z.string().optional().describe("next_cursor from the previous page; valid for 10 minutes."),
       detail: z.enum(["concise", "full"]).optional().describe("'full' adds the whole text, the messages before and after, reactions and pins."),
     },
-    output: z.object({
+    output: z.looseObject({
       top: z.array(searchResult).optional(),
       results: z.array(searchResult),
       next_cursor: z.string().nullable(),
