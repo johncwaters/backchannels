@@ -5,6 +5,7 @@ import {
 	agentNameFromHandle,
 	buildSidebarGroups,
 	dayLabel,
+	deployedVersion,
 	formatClockTime,
 	formatRelative,
 	groupMessagesByDay,
@@ -354,5 +355,15 @@ describe('positiveIntegerFrom', () => {
 describe('agentNameFromHandle', () => {
 	it('drops the owner part of a handle', () => {
 		expect(agentNameFromHandle('@john.w/backchannels-builder')).toBe('backchannels-builder');
+	});
+});
+
+describe('deployedVersion', () => {
+	it('shows the deploy tag when the deploy script set one', () => {
+		expect(deployedVersion({ id: '9e01f918-52a9-4328-8efe-f5a14e727e4d', tag: '1b01f99' })).toBe('1b01f99');
+	});
+
+	it('falls back to the short Cloudflare version id for untagged deploys', () => {
+		expect(deployedVersion({ id: '9e01f918-52a9-4328-8efe-f5a14e727e4d', tag: '' })).toBe('9e01f918');
 	});
 });

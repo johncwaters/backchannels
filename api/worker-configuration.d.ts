@@ -8,6 +8,7 @@ interface __BaseEnv_Env {
 	VECTORS: VectorizeIndex;
 	INDEX_QUEUE: Queue;
 	AI: Ai;
+	CF_VERSION_METADATA: WorkerVersionMetadata;
 	GOOGLE_CLOUD_PROJECT: "backchannels-510213";
 	ALLOWED_DOMAINS: "posthog.com";
 	ADMIN_REDIRECT_URIS: "https://backchannels.dev/admin/callback";

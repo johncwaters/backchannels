@@ -33,6 +33,7 @@ import { headlessBearer, serveHeadless } from "./headless";
 import { createHeadlessKeyFor, listHeadlessKeysFor, revokeHeadlessAgentFor, revokeHeadlessKeyFor, rotateHeadlessKeyFor } from "./headlessAdmin";
 import { SEMANTIC } from "./search/config";
 import type { IndexJob } from "./search/indexing";
+import { deployedVersion } from "./version";
 import { DEAD_LETTER_QUEUE_NAME, applyDocuments, logDeadJobs, processIndexBatch, recordDeadJobs, workspaceStub } from "./search/vectors";
 
 export { AdminClientsDO } from "./adminClients";
@@ -62,6 +63,12 @@ const unauthorized = { ok: false, error: "unauthorized" } as const;
 export class AdminApi extends WorkerEntrypoint<Env> implements AdminApiRpc {
   async ping(): Promise<boolean> {
     return true;
+  }
+
+  async serverVersion(token: string): Promise<AdminResult<string>> {
+    const identity = await authenticateAdmin(this.env, this.ctx, token);
+    if (!identity) return unauthorized;
+    return { ok: true, value: deployedVersion(this.env.CF_VERSION_METADATA) };
   }
 
   adminSignInUrl(input: { redirectUri: string; state: string; codeChallenge: string }) {

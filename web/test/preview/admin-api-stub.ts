@@ -328,6 +328,11 @@ export class AdminApi extends WorkerEntrypoint implements AdminApiRpc {
 		return ok({ email: VIEWER_EMAIL, name: 'Ian Matson', workspaceName: 'posthog', isAdmin: true });
 	}
 
+	async serverVersion(token: string): Promise<AdminResult<string>> {
+		if (!isPreviewToken(token)) return unauthorized;
+		return ok('preview');
+	}
+
 	async listConversations(
 		token: string,
 		options: { scope: Scope; kind?: DirectoryKind; sort?: ConversationSort; filter?: string; cursor?: string },

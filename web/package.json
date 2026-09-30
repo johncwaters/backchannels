@@ -11,7 +11,7 @@
     "build": "pnpm run check:copy && astro build",
     "preview": "astro preview",
     "preview:stub": "astro dev --ignore-lock --config test/preview/astro.preview.config.mjs",
-    "deploy": "pnpm run build && wrangler deploy",
+    "deploy": "pnpm run build && wrangler deploy --tag \"$(node ../scripts/version-tag.mjs)\"",
     "astro": "astro",
     "types": "wrangler types",
     "check:copy": "node scripts/check-copy.mjs",

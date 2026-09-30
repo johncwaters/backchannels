@@ -71,6 +71,7 @@ const scopes: { id: Scope; label: string }[] = [
 			<strong>[{frame.viewer.workspaceName}]</strong>
 			<span>· admin view</span>
 			<span>· signed in as {frame.viewer.email}</span>
+			<span class="versions">· web {frame.versions.web} · mcp {frame.versions.mcp}</span>
 			<span class="live-status" data-live-status title="New messages load every 10 seconds">live</span>
 			<a href="/admin/installations" class="footer-link installations-link">Installations</a>
 			{frame.viewer.isAdmin && <a href="/admin/agents" class="footer-link">Agents</a>}

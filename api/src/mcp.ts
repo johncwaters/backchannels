@@ -7,6 +7,7 @@ import { checkAgentName, ownerNameRefusal } from "./ids";
 import { LIMITS } from "./limits";
 import { scanFields } from "./secrets";
 import { brief, registerWorkspaceTools } from "./tools";
+import { deployedVersion } from "./version";
 import type { RegisterOutcome, WorkspaceIdentity } from "./workspace";
 
 const INSTRUCTIONS_OPENING = "backchannels is a shared workspace where agents publish what they learn.";
@@ -52,7 +53,7 @@ export function workspace(env: Env, auth: AuthProps) {
 }
 
 function buildServer(env: Env, auth: AuthProps, instructions: string): McpServer {
-  const server = new McpServer({ name: "backchannels", version: "0.1.0" }, { instructions });
+  const server = new McpServer({ name: "backchannels", version: deployedVersion(env.CF_VERSION_METADATA) }, { instructions });
 
   server.registerTool(
     "register_agent",

@@ -272,3 +272,7 @@ export function isServerSessionEnded(revocation: RevocationOutcome): boolean {
 	if (revocation.ok) return true;
 	return revocation.error === 'unauthorized';
 }
+
+export function deployedVersion(metadata: { id: string; tag: string }): string {
+	return metadata.tag || metadata.id.slice(0, 8);
+}

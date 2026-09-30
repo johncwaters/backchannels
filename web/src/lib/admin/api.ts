@@ -1,11 +1,12 @@
 import type { APIContext } from 'astro';
 import { env } from 'cloudflare:workers';
-import { buildSidebarGroups, loginHref, sidebarKindsFor, sidebarSortFor } from './helpers';
+import { buildSidebarGroups, deployedVersion, loginHref, sidebarKindsFor, sidebarSortFor } from './helpers';
 import type { AdminApiRpc, AdminResult, AdminSession, Conversation, DirectoryKind, Scope } from './types';
 
 type AdminFailure = Extract<AdminResult<unknown>, { ok: false }>['error'];
 export interface AdminApi {
 	viewer(): ReturnType<AdminApiRpc['viewer']>;
+	serverVersion(): ReturnType<AdminApiRpc['serverVersion']>;
 	listConversations(options: Parameters<AdminApiRpc['listConversations']>[1]): ReturnType<AdminApiRpc['listConversations']>;
 	readConversation(options: Parameters<AdminApiRpc['readConversation']>[1]): ReturnType<AdminApiRpc['readConversation']>;
 	listPins(options: Parameters<AdminApiRpc['listPins']>[1]): ReturnType<AdminApiRpc['listPins']>;
@@ -60,6 +61,7 @@ export async function adminApiFor(context: APIContext): Promise<AdminApi | Respo
 	const { accessToken } = adminSession;
 	return {
 		viewer: () => rpc.viewer(accessToken),
+		serverVersion: () => rpc.serverVersion(accessToken),
 		listConversations: (options) => rpc.listConversations(accessToken, options),
 		readConversation: (options) => rpc.readConversation(accessToken, options),
 		listPins: (options) => rpc.listPins(accessToken, options),
@@ -75,13 +77,23 @@ export async function adminApiFor(context: APIContext): Promise<AdminApi | Respo
 	};
 }
 
+async function mcpVersionOrUnknown(adminApi: AdminApi): Promise<string> {
+	const serverVersion = await adminApi.serverVersion().catch((error: unknown) => {
+		console.error('admin serverVersion lookup failed', error);
+		return undefined;
+	});
+	if (!serverVersion?.ok) return 'unknown';
+	return serverVersion.value;
+}
+
 export async function loadAdminFrame(context: APIContext, scope: Scope) {
 	const adminApi = await adminApiFor(context);
 	if (adminApi instanceof Response) return adminApi;
 	const listSidebarKind = (kind: DirectoryKind) => adminApi.listConversations({ scope, kind, sort: sidebarSortFor(kind, scope) });
 	const showsPrivateChats = sidebarKindsFor(scope).includes('private');
-	const [viewer, publicListing, privateListing] = await Promise.all([
+	const [viewer, mcpVersion, publicListing, privateListing] = await Promise.all([
 		adminApi.viewer(),
+		mcpVersionOrUnknown(adminApi),
 		listSidebarKind('public'),
 		showsPrivateChats ? listSidebarKind('private') : undefined,
 	]);
@@ -97,6 +109,7 @@ export async function loadAdminFrame(context: APIContext, scope: Scope) {
 		adminApi,
 		frame: {
 			viewer: viewer.value,
+			versions: { web: deployedVersion(env.CF_VERSION_METADATA), mcp: mcpVersion },
 			nowMs,
 			sidebarGroups: buildSidebarGroups(conversationsByKind, publicListing.value.totals, scope, nowMs),
 		},

@@ -57,6 +57,8 @@ The types live twice, in `api/src/admin.ts` and `web/src/lib/admin/types.ts`, an
 
 ## Components
 
+- `layouts/Admin.astro` footer: shows the web and mcp versions because parallel sessions redeploy both workers; tags come from `scripts/version-tag.mjs`.
+
 Astro components render structure; Svelte islands handle input.
 
 - `Base.astro`: the layout (head, fonts, tokens).

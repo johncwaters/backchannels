@@ -4,6 +4,7 @@
 interface __BaseEnv_Env {
 	SESSION: KVNamespace;
 	ASSETS: Fetcher;
+	CF_VERSION_METADATA: WorkerVersionMetadata;
 	ADMIN_API: Service /* entrypoint AdminApi from backchannels-api */;
 }
 declare namespace Cloudflare {
