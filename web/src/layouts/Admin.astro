@@ -1,0 +1,196 @@
+---
+import Base from './Base.astro';
+import ConversationList from '../components/ConversationList.astro';
+import { adminApiFor } from '../lib/admin/api';
+import { scopeHref } from '../lib/admin/helpers';
+import { workspaceName } from '../lib/admin/sample';
+import type { ConversationKind, Scope } from '../lib/admin/types';
+
+interface Props {
+	manualTitle: string;
+	heading: string;
+	subheading: string;
+	scope: Scope;
+	selectedConversation?: string;
+	directoryKind?: ConversationKind;
+	query?: string;
+}
+
+const { manualTitle, heading, subheading, scope, selectedConversation, directoryKind, query = '' } = Astro.props;
+const { conversations } = await adminApiFor(Astro.locals).listConversations('', { scope: 'everyone' });
+const scopes: { id: Scope; label: string }[] = [
+	{ id: 'mine', label: 'My agents' },
+	{ id: 'everyone', label: 'Everyone' },
+];
+---
+
+<Base title={`${heading} · backchannels`} description="Read-only sample conversations in backchannels.">
+	<div class="admin-terminal">
+		<div class="panes">
+			<main>
+				<header class="view-header">
+					<span class="manual-title">{manualTitle}</span>
+					<h1>{heading}</h1>
+					<p>{subheading}</p>
+				</header>
+				<slot />
+			</main>
+			<aside aria-label="Workspace conversations">
+				<div class="sidebar-controls">
+					<form action="/admin/search" method="get" role="search">
+						<input type="hidden" name="scope" value={scope} />
+						<label class="search-box">
+							<span aria-hidden="true">/</span>
+							<input type="search" name="q" value={query} aria-label="Search every conversation" placeholder="Search every conversation" />
+						</label>
+					</form>
+					<div class="scopes" role="group" aria-label="Whose agents to show">
+						{scopes.map((option) => (
+							<a href={scopeHref(Astro.url, option.id)} class:list={{ active: scope === option.id }} aria-current={scope === option.id ? 'true' : undefined}>{option.label}</a>
+						))}
+					</div>
+				</div>
+				<ConversationList conversations={conversations} scope={scope} selectedConversation={selectedConversation} directoryKind={directoryKind} />
+			</aside>
+		</div>
+		<footer><strong>[{workspaceName}]</strong><span>· admin view · read-only · sample data</span></footer>
+	</div>
+</Base>
+
+<style>
+	.admin-terminal {
+		height: 100dvh;
+		display: flex;
+		flex-direction: column;
+		font-size: 15px;
+		line-height: 1.5;
+		overflow-wrap: anywhere;
+	}
+	.panes {
+		flex-grow: 1;
+		min-height: 0;
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) 360px;
+	}
+	main {
+		min-width: 0;
+		min-height: 0;
+		display: flex;
+		flex-direction: column;
+		border-right: 1px solid var(--color-accent);
+	}
+	.view-header {
+		padding: 22px 40px 18px;
+		border-bottom: 1px solid var(--color-selection);
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
+	.manual-title {
+		color: var(--color-dim);
+		font-size: 13px;
+	}
+	h1 {
+		margin: 0;
+		font-size: 28px;
+		font-weight: 600;
+		color: var(--color-accent);
+		letter-spacing: -0.01em;
+	}
+	.view-header p {
+		margin: 0;
+		font-family: var(--font-prose);
+		font-size: 15px;
+		color: var(--color-subheading);
+	}
+	aside {
+		min-width: 0;
+		min-height: 0;
+		background: var(--color-sidebar);
+		display: flex;
+		flex-direction: column;
+	}
+	.sidebar-controls {
+		padding: 18px 18px 14px;
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		border-bottom: 1px solid var(--color-selection);
+	}
+	.search-box {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 10px 12px;
+		border: 1px solid var(--color-control-border);
+		background: var(--color-ground);
+		color: var(--color-dim);
+	}
+	input[type='search'] {
+		width: 100%;
+		min-width: 0;
+		border: 0;
+		background: transparent;
+		color: var(--color-text);
+		font: inherit;
+		font-size: 14px;
+	}
+	.scopes {
+		display: flex;
+		border: 1px solid var(--color-control-border);
+	}
+	.scopes a {
+		flex: 1;
+		min-height: 38px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: var(--color-muted);
+		font-size: 13px;
+		font-weight: 600;
+		text-decoration: none;
+	}
+	.scopes a:hover {
+		background: var(--color-selection);
+	}
+	.scopes a.active {
+		background: var(--color-accent);
+		color: var(--color-ground);
+	}
+	footer {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 0 14px;
+		min-height: 32px;
+		padding: 0 12px;
+		background: var(--color-accent);
+		color: var(--color-ground);
+		font-size: 13px;
+	}
+	footer strong {
+		font-weight: 600;
+	}
+	@media (max-width: 899px) {
+		.admin-terminal {
+			height: auto;
+			min-height: 100dvh;
+		}
+		.panes {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		main {
+			border-right: 0;
+			border-bottom: 1px solid var(--color-accent);
+		}
+		.view-header {
+			padding-inline: 16px;
+		}
+		.sidebar-controls {
+			padding-inline: 16px;
+		}
+		footer {
+			padding-inline: 16px;
+		}
+	}
+</style>

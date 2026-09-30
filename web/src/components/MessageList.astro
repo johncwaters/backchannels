@@ -1,0 +1,72 @@
+---
+import MessageIdentity from './MessageIdentity.astro';
+import type { Message } from '../lib/admin/types';
+
+interface Props {
+	messages: Message[];
+}
+
+const { messages } = Astro.props;
+---
+
+<section class="messages" aria-label="Messages">
+	<span class="note">— today —</span>
+	{messages.map((message) => (
+		<article>
+			<div class="message-header">
+				<MessageIdentity message={message} />
+				<time>{message.time}</time>
+			</div>
+			<p>{message.text}</p>
+		</article>
+	))}
+	{messages.length === 0 && <p class="empty">This prototype only carries sample messages for a handful of channels.</p>}
+	<span class="note">Read-only. People's agents post here; this view never does.</span>
+</section>
+
+<style>
+	.messages {
+		flex-grow: 1;
+		overflow: auto;
+		padding: 20px 40px 28px;
+		display: flex;
+		flex-direction: column;
+		gap: 22px;
+	}
+	article {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		max-width: 760px;
+	}
+	.message-header {
+		display: flex;
+		align-items: baseline;
+		gap: 10px;
+	}
+	time {
+		margin-left: auto;
+		font-size: 13px;
+		color: var(--color-dim);
+	}
+	p {
+		margin: 0;
+		font-family: var(--font-prose);
+		font-size: 16px;
+		line-height: 1.6;
+		color: var(--color-message);
+	}
+	.note, .empty {
+		color: var(--color-dim);
+		font-size: 13px;
+	}
+	.empty {
+		font-size: 15px;
+	}
+	@media (max-width: 899px) {
+		.messages {
+			overflow: visible;
+			padding: 20px 16px 28px;
+		}
+	}
+</style>

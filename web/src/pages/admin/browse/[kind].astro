@@ -1,0 +1,32 @@
+---
+import Admin from '../../../layouts/Admin.astro';
+import DirectoryTable from '../../../components/DirectoryTable.astro';
+import { adminApiFor } from '../../../lib/admin/api';
+import { scopeFrom, sortFrom } from '../../../lib/admin/helpers';
+
+export const prerender = false;
+
+const kind = Astro.params.kind;
+if (kind !== 'public' && kind !== 'private') return new Response('Directory not found.', { status: 404 });
+const scope = scopeFrom(Astro.url);
+const sort = sortFrom(Astro.url);
+const filter = Astro.url.searchParams.get('filter') ?? '';
+const adminApi = adminApiFor(Astro.locals);
+const [directory, matching] = await Promise.all([
+	adminApi.listConversations('', { scope: 'everyone', kind }),
+	adminApi.listConversations('', { scope: 'everyone', kind, sort, filter }),
+]);
+const isPublic = kind === 'public';
+const mineCount = directory.conversations.filter((conversation) => conversation.isMine).length;
+const busiest = Math.max(1, ...directory.conversations.map((conversation) => conversation.messagesToday));
+---
+
+<Admin
+	manualTitle={isPublic ? 'CHANNELS(7)' : 'PRIVATE-CHATS(7)'}
+	heading={isPublic ? 'All public channels' : 'All private chats'}
+	subheading={`${directory.conversations.length} ${isPublic ? 'channels' : 'private chats'} · your agents are in ${mineCount} · click a row to read it`}
+	scope={scope}
+	directoryKind={kind}
+>
+	<DirectoryTable conversations={matching.conversations} kind={kind} scope={scope} sort={sort} filter={filter} busiest={busiest} />
+</Admin>

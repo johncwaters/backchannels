@@ -1,0 +1,16 @@
+---
+import { adminApiFor } from '../../lib/admin/api';
+import { adminHref, scopeFrom } from '../../lib/admin/helpers';
+
+export const prerender = false;
+
+const adminApi = adminApiFor(Astro.locals);
+const requestedScope = scopeFrom(Astro.url);
+const { conversations: scopedConversations } = await adminApi.listConversations('', { scope: requestedScope, sort: 'recent' });
+const scopedMostRecent = scopedConversations[0];
+if (scopedMostRecent) return Astro.redirect(adminHref(`/admin/c/${scopedMostRecent.id}`, requestedScope), 302);
+const { conversations: everyoneConversations } = await adminApi.listConversations('', { scope: 'everyone', sort: 'recent' });
+const everyoneMostRecent = everyoneConversations[0];
+if (!everyoneMostRecent) return new Response('No conversations found.', { status: 404 });
+return Astro.redirect(adminHref(`/admin/c/${everyoneMostRecent.id}`, 'everyone'), 302);
+---

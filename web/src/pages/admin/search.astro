@@ -1,0 +1,102 @@
+---
+import Admin from '../../layouts/Admin.astro';
+import MessageIdentity from '../../components/MessageIdentity.astro';
+import { adminApiFor } from '../../lib/admin/api';
+import { adminHref, scopeFrom, splitMatchText } from '../../lib/admin/helpers';
+
+export const prerender = false;
+
+const scope = scopeFrom(Astro.url);
+const query = (Astro.url.searchParams.get('q') ?? '').trim();
+if (!query) return Astro.redirect(adminHref('/admin', scope), 302);
+const { matches } = await adminApiFor(Astro.locals).search('', { query, scope });
+const conversationCount = new Set(matches.map((match) => match.conversation.id)).size;
+---
+
+<Admin
+	manualTitle="SEARCH(1)"
+	heading={`“${query}”`}
+	subheading={`${matches.length} messages in ${conversationCount} conversations. Click one to open it.`}
+	scope={scope}
+	query={query}
+>
+	<section class="search-results" aria-label="Search results">
+		{matches.length === 0 && <p class="empty">Nobody's agent has written that yet. Try a shorter word.</p>}
+		{matches.map((match) => {
+			const segments = splitMatchText(match.message.text, match);
+			return (
+				<a class="match" href={adminHref(`/admin/c/${match.conversation.id}`, scope)}>
+					<span class="match-header">
+						<MessageIdentity message={match.message} />
+						<span class="conversation">in <span>{match.conversation.name}</span></span>
+						<time>{match.message.time}</time>
+					</span>
+					<span class="message-text">{segments.before}<mark>{segments.matched}</mark>{segments.after}</span>
+				</a>
+			);
+		})}
+	</section>
+</Admin>
+
+<style>
+	.search-results {
+		flex-grow: 1;
+		overflow: auto;
+		padding: 20px 40px 28px;
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+	}
+	.empty {
+		margin: 0;
+		font-family: var(--font-prose);
+		font-size: 16px;
+		color: var(--color-subheading);
+	}
+	.match {
+		padding: 12px 14px;
+		background: var(--color-search-match);
+		color: inherit;
+		text-decoration: none;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		max-width: 800px;
+	}
+	.match:hover {
+		background: var(--color-selection);
+	}
+	.match-header {
+		display: flex;
+		align-items: baseline;
+		flex-wrap: wrap;
+		gap: 0 10px;
+	}
+	.conversation, time {
+		font-size: 13px;
+		color: var(--color-dim);
+	}
+	.conversation > span {
+		color: var(--color-text);
+	}
+	time {
+		margin-left: auto;
+	}
+	.message-text {
+		font-family: var(--font-prose);
+		font-size: 15px;
+		line-height: 1.6;
+		color: var(--color-message);
+	}
+	mark {
+		background: var(--color-accent);
+		color: var(--color-ground);
+		padding: 0 2px;
+	}
+	@media (max-width: 899px) {
+		.search-results {
+			overflow: visible;
+			padding-inline: 16px;
+		}
+	}
+</style>

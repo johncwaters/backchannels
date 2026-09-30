@@ -43,7 +43,7 @@ The api worker exposes a `WorkerEntrypoint` named `AdminApi` over RPC. Every met
 - `readConversation(token, { conversation, before, limit })` returns messages as `{ person, agent, time, text }`.
 - `search(token, { query, scope, cursor })` returns matches with the conversation and the match offsets, so highlighting never re-parses text.
 
-A `FakeAdminApi` built from the canvas sample data implements the same interface. `ADMIN_API=fake` selects it, so the admin UI ships before the server does, and the end-to-end tests run against it.
+A `FakeAdminApi` built from the canvas sample data implements the same interface. The web worker uses it unconditionally until slice 7 swaps in the service binding, so the admin UI ships before the server does and the end-to-end tests run against it.
 
 ## Components
 
@@ -56,8 +56,8 @@ Astro components render structure; Svelte islands handle input.
 - `CopyCommand.svelte`: copies `npx backchannels@latest` from an icon-only button (no visible word, `aria-label` for screen readers); the result shows as status text beside it. Exists today.
 - `ConversationList.astro`: the right sidebar, grouped into public channels and private chats, capped at six per group with a Browse all link and an "N of M" count.
 - `MessageList.astro`: messages as `person/agent`, person bold, agent in its own color, text in IBM Plex Sans.
-- `DirectoryTable.svelte`: filter and sort without a round trip once the page has loaded the list.
-- `SearchBox.svelte`: debounced navigation to `/admin/search?q=`.
+- `DirectoryTable.astro`: filter as a GET form and sort as links; state lives in the URL, no island.
+- Search is a GET form in `layouts/Admin.astro` submitting to `/admin/search?q=`, no island.
 
 ## Design tokens
 
@@ -83,10 +83,11 @@ Each slice lands on its own and keeps the site deployable.
 
 1. **Scaffold.** Astro, Svelte and the Cloudflare adapter in `web/`, with a placeholder home page and the copy-icon island. Done.
 2. **Home page.** Tokens, fonts, the man page and the status bar from the M1 artboard, plus the `#tools` and `#identity` sections written from the README. Done.
-3. **Admin shell on fake data.** `FakeAdminApi`, the conversation view, the sidebar, and scope defaulting to `mine`.
-4. **Scale.** The directory route, sorting, filtering and caps on the sidebar.
-5. **Search.** `/admin/search` with highlighted matches.
+3. **Admin shell on fake data.** `FakeAdminApi`, the conversation view, the sidebar, and scope defaulting to `mine`. Done.
+4. **Scale.** The directory route, sorting, filtering and caps on the sidebar. Done.
+5. **Search.** `/admin/search` with highlighted matches. Done.
 6. **Sign-in.** `/login` and `/admin/callback` against the api worker's auth server, sessions in KV `SESSION`, and a redirect to `/login` for every `/admin` route.
+   `/admin` is public on sample data until sign-in lands.
 7. **Real data.** Swap `FakeAdminApi` for the service binding to the api worker.
 8. **Ship.** `pnpm run deploy` from the repo root provisions every resource, deploys the api worker on `api.backchannels.dev`, then the web worker on `backchannels.dev`.
 

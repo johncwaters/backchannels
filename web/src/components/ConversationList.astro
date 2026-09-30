@@ -1,0 +1,136 @@
+---
+import { adminHref, buildSidebarGroups, formatRelative } from '../lib/admin/helpers';
+import type { Conversation, ConversationKind, Scope } from '../lib/admin/types';
+
+interface Props {
+	conversations: Conversation[];
+	scope: Scope;
+	selectedConversation?: string;
+	directoryKind?: ConversationKind;
+}
+
+const { conversations, scope, selectedConversation, directoryKind } = Astro.props;
+const groups = buildSidebarGroups(conversations, scope);
+---
+
+<nav aria-label="Conversations">
+	{groups.map((group) => (
+		<section>
+			<div class="group-header">
+				<h2>{group.title}</h2>
+				<span>{group.conversations.length} of {group.total}</span>
+			</div>
+			{group.conversations.map((conversation) => (
+				<a
+					class="conversation"
+					href={adminHref(`/admin/c/${conversation.id}`, scope)}
+					aria-current={conversation.id === selectedConversation ? 'page' : undefined}
+				>
+					<span class="conversation-header">
+						<strong>{conversation.name}</strong>
+						<span class="last-active">{formatRelative(conversation.minutesAgo)}</span>
+					</span>
+					<span class="preview">{conversation.preview}</span>
+				</a>
+			))}
+			<a
+				class:list={['browse', { selected: directoryKind === group.kind }]}
+				href={adminHref(`/admin/browse/${group.kind}`, scope)}
+				aria-current={directoryKind === group.kind ? 'page' : undefined}
+			>Browse all</a>
+		</section>
+	))}
+</nav>
+
+<style>
+	nav {
+		flex-grow: 1;
+		overflow: auto;
+		padding: 14px 10px 18px;
+		display: flex;
+		flex-direction: column;
+		gap: 20px;
+	}
+	section {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 0;
+	}
+	.group-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		gap: 8px;
+		padding: 0 8px 6px;
+		font-size: 12px;
+		color: var(--color-dim);
+	}
+	h2 {
+		margin: 0;
+		font-size: inherit;
+		font-weight: 400;
+		letter-spacing: 0.08em;
+	}
+	.group-header > span {
+		white-space: nowrap;
+	}
+	a {
+		color: var(--color-text);
+		text-decoration: none;
+	}
+	.conversation {
+		padding: 8px 10px;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 0;
+	}
+	.conversation:hover, .selected, .conversation[aria-current='page'] {
+		background: var(--color-selection);
+	}
+	.conversation[aria-current='page'] strong {
+		color: var(--color-accent);
+	}
+	.conversation-header {
+		display: flex;
+		align-items: baseline;
+		gap: 8px;
+	}
+	strong {
+		font-size: 14px;
+		font-weight: 600;
+	}
+	.last-active {
+		margin-left: auto;
+		font-size: 12px;
+		color: var(--color-dim);
+	}
+	.preview {
+		font-family: var(--font-prose);
+		font-size: 13px;
+		color: var(--color-preview);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.browse {
+		margin: 4px 10px 0;
+		align-self: flex-start;
+		min-height: 32px;
+		padding: 0 10px;
+		border: 1px solid var(--color-control-border);
+		display: inline-flex;
+		align-items: center;
+		font-size: 13px;
+	}
+	.browse:hover {
+		background: var(--color-selection);
+	}
+	@media (max-width: 899px) {
+		nav {
+			overflow: visible;
+			padding-inline: 6px;
+		}
+	}
+</style>

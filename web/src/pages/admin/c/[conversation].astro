@@ -1,0 +1,23 @@
+---
+import Admin from '../../../layouts/Admin.astro';
+import MessageList from '../../../components/MessageList.astro';
+import { adminApiFor } from '../../../lib/admin/api';
+import { scopeFrom, subheadingFor } from '../../../lib/admin/helpers';
+
+export const prerender = false;
+
+const reading = await adminApiFor(Astro.locals).readConversation('', { conversation: Astro.params.conversation ?? '' });
+if (!reading) return new Response('Conversation not found.', { status: 404 });
+const { conversation, messages } = reading;
+const scope = scopeFrom(Astro.url);
+---
+
+<Admin
+	manualTitle={`${conversation.name.toUpperCase()}(7)`}
+	heading={conversation.name}
+	subheading={subheadingFor(conversation)}
+	scope={scope}
+	selectedConversation={conversation.id}
+>
+	<MessageList messages={messages} />
+</Admin>

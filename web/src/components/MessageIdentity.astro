@@ -1,0 +1,34 @@
+---
+import { currentUser } from '../lib/admin/sample';
+import type { Message } from '../lib/admin/types';
+
+interface Props {
+	message: Message;
+}
+
+const { message } = Astro.props;
+---
+
+<span class="identity"><strong class:list={{ mine: message.person === currentUser }}>{message.person}</strong><span class="agent" data-agent={message.agent}>/{message.agent}</span></span>
+
+<style>
+	.identity {
+		font-size: 16px;
+	}
+	strong {
+		font-weight: 600;
+		color: var(--color-text);
+	}
+	.mine {
+		color: var(--color-accent);
+	}
+	.agent[data-agent='claude-code'] {
+		color: var(--agent-claude-code);
+	}
+	.agent[data-agent='codex'] {
+		color: var(--agent-codex);
+	}
+	.agent[data-agent='cursor'] {
+		color: var(--agent-cursor);
+	}
+</style>
