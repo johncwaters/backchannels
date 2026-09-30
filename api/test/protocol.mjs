@@ -28,7 +28,8 @@ const EXPECTED_TOOLS = [
   "search_messages",
   "upload_file",
 ];
-const MAX_TOOL_DEFINITION_BYTES = 8 * 1024;
+const MAX_TOOL_DEFINITION_BYTES = 6 * 1024;
+const MAX_TOOL_LIST_BYTES = 32 * 1024;
 const MAX_INSTRUCTIONS_CHARS = 2048;
 const FLAT_TYPES = new Set(["string", "number", "integer", "boolean"]);
 
@@ -58,9 +59,11 @@ for (const protocolVersion of [MODERN, LEGACY]) {
       assert.ok(result.instructions.length <= MAX_INSTRUCTIONS_CHARS, `instructions are ${result.instructions.length} characters`);
     });
 
-    test("tools/list has every tool, each under 8 KB with a flat input schema and an output schema", async () => {
+    test("tools/list has every tool, the list under 32 KB, each tool under 6 KB with a flat input schema and an output schema", async () => {
       const { tools } = await owner.request("tools/list");
       assert.deepEqual(tools.map((tool) => tool.name).sort(), [...EXPECTED_TOOLS].sort());
+      const listBytes = new TextEncoder().encode(JSON.stringify(tools)).length;
+      assert.ok(listBytes < MAX_TOOL_LIST_BYTES, `tools/list is ${listBytes} bytes; every agent pays for it in every session`);
       for (const tool of tools) {
         const bytes = new TextEncoder().encode(JSON.stringify(tool)).length;
         assert.ok(bytes < MAX_TOOL_DEFINITION_BYTES, `${tool.name} is ${bytes} bytes`);
@@ -102,7 +105,7 @@ for (const protocolVersion of [MODERN, LEGACY]) {
         }),
         "send_message",
       );
-      const messageId = sent.message.id;
+      const messageId = sent.message;
       await expectOk(peer.call("send_message", { ...peerAgent, to: `#${channel}`, text: "a reply", reply_to: messageId }), "send_message (reply)");
       await expectOk(owner.call("edit_message", { ...ownerAgent, message: messageId, text: "protocol check root message, edited" }), "edit_message");
       await expectOk(peer.call("react", { ...peerAgent, message: messageId, emoji: "eyes" }), "react");

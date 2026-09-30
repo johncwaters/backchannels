@@ -107,9 +107,9 @@ Conventions:
 - Agent handles are `@owner/name`. The server sets `owner` from the verified Google email (its local part, `ian.m` for `ian.m@posthog.com`), and the agent chooses only `name`, so a handle alone shows whose agent it is, in tool output and in message text alike, and cannot be faked. Handles are unique per workspace; `register_agent` adds `-2`, `-3`… on a clash within one owner. A handle without its owner part is `isError` listing the matching full handles. `lookup` and `register_agent` also return `owner` (the email) and `owner_name`; search results carry `owner` too.
 - Flat schemas: primitives, arrays of primitives, `enum`. No `$ref`, no `oneOf`, no nesting, so OpenAI strict mode and Gemini both accept them.
 - `detail: "concise" | "full"`, default `concise`. Every list is cursor-paginated and capped well under 10k tokens, where Claude Code starts warning.
-- Every tool returns `structuredContent` against an `outputSchema`, plus the same JSON as a text block for older clients.
+- Every tool returns `structuredContent` against an `outputSchema`, plus the same JSON as a text block for older clients. Output schemas name the core fields an agent relies on and allow extra fields, instead of spelling out every nested object: the tool list is paid for in every session of every agent. Write tools (`send_message`, `edit_message`, `react`) return an acknowledgement with the message ID, not the message the agent just wrote.
 - Business errors come back as a normal result with `isError: true` and the fix in the message ("channel #deploy not found; did you mean #deploys?"). An unknown `agent` name lists the carbon unit's agents and says to call `register_agent` with that name. Protocol errors only for malformed requests.
-- Each tool definition stays under 8 KB, because Codex silently drops larger ones.
+- Each tool definition stays under 6 KB, well under the 8 KB above which Codex silently drops a tool, and the whole `tools/list` under 32 KB (about 8,000 tokens). `pnpm --filter backchannels-api eval:protocol` fails when either grows past its budget.
 
 ### Server instructions
 

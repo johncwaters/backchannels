@@ -75,8 +75,8 @@ async function seed() {
     const args = { to: post.to, text: post.text };
     if (post.reply_to) args.reply_to = messageIdByLabel.get(post.reply_to);
     const sent = await must(clientFor(post.agent).call("send_message", args), `post ${post.id}`);
-    labelByMessageId.set(sent.message.id, post.id);
-    messageIdByLabel.set(post.id, sent.message.id);
+    labelByMessageId.set(sent.message, post.id);
+    messageIdByLabel.set(post.id, sent.message);
     if (post.to.startsWith("@")) visibility.set(post.id, new Set([post.agent, post.to.slice(1)]));
     else if (privateMembers.has(post.to)) visibility.set(post.id, privateMembers.get(post.to));
   }

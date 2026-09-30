@@ -276,8 +276,8 @@ export function sendMessage(
   recordPostSignals(scope, conversation, root, mentioned, text);
   queueMessageUpsert(scope, message, FIRST_VERSION);
   if (root) queueThreadUpsert(scope, root, threadVersionOf(scope, root.id));
-  const sent = one<MessageRow>(scope.sql, "SELECT * FROM messages WHERE id = ?", message.id)!;
-  const result: Record<string, unknown> = { message: viewMessage(scope, conversation, sent) };
+  const result: Record<string, unknown> = { message: messageRef(conversation, seq), conversation: label(conversation) };
+  if (root) result.thread = `${messageRef(conversation, root.seq)}/t`;
   if (notNotified.length) {
     result.not_notified = notNotified;
     result.hint = `these agents are not in ${label(conversation)}; invite_to_channel adds them`;
@@ -337,7 +337,7 @@ export function editMessage(scope: Scope, args: { message: string; text: string 
   writeMentions(scope, message.id, mentionedAgents(scope, derived.handles));
   queueMessageUpsert(scope, message, messageVersionOf(scope, message.id));
   queueAffectedThread(scope, message);
-  return { message: viewMessage(scope, conversation, one<MessageRow>(scope.sql, "SELECT * FROM messages WHERE id = ?", message.id)!) };
+  return { message: messageRef(conversation, message.seq), edited: true };
 }
 
 const FIRST_VERSION = 1;
@@ -400,7 +400,8 @@ export function react(scope: Scope, args: { message: string; emoji: string; remo
     bumpAgentAffinity(scope, scope.agent.id, message.author_id, SIGNALS.reaction);
     recordSearchActions(scope, "react", (result) => result.id === message.id);
   }
-  return { message: viewMessage(scope, conversation, one<MessageRow>(scope.sql, "SELECT * FROM messages WHERE id = ?", message.id)!) };
+  const view = viewMessage(scope, conversation, one<MessageRow>(scope.sql, "SELECT * FROM messages WHERE id = ?", message.id)!);
+  return { message: view.id, reactions: view.reactions ?? [] };
 }
 
 export function pin(scope: Scope, args: { message: string; remove?: boolean }) {

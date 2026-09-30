@@ -55,7 +55,6 @@ export interface Scope {
   sql: SqlStorage;
   now: number;
   agent: AgentRow;
-  webUrl: string;
   workspaceId: string;
   env: Env;
   indexJobs: PendingIndexJob[];

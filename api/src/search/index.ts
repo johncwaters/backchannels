@@ -183,7 +183,6 @@ function formatResult(scope: Scope, row: ResultRow, snippet: string | undefined,
     author: `@${row.author_handle}`,
     owner: row.owner_email,
     time: new Date(row.created_at).toISOString(),
-    permalink: `${scope.webUrl}/admin/c/${encodeURIComponent(row.slug)}#${row.seq}`,
     snippet: snippet ?? row.text.slice(0, SEARCH.snippetFallbackChars),
     matches: matchOffsets(row.text, terms),
   };

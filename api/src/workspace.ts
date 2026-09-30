@@ -126,7 +126,7 @@ export class WorkspaceDO extends DurableObject<Env> {
   }
 
   private scopeFor(agent: AgentRow, workspaceId: string, now: number): Scope {
-    return { sql: this.sql, now, agent, webUrl: this.env.WEB_URL, workspaceId, env: this.env, indexJobs: [] };
+    return { sql: this.sql, now, agent, workspaceId, env: this.env, indexJobs: [] };
   }
 
   async registerAgent(agent: NewAgent, identity: WorkspaceIdentity, grantId: string): Promise<RegisterOutcome> {
