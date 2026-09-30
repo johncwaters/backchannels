@@ -1,20 +1,25 @@
 ---
 import MessageIdentity from './MessageIdentity.astro';
 import { formatClockTime, groupMessagesByDay } from '../lib/admin/helpers';
+import { emojiForShortcode } from '../lib/admin/emoji';
+import { renderMessageMarkdown } from '../lib/admin/markdown';
 import type { Message } from '../lib/admin/types';
 
 interface Props {
 	messages: Message[];
 	nowMs: number;
 	olderMessagesHref?: string;
+	conversationHref?: string;
+	threadHref?: (rootSeq: number) => string;
 }
 
-const { messages, nowMs, olderMessagesHref } = Astro.props;
+const { messages, nowMs, olderMessagesHref, conversationHref, threadHref } = Astro.props;
 const days = groupMessagesByDay(messages, nowMs);
 ---
 
 <section class="messages" aria-label="Messages">
-	{olderMessagesHref && <a class="older" href={olderMessagesHref}>Older messages</a>}
+	{conversationHref && <a class="page-link" href={conversationHref}>Back to conversation</a>}
+	{olderMessagesHref && <a class="page-link" href={olderMessagesHref}>Older messages</a>}
 	{days.map((day) => (
 		<Fragment>
 			<span class="note">— {day.label} —</span>
@@ -24,7 +29,20 @@ const days = groupMessagesByDay(messages, nowMs);
 						<MessageIdentity message={message} />
 						<time datetime={message.time}>{formatClockTime(message.time)}</time>
 					</div>
-					<p>{message.text}</p>
+					<div class="message-body" set:html={renderMessageMarkdown(message.text)} />
+					{message.reactions.length > 0 && (
+						<ul class="reactions" aria-label="Reactions">
+							{message.reactions.map((reaction) => (
+								<li title={`:${reaction.emoji}: by ${reaction.agents.join(', ')}`}>
+									<span class="reaction-emoji">{emojiForShortcode(reaction.emoji) ?? `:${reaction.emoji}:`}</span>
+									<span class="reaction-count">{reaction.agents.length}</span>
+								</li>
+							))}
+						</ul>
+					)}
+					{threadHref && message.threadReplies > 0 && (
+						<a class="replies" href={threadHref(message.seq)}>{message.threadReplies === 1 ? '1 reply' : `${message.threadReplies} replies`}</a>
+					)}
 				</article>
 			))}
 		</Fragment>
@@ -58,21 +76,132 @@ const days = groupMessagesByDay(messages, nowMs);
 		font-size: 13px;
 		color: var(--color-dim);
 	}
-	p {
-		margin: 0;
+	.message-body {
 		font-family: var(--font-prose);
 		font-size: 16px;
 		line-height: 1.6;
 		color: var(--color-message);
+		overflow-wrap: anywhere;
+	}
+	.message-body > :global(*) {
+		margin: 0;
+	}
+	.message-body > :global(* + *) {
+		margin-top: 10px;
+	}
+	.message-body :global(:is(h1, h2, h3, h4, h5, h6)) {
+		font-size: 16px;
+		font-weight: 600;
+		color: var(--color-text);
+	}
+	.message-body :global(strong) {
+		font-weight: 600;
+		color: var(--color-text);
+	}
+	.message-body :global(a) {
+		color: var(--color-accent);
+		text-underline-offset: 3px;
+	}
+	.message-body :global(:is(ul, ol)) {
+		padding-left: 22px;
+	}
+	.message-body :global(li + li) {
+		margin-top: 2px;
+	}
+	.message-body :global(code) {
+		font-family: var(--font-mono);
+		font-size: 14px;
+		padding: 1px 5px;
+		background: var(--color-selection);
+		color: var(--color-text);
+	}
+	.message-body :global(pre) {
+		padding: 10px 12px;
+		overflow-x: auto;
+		background: var(--color-sidebar);
+		border: 1px solid var(--color-row-border);
+		line-height: 1.5;
+	}
+	.message-body :global(pre code) {
+		padding: 0;
+		background: none;
+		overflow-wrap: normal;
+	}
+	.message-body :global(blockquote) {
+		padding-left: 12px;
+		border-left: 2px solid var(--color-control-border);
+		color: var(--color-preview);
+	}
+	.message-body :global(.mention) {
+		padding: 0 3px;
+		background: var(--color-selection);
+		font-family: var(--font-mono);
+		font-size: 14px;
+	}
+	.message-body :global(.mention-broadcast) {
+		color: var(--color-accent);
+	}
+	.message-body :global(hr) {
+		border: 0;
+		border-top: 1px solid var(--color-control-border);
+	}
+	.message-body :global(table) {
+		border-collapse: collapse;
+		display: block;
+		overflow-x: auto;
+		font-size: 14px;
+	}
+	.message-body :global(:is(th, td)) {
+		padding: 4px 10px;
+		border: 1px solid var(--color-row-border);
+		text-align: left;
+	}
+	.message-body :global(th) {
+		font-weight: 600;
+		color: var(--color-text);
 	}
 	.note, .empty {
 		color: var(--color-dim);
 		font-size: 13px;
 	}
 	.empty {
+		margin: 0;
+		font-family: var(--font-prose);
 		font-size: 15px;
 	}
-	.older {
+	.reactions {
+		margin: 2px 0 0;
+		padding: 0;
+		list-style: none;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+	}
+	.reactions li {
+		min-height: 24px;
+		padding: 0 8px;
+		border: 1px solid var(--color-control-border);
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		font-size: 13px;
+		color: var(--color-muted);
+		cursor: default;
+	}
+	.reaction-emoji {
+		font-size: 14px;
+	}
+	.replies {
+		align-self: flex-start;
+		font-size: 13px;
+		color: var(--color-accent);
+		text-decoration: none;
+	}
+	.replies:hover {
+		text-decoration: underline;
+		text-underline-offset: 3px;
+	}
+	.page-link {
 		align-self: flex-start;
 		min-height: 32px;
 		padding: 0 10px;
@@ -83,7 +212,7 @@ const days = groupMessagesByDay(messages, nowMs);
 		font-size: 13px;
 		text-decoration: none;
 	}
-	.older:hover {
+	.page-link:hover {
 		background: var(--color-selection);
 	}
 	@media (max-width: 899px) {

@@ -219,7 +219,7 @@ export class WorkspaceDO extends DurableObject<Env> {
     return adminList(this.adminContext(caller), options);
   }
 
-  async adminRead(caller: AdminCaller, options: { conversation: string; before?: number; limit?: number }) {
+  async adminRead(caller: AdminCaller, options: { conversation: string; thread?: number; before?: number; limit?: number }) {
     return adminRead(this.adminContext(caller), options);
   }
 

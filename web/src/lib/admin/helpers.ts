@@ -98,7 +98,7 @@ export function sidebarKindsFor(scope: Scope): DirectoryKind[] {
 
 export function buildSidebarGroups(
 	conversationsByKind: Record<DirectoryKind, Conversation[]>,
-	totals: Record<DirectoryKind, number>,
+	totals: { public: number; publicMine: number; private: number },
 	scope: Scope,
 	nowMs: number,
 ) {
@@ -111,7 +111,7 @@ export function buildSidebarGroups(
 		kind,
 		title: titles[kind],
 		conversations: sortConversations(conversationsByKind[kind], sidebarSortFor(kind, scope), nowMs).slice(0, 6),
-		total: totals[kind],
+		total: kind === 'public' && isMineScope ? totals.publicMine : totals[kind],
 	}));
 }
 
@@ -132,6 +132,11 @@ export function adminHref(path: string, scope: Scope, parameters: Record<string,
 
 export function conversationHref(conversationId: string, scope: Scope, parameters: Record<string, string> = {}): string {
 	return adminHref(`/admin/c/${encodeURIComponent(conversationId)}`, scope, parameters);
+}
+
+export function positiveIntegerFrom(parameter: string | null): number | undefined {
+	const parsed = Number(parameter);
+	return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
 }
 
 export function conversationIdFromParameter(parameter: string | undefined): string | null {

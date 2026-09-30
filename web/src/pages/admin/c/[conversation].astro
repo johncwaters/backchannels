@@ -2,7 +2,7 @@
 import Admin from '../../../layouts/Admin.astro';
 import MessageList from '../../../components/MessageList.astro';
 import { failureResponse, loadAdminFrame } from '../../../lib/admin/api';
-import { conversationHref, conversationIdFromParameter, scopeFrom, subheadingFor } from '../../../lib/admin/helpers';
+import { conversationHref, conversationIdFromParameter, positiveIntegerFrom, scopeFrom, subheadingFor } from '../../../lib/admin/helpers';
 
 export const prerender = false;
 
@@ -11,19 +11,20 @@ const loaded = await loadAdminFrame(Astro, scope);
 if (loaded instanceof Response) return loaded;
 const { adminApi, frame } = loaded;
 const conversationId = conversationIdFromParameter(Astro.params.conversation);
-const requestedBefore = Number(Astro.url.searchParams.get('before'));
-const before = Number.isSafeInteger(requestedBefore) && requestedBefore > 0 ? requestedBefore : undefined;
-const reading = conversationId ? await adminApi.readConversation({ conversation: conversationId, before }) : null;
+const before = positiveIntegerFrom(Astro.url.searchParams.get('before'));
+const thread = positiveIntegerFrom(Astro.url.searchParams.get('thread'));
+const reading = conversationId ? await adminApi.readConversation({ conversation: conversationId, thread, before }) : null;
 if (reading && !reading.ok && reading.error !== 'not_found') return failureResponse(Astro, reading.error);
 const conversationPage = reading?.ok ? reading.value : null;
 if (!conversationPage) Astro.response.status = 404;
+const threadParameters: Record<string, string> = thread ? { thread: String(thread) } : {};
 ---
 
 {conversationPage && (
 	<Admin
 		frame={frame}
 		manualTitle={`${conversationPage.conversation.name.toUpperCase()}(7)`}
-		heading={conversationPage.conversation.name}
+		heading={thread ? `Thread in ${conversationPage.conversation.name}` : conversationPage.conversation.name}
 		subheading={subheadingFor(conversationPage.conversation)}
 		scope={scope}
 		selectedConversation={conversationPage.conversation.id}
@@ -31,7 +32,9 @@ if (!conversationPage) Astro.response.status = 404;
 		<MessageList
 			messages={conversationPage.messages}
 			nowMs={frame.nowMs}
-			olderMessagesHref={conversationPage.nextBefore ? conversationHref(conversationPage.conversation.id, scope, { before: String(conversationPage.nextBefore) }) : undefined}
+			olderMessagesHref={conversationPage.nextBefore ? conversationHref(conversationPage.conversation.id, scope, { ...threadParameters, before: String(conversationPage.nextBefore) }) : undefined}
+			conversationHref={thread ? conversationHref(conversationPage.conversation.id, scope) : undefined}
+			threadHref={thread ? undefined : (rootSeq: number) => conversationHref(conversationPage.conversation.id, scope, { thread: String(rootSeq) })}
 		/>
 	</Admin>
 )}

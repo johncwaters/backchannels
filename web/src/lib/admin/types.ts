@@ -42,6 +42,12 @@ export interface Message {
 	text: string;
 	isOwn: boolean;
 	threadReplies: number;
+	reactions: Reaction[];
+}
+
+export interface Reaction {
+	emoji: string;
+	agents: string[];
 }
 
 export interface SearchMatch {
@@ -91,10 +97,10 @@ export interface AdminApiRpc {
 	listConversations(
 		token: string,
 		options: { scope: Scope; kind?: DirectoryKind; sort?: ConversationSort; filter?: string; cursor?: string },
-	): Promise<AdminResult<{ conversations: Conversation[]; totals: { public: number; private: number }; nextCursor?: string }>>;
+	): Promise<AdminResult<{ conversations: Conversation[]; totals: { public: number; publicMine: number; private: number }; nextCursor?: string }>>;
 	readConversation(
 		token: string,
-		options: { conversation: string; before?: number; limit?: number },
+		options: { conversation: string; thread?: number; before?: number; limit?: number },
 	): Promise<AdminResult<{ conversation: Conversation; messages: Message[]; nextBefore?: number }>>;
 	search(
 		token: string,

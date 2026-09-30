@@ -1,5 +1,5 @@
-import type { AdminResult, Conversation, ConversationSort, DirectoryKind, Message, Scope, SearchMatch } from "./admin";
-import { all, type ConversationRow, type MessageRow } from "./store";
+import type { AdminResult, Conversation, ConversationSort, DirectoryKind, Message, Reaction, Scope, SearchMatch } from "./admin";
+import { all, one, type ConversationRow, type MessageRow } from "./store";
 
 const LIST_PAGE_SIZE = 100;
 const SEARCH_PAGE_SIZE = 50;
@@ -26,7 +26,7 @@ type ListedRow = ConversationRow & {
   people: number;
   is_mine: number;
 };
-type AuthoredMessageRow = MessageRow & { handle: string | null; owner_email: string | null; owner_sub: string | null };
+type AuthoredMessageRow = MessageRow & { handle: string | null; owner_email: string | null; owner_sub: string | null; live_replies: number };
 
 const SCOPES: readonly Scope[] = ["mine", "everyone"];
 const KINDS: readonly DirectoryKind[] = ["public", "private"];
@@ -40,7 +40,8 @@ const MEMBER_HANDLES = `SELECT a.handle FROM members m JOIN agents a ON a.id = m
 const ownConversations = (subParameter: string) => `own_conversations AS (
   SELECT DISTINCT mb.conversation_id FROM members mb JOIN agents own ON own.id = mb.agent_id
   WHERE own.owner_sub = ${subParameter} AND own.revoked_at IS NULL)`;
-const MESSAGE_SELECT = `SELECT m.*, a.handle, a.owner_email, a.owner_sub FROM messages m LEFT JOIN agents a ON a.id = m.author_id`;
+const LIVE_REPLIES = `(SELECT count(*) FROM messages reply WHERE reply.thread_root_id = m.id AND reply.deleted_at IS NULL)`;
+const MESSAGE_SELECT = `SELECT m.*, a.handle, a.owner_email, a.owner_sub, ${LIVE_REPLIES} AS live_replies FROM messages m LEFT JOIN agents a ON a.id = m.author_id`;
 
 function listedConversations(context: AdminContext, condition: string, ...bindings: (string | number)[]): ListedRow[] {
   return all<ListedRow>(
@@ -87,7 +88,35 @@ function viewConversation(context: AdminContext, row: ListedRow): Conversation {
   };
 }
 
-function viewMessage(row: AuthoredMessageRow, sub: string): Message {
+function reactionsByMessageId(context: AdminContext, rows: AuthoredMessageRow[]): Map<number, Reaction[]> {
+  const reactedIds = rows.filter((row) => row.reaction_count > 0 && !row.deleted_at).map((row) => row.id);
+  const reactionsById = new Map<number, Reaction[]>();
+  if (reactedIds.length === 0) return reactionsById;
+  const reactionRows = all<{ message_id: number; emoji: string; handle: string }>(
+    context.sql,
+    `SELECT r.message_id, r.emoji, a.handle FROM reactions r JOIN agents a ON a.id = r.agent_id
+     WHERE r.message_id IN (SELECT value FROM json_each(?)) ORDER BY r.created_at`,
+    JSON.stringify(reactedIds),
+  );
+  for (const { message_id, emoji, handle } of reactionRows) {
+    const reactions = reactionsById.get(message_id) ?? [];
+    reactionsById.set(message_id, reactions);
+    const existing = reactions.find((reaction) => reaction.emoji === emoji);
+    if (existing) {
+      existing.agents.push(handle);
+      continue;
+    }
+    reactions.push({ emoji, agents: [handle] });
+  }
+  return reactionsById;
+}
+
+function viewMessages<Row extends AuthoredMessageRow>(context: AdminContext, rows: Row[]): Message[] {
+  const reactionsById = reactionsByMessageId(context, rows);
+  return rows.map((row) => viewMessage(row, context.sub, reactionsById.get(row.id) ?? []));
+}
+
+function viewMessage(row: AuthoredMessageRow, sub: string, reactions: Reaction[]): Message {
   const email = row.owner_email ?? "";
   const handle = row.handle ?? "unknown";
   return {
@@ -98,7 +127,8 @@ function viewMessage(row: AuthoredMessageRow, sub: string): Message {
     time: new Date(row.created_at).toISOString(),
     text: row.deleted_at ? "" : row.text,
     isOwn: row.owner_sub === sub,
-    threadReplies: row.reply_count,
+    threadReplies: row.live_replies,
+    reactions,
   };
 }
 
@@ -114,7 +144,7 @@ const isOneOf = <Value extends string>(allowed: readonly Value[], value: unknown
 export function adminList(
   context: AdminContext,
   options: { scope: Scope; kind?: DirectoryKind; sort?: ConversationSort; filter?: string; cursor?: string },
-): AdminResult<{ conversations: Conversation[]; totals: { public: number; private: number }; nextCursor?: string }> {
+): AdminResult<{ conversations: Conversation[]; totals: { public: number; publicMine: number; private: number }; nextCursor?: string }> {
   const sort = options?.sort ?? "active";
   const offset = parseOffset(options?.cursor);
   if (!isOneOf(SCOPES, options?.scope) || !isOneOf(Object.keys(SORT_ORDER) as ConversationSort[], sort)) return invalid;
@@ -135,10 +165,12 @@ export function adminList(
     LIST_PAGE_SIZE + 1,
     offset,
   );
-  const totals = all<{ public: number | null; private: number | null }>(
+  const totals = all<{ public: number | null; public_mine: number | null; private: number | null }>(
     context.sql,
     `WITH ${ownConversations("?1")}
-     SELECT sum(kind = 'public') AS public, sum(kind <> 'public' AND id IN (SELECT conversation_id FROM own_conversations)) AS private
+     SELECT sum(kind = 'public') AS public,
+       sum(kind = 'public' AND id IN (SELECT conversation_id FROM own_conversations)) AS public_mine,
+       sum(kind <> 'public' AND id IN (SELECT conversation_id FROM own_conversations)) AS private
      FROM conversations WHERE archived_at IS NULL`,
     context.sub,
   )[0];
@@ -147,7 +179,7 @@ export function adminList(
     ok: true,
     value: {
       conversations: page.map((row) => viewConversation(context, row)),
-      totals: { public: totals?.public ?? 0, private: totals?.private ?? 0 },
+      totals: { public: totals?.public ?? 0, publicMine: totals?.public_mine ?? 0, private: totals?.private ?? 0 },
       ...(rows.length > LIST_PAGE_SIZE ? { nextCursor: String(offset + LIST_PAGE_SIZE) } : {}),
     },
   };
@@ -157,23 +189,38 @@ const isPositiveInteger = (value: unknown): value is number => Number.isSafeInte
 
 export function adminRead(
   context: AdminContext,
-  options: { conversation: string; before?: number; limit?: number },
+  options: { conversation: string; thread?: number; before?: number; limit?: number },
 ): AdminResult<{ conversation: Conversation; messages: Message[]; nextBefore?: number }> {
   if (typeof options?.conversation !== "string") return invalid;
+  if (options.thread !== undefined && !isPositiveInteger(options.thread)) return invalid;
   if (options.before !== undefined && !isPositiveInteger(options.before)) return invalid;
   if (options.limit !== undefined && !isPositiveInteger(options.limit)) return invalid;
   const limit = Math.min(options.limit ?? DEFAULT_READ_LIMIT, MAX_READ_LIMIT);
 
   const row = listedConversations(context, "slug = ?3", options.conversation)[0];
   if (!row) return notFound;
+  const threadRoot =
+    options.thread === undefined
+      ? null
+      : one<{ id: number }>(
+          context.sql,
+          `SELECT m.id FROM messages m WHERE m.conversation_id = ? AND m.seq = ? AND m.thread_root_id IS NULL
+             AND (m.deleted_at IS NULL OR ${LIVE_REPLIES} > 0)`,
+          row.id,
+          options.thread,
+        );
+  if (options.thread !== undefined && !threadRoot) return notFound;
   context.audit("admin_read", row.id);
+  const scopeCondition = threadRoot
+    ? "(m.id = ?1 OR m.thread_root_id = ?1)"
+    : "m.conversation_id = ?1 AND (m.thread_root_id IS NULL OR m.also_in_channel = 1)";
   const rows = all<AuthoredMessageRow>(
     context.sql,
     `${MESSAGE_SELECT}
-     WHERE m.conversation_id = ? AND (m.thread_root_id IS NULL OR m.also_in_channel = 1)
-       AND (m.deleted_at IS NULL OR m.reply_count > 0) AND m.seq < ?
-     ORDER BY m.seq DESC LIMIT ?`,
-    row.id,
+     WHERE ${scopeCondition}
+       AND (m.deleted_at IS NULL OR live_replies > 0) AND m.seq < ?2
+     ORDER BY m.seq DESC LIMIT ?3`,
+    threadRoot?.id ?? row.id,
     options.before ?? Number.MAX_SAFE_INTEGER,
     limit + 1,
   );
@@ -182,7 +229,7 @@ export function adminRead(
     ok: true,
     value: {
       conversation: viewConversation(context, row),
-      messages: page.map((message) => viewMessage(message, context.sub)),
+      messages: viewMessages(context, page),
       ...(rows.length > limit ? { nextBefore: page[0].seq } : {}),
     },
   };
@@ -258,7 +305,7 @@ export function adminSearch(
   >(
     context.sql,
     `WITH ${ownConversations("?3")}
-     SELECT m.*, a.handle, a.owner_email, a.owner_sub, c.slug AS conversation_slug, c.kind AS conversation_kind,
+     SELECT m.*, a.handle, a.owner_email, a.owner_sub, ${LIVE_REPLIES} AS live_replies, c.slug AS conversation_slug, c.kind AS conversation_kind,
        highlight(messages_fts, 0, ?6, ?7) AS highlighted
      FROM messages_fts JOIN messages m ON m.id = messages_fts.rowid
        JOIN conversations c ON c.id = m.conversation_id
@@ -284,9 +331,11 @@ export function adminSearch(
     namesByConversationId.set(row.conversation_id, name);
     return name;
   };
-  const matches = rows.slice(0, SEARCH_PAGE_SIZE).map((row) => ({
+  const pageRows = rows.slice(0, SEARCH_PAGE_SIZE);
+  const pageMessages = viewMessages(context, pageRows);
+  const matches = pageRows.map((row, index) => ({
     conversation: { id: row.conversation_slug, name: conversationName(row), isPrivate: row.conversation_kind !== "public" },
-    message: viewMessage(row, context.sub),
+    message: pageMessages[index],
     ranges: highlightedRanges(row.text, row.highlighted) ?? literalRanges(row.text, terms),
   }));
   return {

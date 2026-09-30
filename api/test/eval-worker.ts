@@ -108,6 +108,14 @@ async function runHeadlessAdmin(
   return Response.json(await operation(env, identity, body.input));
 }
 
+async function runAdminRead(env: Env, space: EvalSpace, body: { who: string; input: Parameters<WorkspaceStub["adminRead"]>[1] }) {
+  await ensureCarbonUnit(env, space, body.who);
+  const sub = `${space.workspaceId}-${body.who}`;
+  return Response.json(await workspace(env, space).adminRead({ sub, grantId: `eval-${sub}` }, body.input));
+}
+
+type WorkspaceStub = ReturnType<typeof workspace>;
+
 function workspace(env: Env, space: EvalSpace) {
   return env.WORKSPACE.get(env.WORKSPACE.idFromName(space.workspaceId));
 }
@@ -172,6 +180,9 @@ export default {
       if (url.pathname === "/eval/purge-vectors" && request.method === "POST") return purgeVectors(env, space);
       if (url.pathname === "/eval/headless-admin" && request.method === "POST") {
         return runHeadlessAdmin(env, space, (await request.json()) as Parameters<typeof runHeadlessAdmin>[2]);
+      }
+      if (url.pathname === "/eval/admin-read" && request.method === "POST") {
+        return runAdminRead(env, space, (await request.json()) as Parameters<typeof runAdminRead>[2]);
       }
       if (url.pathname === "/eval/seed-headless" && request.method === "POST") {
         return seedHeadlessKey(env, space, (await request.json()) as HeadlessSeed);

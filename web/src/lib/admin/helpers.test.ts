@@ -12,6 +12,7 @@ import {
 	isServerSessionEnded,
 	loginHref,
 	normalizePathname,
+	positiveIntegerFrom,
 	sanitizeNextPath,
 	scopeHref,
 	searchSummary,
@@ -153,25 +154,30 @@ describe('buildSidebarGroups', () => {
 	const publicConversations = Array.from({ length: 8 }, (_, index) => conversationNamed(`#channel-${index}`, index, isoMinutesAgo(index)));
 	const privateConversations = [conversationNamed('dm-a', 0, isoMinutesAgo(30), { kind: 'dm', isPrivate: true })];
 
-	it('caps each group at six and reports the workspace totals as the count', () => {
-		const [publicGroup, privateGroup] = buildSidebarGroups({ public: publicConversations, private: privateConversations }, { public: 40, private: 3 }, 'mine', nowMs);
+	it('caps each group at six and counts only channels my agents are in under my agents', () => {
+		const [publicGroup, privateGroup] = buildSidebarGroups({ public: publicConversations, private: privateConversations }, { public: 40, publicMine: 8, private: 3 }, 'mine', nowMs);
 		expect(publicGroup.conversations).toHaveLength(6);
-		expect(publicGroup.total).toBe(40);
+		expect(publicGroup.total).toBe(8);
 		expect(privateGroup.conversations).toHaveLength(1);
 		expect(privateGroup.total).toBe(3);
 	});
 
+	it('counts every public channel under everyone', () => {
+		const [publicGroup] = buildSidebarGroups({ public: publicConversations, private: [] }, { public: 40, publicMine: 8, private: 0 }, 'everyone', nowMs);
+		expect(publicGroup.total).toBe(40);
+	});
+
 	it('orders public channels by activity for everyone and by recency for mine', () => {
-		const [everyonePublic] = buildSidebarGroups({ public: publicConversations, private: [] }, { public: 8, private: 0 }, 'everyone', nowMs);
-		const [minePublic] = buildSidebarGroups({ public: publicConversations, private: [] }, { public: 8, private: 0 }, 'mine', nowMs);
+		const [everyonePublic] = buildSidebarGroups({ public: publicConversations, private: [] }, { public: 8, publicMine: 8, private: 0 }, 'everyone', nowMs);
+		const [minePublic] = buildSidebarGroups({ public: publicConversations, private: [] }, { public: 8, publicMine: 8, private: 0 }, 'mine', nowMs);
 		expect(everyonePublic.conversations[0].name).toBe('#channel-7');
 		expect(minePublic.conversations[0].name).toBe('#channel-0');
 		expect(minePublic.title).toBe('PUBLIC · YOUR AGENTS ARE IN');
 	});
 
 	it('shows private chats only under my agents because private visibility never widens', () => {
-		const everyoneGroups = buildSidebarGroups({ public: [], private: privateConversations }, { public: 0, private: 1 }, 'everyone', nowMs);
-		const mineGroups = buildSidebarGroups({ public: [], private: privateConversations }, { public: 0, private: 1 }, 'mine', nowMs);
+		const everyoneGroups = buildSidebarGroups({ public: [], private: privateConversations }, { public: 0, publicMine: 0, private: 1 }, 'everyone', nowMs);
+		const mineGroups = buildSidebarGroups({ public: [], private: privateConversations }, { public: 0, publicMine: 0, private: 1 }, 'mine', nowMs);
 		expect(everyoneGroups.map((group) => group.kind)).toEqual(['public']);
 		expect(mineGroups.map((group) => group.kind)).toEqual(['public', 'private']);
 		expect(mineGroups[1].title).toBe('PRIVATE · YOUR AGENTS ARE IN');
@@ -297,5 +303,17 @@ describe('isServerSessionEnded', () => {
 	it('treats a rejected revocation request as not ended', () => {
 		expect(isServerSessionEnded({ ok: false, error: 'invalid' })).toBe(false);
 		expect(isServerSessionEnded({ ok: false, error: 'not_found' })).toBe(false);
+	});
+});
+
+describe('positiveIntegerFrom', () => {
+	it('reads a positive integer query parameter', () => {
+		expect(positiveIntegerFrom('42')).toBe(42);
+	});
+
+	it('ignores missing, zero, negative, fractional and non-numeric values', () => {
+		for (const parameter of [null, '', '0', '-3', '1.5', 'abc', '9007199254740993']) {
+			expect(positiveIntegerFrom(parameter)).toBeUndefined();
+		}
 	});
 });
