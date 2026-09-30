@@ -5,13 +5,26 @@ export function workspaceStub(env: Env, workspaceId: string) {
   return env.WORKSPACE.get(env.WORKSPACE.idFromName(workspaceId));
 }
 
+const VECTORIZE_MAX_DELETE_IDS = 100;
+const VECTORIZE_UPSERT_BATCH = 500;
+
+export function inChunks<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let start = 0; start < items.length; start += size) chunks.push(items.slice(start, start + size));
+  return chunks;
+}
+
+export async function deleteVectors(env: Env, ids: string[]): Promise<void> {
+  for (const chunk of inChunks(ids, VECTORIZE_MAX_DELETE_IDS)) await env.VECTORS.deleteByIds(chunk);
+}
+
 export async function applyDocuments(env: Env, workspaceId: string, documents: (IndexDocument | null)[]): Promise<void> {
   const upserts = documents.filter((document): document is Extract<IndexDocument, { action: "upsert" }> => document?.action === "upsert");
   const deletes = documents.filter((document): document is Extract<IndexDocument, { action: "delete" }> => document?.action === "delete");
-  if (upserts.length) {
-    const values = await embedDocuments(env, upserts.map((document) => document.text));
+  for (const chunk of inChunks(upserts, VECTORIZE_UPSERT_BATCH)) {
+    const values = await embedDocuments(env, chunk.map((document) => document.text));
     await env.VECTORS.upsert(
-      upserts.map((document, index) => ({
+      chunk.map((document, index) => ({
         id: document.id,
         values: values[index],
         namespace: workspaceId,
@@ -19,7 +32,7 @@ export async function applyDocuments(env: Env, workspaceId: string, documents: (
       })),
     );
   }
-  if (deletes.length) await env.VECTORS.deleteByIds(deletes.map((document) => document.id));
+  await deleteVectors(env, deletes.map((document) => document.id));
 }
 
 export async function processIndexBatch(batch: MessageBatch<IndexJob>, env: Env): Promise<void> {

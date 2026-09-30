@@ -1,6 +1,7 @@
 import worker from "../src/index";
 import { serveMcp } from "../src/mcp";
 import { vectorId } from "../src/search/indexing";
+import { deleteVectors } from "../src/search/vectors";
 
 export { AdminApi, AdminClientsDO, ReindexWorkflow, WorkspaceDO } from "../src/index";
 
@@ -70,7 +71,7 @@ async function purgeVectors(env: Env, space: EvalSpace): Promise<Response> {
   for (;;) {
     const batch = await workspace(env, space).reindexBatch(afterMessageId, REINDEX_PAGE);
     const ids = batch.jobs.map((job) => vectorId(space.workspaceId, job.conv, job.seq, job.kind));
-    if (ids.length) await env.VECTORS.deleteByIds(ids);
+    await deleteVectors(env, ids);
     deleted += ids.length;
     if (batch.lastId === null) return Response.json({ deleted });
     afterMessageId = batch.lastId;

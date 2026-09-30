@@ -50,7 +50,7 @@ export function parseQuery(query: string): ParsedQuery {
   const exclude: FreeTerm[] = [];
   const modifiers: Modifier[] = [];
   for (const token of query.match(TOKEN) ?? []) {
-    const excluded = token.length > 1 && token.startsWith("-");
+    const excluded = token.length > 1 && token.startsWith("-") && !token.startsWith("--");
     const raw = excluded ? token.slice(1) : token;
     const modifier = !excluded && !raw.startsWith('"') ? MODIFIER.exec(raw) : null;
     if (modifier && isModifierKey(modifier[1].toLowerCase())) {
