@@ -1,5 +1,6 @@
 ---
 import MessageIdentity from './MessageIdentity.astro';
+import { Badge } from '../lib/components/ui/badge';
 import { dayLabel, formatClockTime, highlightSegments, messageHref, plainSnippetText, replyCountLabel, snippetAround } from '../lib/admin/helpers';
 import type { Scope, SearchMatch } from '../lib/admin/types';
 
@@ -14,86 +15,22 @@ const { message, conversation } = match;
 const snippet = snippetAround(plainSnippetText(message.text), match.ranges);
 const segments = highlightSegments(snippet.text, snippet.ranges);
 const threadNote = message.threadRootSeq ? 'reply in a thread' : message.threadReplies > 0 ? replyCountLabel(message.threadReplies) : null;
+const fileCount = message.files.length;
+const fileNote = fileCount === 0 ? null : fileCount === 1 ? '1 file' : `${fileCount} files`;
+const markerClass = 'h-auto rounded-none px-1.5 py-0 font-mono text-xs font-normal';
 ---
 
-<a class="match" href={messageHref(conversation.id, scope, message)}>
-	<span class="match-header">
+<a
+	class="group flex max-w-[800px] flex-col gap-1 border-l-2 border-transparent bg-search-match px-3 py-2 text-inherit no-underline outline-none hover:border-amber hover:bg-secondary focus-visible:border-amber focus-visible:bg-secondary focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-amber"
+	href={messageHref(conversation.id, scope, message)}
+>
+	<span class="flex flex-wrap items-baseline gap-x-2.5">
 		<MessageIdentity message={message} />
-		<span class="conversation">in <span>{conversation.name}</span></span>
-		{threadNote && <span class="badge">{threadNote}</span>}
-		{message.pinned && <span class="badge pinned">pinned</span>}
-		{message.files.length > 0 && <span class="badge">{message.files.length === 1 ? '1 file' : `${message.files.length} files`}</span>}
-		<time datetime={message.time}>{dayLabel(message.time, nowMs)} {formatClockTime(message.time)}</time>
+		<span class="max-w-[42ch] min-w-0 truncate text-[13px] text-dim">in <span class="text-foreground">{conversation.name}</span></span>
+		{threadNote && <Badge variant="outline" class={`${markerClass} text-muted-foreground`}>{threadNote}</Badge>}
+		{message.pinned && <Badge variant="outline" class={`${markerClass} border-amber text-amber`}>pinned</Badge>}
+		{fileNote && <Badge variant="outline" class={`${markerClass} text-muted-foreground`}>{fileNote}</Badge>}
+		<time class="ml-auto text-[13px] text-dim" datetime={message.time}>{dayLabel(message.time, nowMs)} {formatClockTime(message.time)}</time>
 	</span>
-	<span class="message-text">{segments.map((segment) => segment.isMatch && segment.text.trim() ? <mark>{segment.text}</mark> : segment.text)}</span>
+	<span class="line-clamp-3 font-sans text-sm leading-normal text-message">{segments.map((segment) => segment.isMatch && segment.text.trim() ? <mark class="bg-amber px-0.5 text-ground">{segment.text}</mark> : segment.text)}</span>
 </a>
-
-<style>
-	.match {
-		padding: 8px 12px;
-		background: var(--color-search-match);
-		border-left: 2px solid transparent;
-		color: inherit;
-		text-decoration: none;
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-		max-width: 800px;
-	}
-	.match {
-		transition: background-color 140ms var(--ease-out-quint), border-color 140ms var(--ease-out-quint);
-	}
-	.match:hover, .match:focus-visible {
-		background: var(--color-selection);
-		border-left-color: var(--color-accent);
-	}
-	.match-header {
-		display: flex;
-		align-items: baseline;
-		flex-wrap: wrap;
-		gap: 0 10px;
-	}
-	.conversation, time {
-		font-size: 13px;
-		color: var(--color-dim);
-	}
-	.conversation {
-		min-width: 0;
-		max-width: 42ch;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-	.conversation > span {
-		color: var(--color-text);
-	}
-	.badge {
-		font-size: 12px;
-		color: var(--color-muted);
-		padding: 0 6px;
-		border: 1px solid var(--color-control-border);
-	}
-	.pinned {
-		color: var(--color-accent);
-		border-color: var(--color-accent);
-	}
-	time {
-		margin-left: auto;
-	}
-	.message-text {
-		font-family: var(--font-prose);
-		font-size: 14px;
-		line-height: 1.5;
-		color: var(--color-message);
-		display: -webkit-box;
-		-webkit-box-orient: vertical;
-		-webkit-line-clamp: 3;
-		line-clamp: 3;
-		overflow: hidden;
-	}
-	mark {
-		background: var(--color-accent);
-		color: var(--color-ground);
-		padding: 0 2px;
-	}
-</style>

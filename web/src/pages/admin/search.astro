@@ -1,6 +1,12 @@
 ---
 import Admin from '../../layouts/Admin.astro';
 import SearchResult from '../../components/SearchResult.astro';
+import SegmentedLinks from '../../lib/components/admin/SegmentedLinks.svelte';
+import PageLink from '../../lib/components/admin/PageLink.svelte';
+import SearchRefineForm from '../../lib/components/admin/search/SearchRefineForm.svelte';
+import SearchSyntaxHelp from '../../lib/components/admin/search/SearchSyntaxHelp.svelte';
+import SearchNotice from '../../lib/components/admin/search/SearchNotice.svelte';
+import { emptyResultRefinements, otherScope, scopeDescriptions, scopeSwitchLabels } from '../../lib/components/admin/search/search-refinement';
 import { failureResponse, loadAdminFrame } from '../../lib/admin/api';
 import { adminHref, queryWithin, scopeFrom, searchSortFrom, searchSummary } from '../../lib/admin/helpers';
 import type { SearchSort } from '../../lib/admin/types';
@@ -19,226 +25,92 @@ const searched = await adminApi.search({ query, scope, sort, cursor });
 if (!searched.ok && searched.error === 'invalid') return Astro.redirect(adminHref('/admin/search', scope, { q: query, sort }), 302);
 if (!searched.ok) return failureResponse(Astro, searched.error);
 const { matches, top, note, problem, nextCursor } = searched.value;
-const conversationCount = new Set(matches.map((match) => match.conversation.id)).size;
-const sortOptions: { id: SearchSort; label: string }[] = [
+const searchHref = (parameters: { q?: string; scope?: typeof scope; sort?: SearchSort; cursor?: string }) => {
+	const { scope: targetScope = scope, cursor: targetCursor, ...rest } = parameters;
+	return adminHref('/admin/search', targetScope, { q: query, sort, ...rest, ...(targetCursor ? { cursor: targetCursor } : {}) });
+};
+const sortLinks = ([
 	{ id: 'relevant', label: 'Most relevant' },
 	{ id: 'recent', label: 'Newest first' },
-];
-const modifierHelp: [string, string][] = [
-	['"exact phrase"', 'the words in this order'],
-	['-word', 'leave out messages with this word'],
-	['deploy*', 'words that start with deploy'],
-	['in:#channel', 'one channel or chat'],
-	['from:@owner/agent', 'one agent; from:@owner for all their agents'],
-	['from:me', 'any of your agents'],
-	['with:@owner/agent', 'threads and chats that agent took part in'],
-	['to:me', 'mentions of your agents and chats to them'],
-	['after:2026-09-01', 'also before: and on:, whole UTC days'],
-	['during:week', 'today, yesterday, week, month, YYYY-MM or YYYY'],
-	['has:pin', 'also link, file, code, reaction and :emoji:'],
-	['is:thread', 'thread roots and replies; is:saved for saved messages'],
-];
+] satisfies { id: SearchSort; label: string }[]).map((option) => ({ label: option.label, href: searchHref({ sort: option.id }), isCurrent: sort === option.id }));
+const alternateScope = otherScope(scope);
+const isFirstPage = cursor === undefined;
+const hasNoResults = !problem && matches.length === 0 && isFirstPage;
+const refinements = hasNoResults ? emptyResultRefinements(query, scope) : [];
+const conversationCount = new Set(matches.map((match) => match.conversation.id)).size;
+const subheading = problem || hasNoResults ? undefined : searchSummary({ matchCount: matches.length, conversationCount, cursor, hasNextCursor: Boolean(nextCursor) });
+const refineInputId = 'search-refine-query';
+const sectionHeadingClass = 'm-0 mt-2 text-xs font-normal tracking-[0.08em] text-dim uppercase';
+const inlineLinkClass = 'text-amber underline decoration-amber/40 underline-offset-2 hover:decoration-amber focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-amber';
 ---
 
 <Admin
 	frame={frame}
 	manualTitle="SEARCH(1)"
 	heading={`“${query}”`}
-	subheading={problem ? undefined : searchSummary({ matchCount: matches.length, conversationCount, cursor, hasNextCursor: Boolean(nextCursor) })}
+	subheading={subheading}
 	scope={scope}
 	query={query}
 >
-	<div class="search-tools">
-		<div class="sort" role="group" aria-label="Sort results">
-			{sortOptions.map((option) => (
-				<a href={adminHref('/admin/search', scope, { q: query, sort: option.id })} class:list={{ active: sort === option.id }} aria-current={sort === option.id ? 'true' : undefined}>{option.label}</a>
-			))}
-		</div>
-		<button type="button" class="syntax-toggle" popovertarget="search-syntax" aria-haspopup="dialog">Search syntax</button>
-		<div id="search-syntax" class="syntax" popover role="dialog" aria-label="Search syntax">
-			<dl>
-				{modifierHelp.map(([syntax, meaning]) => (
-					<Fragment>
-						<dt><code>{syntax}</code></dt>
-						<dd>{meaning}</dd>
-					</Fragment>
-				))}
-			</dl>
-			<p class="syntax-hint">Combine them freely: <code>in:#deploys from:me has:link rollback</code></p>
+	<div class="flex flex-col gap-2.5 px-7 pt-3 max-[899px]:px-4">
+		<SearchRefineForm query={query} scope={scope} sort={sort} inputId={refineInputId} />
+		<div class="flex flex-wrap items-center gap-x-5 gap-y-2.5">
+			<SegmentedLinks links={sortLinks} label="Sort results" />
+			<SearchSyntaxHelp targetInputId={refineInputId} />
+			<p class="m-0 text-[13px] text-dim">
+				Searching {scopeDescriptions[scope]} · <a class={inlineLinkClass} href={searchHref({ scope: alternateScope })}>{scopeSwitchLabels[alternateScope]}</a>
+			</p>
 		</div>
 	</div>
-	<section class="search-results" aria-label="Search results">
-		{problem && <p class="problem" role="alert">{problem}</p>}
-		{note && <p class="note">{note}</p>}
-		{!problem && matches.length === 0 && <p class="empty">Nobody's agent has written that yet. Try fewer or other words.</p>}
+	<section class="flex grow flex-col gap-1.5 overflow-auto px-7 pt-3 pb-5 max-[899px]:overflow-visible max-[899px]:px-4" aria-label="Search results">
+		{problem && <SearchNotice tone="problem" title="Search could not run">{problem}</SearchNotice>}
+		{note && <SearchNotice tone="note">{note}</SearchNotice>}
+		{hasNoResults && (
+			<SearchNotice tone="note" title="No matches">
+				<p class="m-0">Nobody's agent has written that yet. Try fewer or other words, or a prefix such as <code class="font-mono text-[13px] text-amber">deploy*</code>.</p>
+				{refinements.length > 0 && (
+					<ul class="m-0 mt-2 flex list-none flex-col gap-1 p-0 font-mono text-[13px]">
+						{refinements.map((refinement) => (
+							<li><a class={inlineLinkClass} href={searchHref({ q: refinement.query, scope: refinement.scope })}>{refinement.label}</a>{refinement.query !== query && <span class="text-dim"> → {refinement.query}</span>}</li>
+						))}
+					</ul>
+				)}
+			</SearchNotice>
+		)}
+		{!problem && matches.length === 0 && !isFirstPage && <SearchNotice tone="note">No more matches.</SearchNotice>}
 		{top && top.length > 0 && (
 			<Fragment>
-				<h2>Best matches</h2>
+				<h2 class={sectionHeadingClass}>Best matches</h2>
 				{top.map((match) => <SearchResult match={match} scope={scope} nowMs={frame.nowMs} />)}
-				<h2>Newest first</h2>
+				<h2 class={sectionHeadingClass}>Newest first</h2>
 			</Fragment>
 		)}
 		{matches.map((match) => <SearchResult match={match} scope={scope} nowMs={frame.nowMs} />)}
-		{nextCursor && <a class="more" href={adminHref('/admin/search', scope, { q: query, sort, cursor: nextCursor })}>More results</a>}
+		{(nextCursor || !isFirstPage) && (
+			<div class="mt-1.5 flex gap-2">
+				{!isFirstPage && <PageLink href={searchHref({})}>First page</PageLink>}
+				{nextCursor && <PageLink href={searchHref({ cursor: nextCursor })}>More results</PageLink>}
+			</div>
+		)}
 	</section>
 </Admin>
 
-<style>
-	.search-tools {
-		padding: 10px 28px 0;
-		display: flex;
-		align-items: flex-start;
-		flex-wrap: wrap;
-		gap: 10px 20px;
+<script>
+	function insertSyntaxExample(example: HTMLButtonElement): void {
+		const popover = example.closest<HTMLElement>('[data-syntax-target]');
+		const input = popover ? document.getElementById(popover.dataset.syntaxTarget ?? '') : null;
+		if (!(input instanceof HTMLInputElement)) return;
+		const { syntaxFixed = '', syntaxEditable = '', syntaxClosing = '' } = example.dataset;
+		const separator = input.value && !input.value.endsWith(' ') ? ' ' : '';
+		const editableStart = input.value.length + separator.length + syntaxFixed.length;
+		input.value = `${input.value}${separator}${syntaxFixed}${syntaxEditable}${syntaxClosing}`;
+		popover?.hidePopover();
+		input.focus();
+		input.setSelectionRange(editableStart, editableStart + syntaxEditable.length);
 	}
-	.sort {
-		display: flex;
-		border: 1px solid var(--color-control-border);
-	}
-	.sort a {
-		min-height: 32px;
-		padding: 0 12px;
-		display: inline-flex;
-		align-items: center;
-		color: var(--color-muted);
-		font-size: 13px;
-		font-weight: 600;
-		text-decoration: none;
-	}
-	.sort a:hover {
-		background: var(--color-selection);
-	}
-	.sort a.active {
-		background: var(--color-accent);
-		color: var(--color-ground);
-	}
-	.syntax-toggle {
-		min-height: 32px;
-		padding: 0 12px;
-		border: 1px solid var(--color-control-border);
-		background: transparent;
-		color: var(--color-text);
-		font: inherit;
-		font-size: 13px;
-		cursor: pointer;
-		anchor-name: --search-syntax;
-	}
-	.syntax-toggle:hover, .syntax-toggle:has(+ .syntax:popover-open) {
-		background: var(--color-selection);
-		border-color: var(--color-accent);
-	}
-	.syntax {
-		inset: auto;
-		top: 72px;
-		right: 360px;
-		margin: 0;
-		width: min(560px, calc(100vw - 32px));
-		padding: 12px 14px;
-		background: var(--color-sidebar);
-		border: 1px solid var(--color-control-border);
-		box-shadow: 0 16px 40px rgb(0 0 0 / 0.45);
-		color: var(--color-muted);
-		font-size: 13px;
-		opacity: 0;
-		transform: translateY(-4px);
-		transition: opacity 160ms var(--ease-out-quint), transform 160ms var(--ease-out-quint), display 160ms allow-discrete, overlay 160ms allow-discrete;
-	}
-	@supports (position-anchor: --search-syntax) {
-		.syntax {
-			position-anchor: --search-syntax;
-			top: calc(anchor(bottom) + 6px);
-			left: anchor(left);
-			right: auto;
-			position-try-fallbacks: flip-inline;
-		}
-	}
-	.syntax:popover-open {
-		opacity: 1;
-		transform: none;
-	}
-	@starting-style {
-		.syntax:popover-open {
-			opacity: 0;
-			transform: translateY(-4px);
-		}
-	}
-	.syntax dl {
-		margin: 0;
-		display: grid;
-		grid-template-columns: max-content minmax(0, 1fr);
-		gap: 4px 16px;
-	}
-	.syntax dt code, .syntax-hint code {
-		color: var(--color-accent);
-		font-family: var(--font-mono);
-	}
-	.syntax dd {
-		margin: 0;
-		font-family: var(--font-prose);
-	}
-	.syntax-hint {
-		margin: 10px 0 0;
-		padding-top: 8px;
-		border-top: 1px solid var(--color-row-border);
-		font-family: var(--font-prose);
-		color: var(--color-dim);
-	}
-	.search-results {
-		flex-grow: 1;
-		overflow: auto;
-		padding: 12px 28px 20px;
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-	}
-	h2 {
-		margin: 8px 0 0;
-		font-size: 12px;
-		font-weight: 400;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-		color: var(--color-dim);
-	}
-	.empty, .note, .problem {
-		margin: 0;
-		max-width: 800px;
-		font-family: var(--font-prose);
-		font-size: 15px;
-		line-height: 1.5;
-		color: var(--color-subheading);
-	}
-	.note {
-		padding: 10px 14px;
-		border-left: 2px solid var(--color-accent);
-		background: var(--color-sidebar);
-	}
-	.problem {
-		padding: 10px 14px;
-		border-left: 2px solid var(--color-danger);
-		background: var(--color-sidebar);
-		color: var(--color-text);
-	}
-	.more {
-		align-self: flex-start;
-		min-height: 32px;
-		padding: 0 10px;
-		border: 1px solid var(--color-control-border);
-		display: inline-flex;
-		align-items: center;
-		color: var(--color-text);
-		font-size: 13px;
-		text-decoration: none;
-	}
-	.more:hover {
-		background: var(--color-selection);
-	}
-	@media (max-width: 899px) {
-		.search-tools {
-			padding-inline: 16px;
-		}
-		.search-results {
-			overflow: visible;
-			padding-inline: 16px;
-		}
-	}
-</style>
+
+	document.addEventListener('click', (event) => {
+		const example = (event.target as Element | null)?.closest?.('button[data-syntax-editable]');
+		if (example instanceof HTMLButtonElement) insertSyntaxExample(example);
+	});
+</script>
