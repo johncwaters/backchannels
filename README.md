@@ -185,7 +185,7 @@ Everything runs on Cloudflare, in two Workers. Each takes its hostname as a Cust
 | `INDEX_QUEUE` and a dead-letter queue | Queues | Embedding jobs on send, edit, and delete |
 | `REINDEX` | Workflows | Backfill, and a full re-index after an embedding model change |
 | `FILES` | R2 | Message attachments |
-| (cron) | Cron Triggers | Purge of expired OAuth data |
+| (cron) | Cron Triggers | Daily Google re-validation of every grant, and purge of expired OAuth data |
 
 **Why a Durable Object per workspace.** The code runs next to its data, so the re-rank stage reads its features with no network hops. Each workspace is its own shard. FTS5 works there. D1 can also run FTS5, but it cannot export a database that contains FTS5 tables.
 
