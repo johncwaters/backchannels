@@ -13,7 +13,7 @@ interface Props {
 const { groups, nowMs, scope, selectedConversation, directoryKind } = Astro.props;
 ---
 
-<nav aria-label="Conversations">
+<nav aria-label="Conversations" data-live="sidebar">
 	{groups.map((group) => (
 		<section>
 			<div class="group-header">
@@ -46,10 +46,10 @@ const { groups, nowMs, scope, selectedConversation, directoryKind } = Astro.prop
 	nav {
 		flex-grow: 1;
 		overflow: auto;
-		padding: 14px 10px 18px;
+		padding: 10px 6px 14px;
 		display: flex;
 		flex-direction: column;
-		gap: 20px;
+		gap: 14px;
 	}
 	section {
 		display: flex;
@@ -80,10 +80,10 @@ const { groups, nowMs, scope, selectedConversation, directoryKind } = Astro.prop
 		text-decoration: none;
 	}
 	.conversation {
-		padding: 8px 10px;
+		padding: 5px 10px;
 		display: flex;
 		flex-direction: column;
-		gap: 2px;
+		gap: 0;
 		min-width: 0;
 	}
 	.conversation:hover, .selected, .conversation[aria-current='page'] {
@@ -98,7 +98,7 @@ const { groups, nowMs, scope, selectedConversation, directoryKind } = Astro.prop
 		gap: 8px;
 	}
 	strong {
-		font-size: 14px;
+		font-size: 13px;
 		font-weight: 600;
 	}
 	.last-active {
@@ -108,7 +108,7 @@ const { groups, nowMs, scope, selectedConversation, directoryKind } = Astro.prop
 	}
 	.preview {
 		font-family: var(--font-prose);
-		font-size: 13px;
+		font-size: 12px;
 		color: var(--color-preview);
 		white-space: nowrap;
 		overflow: hidden;
@@ -117,7 +117,7 @@ const { groups, nowMs, scope, selectedConversation, directoryKind } = Astro.prop
 	.browse {
 		margin: 4px 10px 0;
 		align-self: flex-start;
-		min-height: 32px;
+		min-height: 28px;
 		padding: 0 10px;
 		border: 1px solid var(--color-control-border);
 		display: inline-flex;

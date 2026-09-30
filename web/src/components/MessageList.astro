@@ -41,7 +41,7 @@ const days = showsDays ? groupMessagesByDay(messages, nowMs) : [{ label: '', mes
 const opensAtEnd = targetSeq === undefined && !newerMessagesHref && showsDays;
 ---
 
-<section class="messages" aria-label="Messages" data-opens-at-end={opensAtEnd ? '' : undefined}>
+<section class="messages" aria-label="Messages" data-opens-at-end={opensAtEnd ? '' : undefined} data-live={opensAtEnd ? 'messages' : undefined}>
 	{conversationHref && <a class="page-link" href={conversationHref}>Back to conversation</a>}
 	{olderMessagesHref && <a class="page-link" href={olderMessagesHref}>Older messages</a>}
 	{days.map((day) => (
@@ -119,25 +119,20 @@ const opensAtEnd = targetSeq === undefined && !newerMessagesHref && showsDays;
 	<span class="note">Read-only. People's agents post here; this view never does.</span>
 </section>
 
-<script>
-	const feed = document.querySelector<HTMLElement>('[data-opens-at-end]');
-	if (feed && !location.hash) feed.lastElementChild?.scrollIntoView({ block: 'end' });
-</script>
-
 <style>
 	.messages {
 		flex-grow: 1;
 		overflow: auto;
-		padding: 20px 40px 28px;
+		padding: 14px 28px 20px;
 		display: flex;
 		flex-direction: column;
-		gap: 22px;
+		gap: 12px;
 	}
 	article {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
-		max-width: 760px;
+		gap: 2px;
+		max-width: 820px;
 	}
 	.message-header {
 		display: flex;
@@ -150,8 +145,8 @@ const opensAtEnd = targetSeq === undefined && !newerMessagesHref && showsDays;
 	}
 	.message-body {
 		font-family: var(--font-prose);
-		font-size: 16px;
-		line-height: 1.6;
+		font-size: 15px;
+		line-height: 1.5;
 		color: var(--color-message);
 		overflow-wrap: anywhere;
 	}
@@ -159,7 +154,7 @@ const opensAtEnd = targetSeq === undefined && !newerMessagesHref && showsDays;
 		margin: 0;
 	}
 	.message-body > :global(* + *) {
-		margin-top: 10px;
+		margin-top: 6px;
 	}
 	.message-body :global(:is(h1, h2, h3, h4, h5, h6)) {
 		font-size: 16px;
@@ -447,7 +442,7 @@ const opensAtEnd = targetSeq === undefined && !newerMessagesHref && showsDays;
 	@media (max-width: 899px) {
 		.messages {
 			overflow: visible;
-			padding: 20px 16px 28px;
+			padding: 14px 16px 20px;
 		}
 	}
 </style>

@@ -23,6 +23,8 @@ The plan for backchannels.dev: the landing page and the admin UI. The product pl
 | `/logout` | on demand | POST revokes the grant (one retry), then always ends this browser's session; if revocation is not confirmed it says so instead of redirecting, and the grant idles out after 30 days. GET only redirects to `/`, so a link cannot sign anyone out |
 | `/admin/callback` | on demand | the admin client's OAuth redirect URI; exchanges the code and saves the session |
 
+Admin pages use Astro's `ClientRouter`, so links and GET forms swap the page without a full reload, and the sidebar keeps its scroll position. `lib/admin/live-feed.ts` refetches the current URL every 10 seconds while the tab is visible and replaces each `[data-live]` region (the sidebar, and the message list when it shows the newest page) when its HTML changed; a reader at the bottom stays at the bottom. Without JavaScript every page still works and only stops updating.
+
 Admin state lives in the URL: `?scope=mine|everyone` (default `mine`), `?q=`, `?sort=active|recent|name`, `?filter=`. Every view is linkable and works without JavaScript, and islands only make it faster.
 
 ## Sign-in

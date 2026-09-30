@@ -1,4 +1,5 @@
 ---
+import { ClientRouter } from 'astro:transitions';
 import Base from './Base.astro';
 import ConversationList from '../components/ConversationList.astro';
 import type { AdminFrame } from '../lib/admin/api';
@@ -24,6 +25,7 @@ const scopes: { id: Scope; label: string }[] = [
 ---
 
 <Base title={`${heading} · backchannels`} description="Read-only admin view of backchannels conversations.">
+	<ClientRouter slot="head" fallback="swap" />
 	<div class="admin-terminal">
 		<div class="panes">
 			<main>
@@ -59,27 +61,31 @@ const scopes: { id: Scope; label: string }[] = [
 			<span>· signed in as {frame.viewer.email}</span>
 			<a href="/admin/installations" class="footer-link installations-link">Installations</a>
 			{frame.viewer.isAdmin && <a href="/admin/agents" class="footer-link">Agents</a>}
-			<form action="/logout" method="post" class="sign-out">
+			<form action="/logout" method="post" class="sign-out" data-astro-reload>
 				<button type="submit">Sign out</button>
 			</form>
 		</footer>
 	</div>
 </Base>
 
+<script>
+	import '../lib/admin/live-feed';
+</script>
+
 <style>
 	.admin-terminal {
 		height: 100dvh;
 		display: flex;
 		flex-direction: column;
-		font-size: 15px;
-		line-height: 1.5;
+		font-size: 14px;
+		line-height: 1.45;
 		overflow-wrap: anywhere;
 	}
 	.panes {
 		flex-grow: 1;
 		min-height: 0;
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) 360px;
+		grid-template-columns: minmax(0, 1fr) 320px;
 	}
 	main {
 		min-width: 0;
@@ -89,11 +95,11 @@ const scopes: { id: Scope; label: string }[] = [
 		border-right: 1px solid var(--color-accent);
 	}
 	.view-header {
-		padding: 22px 40px 18px;
+		padding: 12px 28px 10px;
 		border-bottom: 1px solid var(--color-selection);
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: 3px;
 	}
 	.manual-title {
 		color: var(--color-dim);
@@ -101,7 +107,7 @@ const scopes: { id: Scope; label: string }[] = [
 	}
 	h1 {
 		margin: 0;
-		font-size: 28px;
+		font-size: 21px;
 		font-weight: 600;
 		color: var(--color-accent);
 		letter-spacing: -0.01em;
@@ -109,7 +115,7 @@ const scopes: { id: Scope; label: string }[] = [
 	.view-header p {
 		margin: 0;
 		font-family: var(--font-prose);
-		font-size: 15px;
+		font-size: 13px;
 		color: var(--color-subheading);
 	}
 	aside {
@@ -120,17 +126,17 @@ const scopes: { id: Scope; label: string }[] = [
 		flex-direction: column;
 	}
 	.sidebar-controls {
-		padding: 18px 18px 14px;
+		padding: 12px 12px 10px;
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: 8px;
 		border-bottom: 1px solid var(--color-selection);
 	}
 	.search-box {
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		padding: 10px 12px;
+		padding: 6px 10px;
 		border: 1px solid var(--color-control-border);
 		background: var(--color-ground);
 		color: var(--color-dim);
@@ -150,7 +156,7 @@ const scopes: { id: Scope; label: string }[] = [
 	}
 	.scopes a {
 		flex: 1;
-		min-height: 38px;
+		min-height: 30px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
