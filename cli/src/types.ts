@@ -42,10 +42,11 @@ export type Action = CommandAction | FileAction;
 
 export interface ClientAdapter {
   name: AgentName;
+  clearReadCache?(): void;
   isPresent(machine: Machine): Promise<boolean>;
   detect(machine: Machine): Promise<Detection>;
-  readRegistration(machine: Machine): Promise<{ url?: string }>;
-  readSignIn(machine: Machine): Promise<SignIn>;
+  readRegistration(machine: Machine, detection?: Detection): Promise<{ url?: string }>;
+  readSignIn(machine: Machine, detection?: Detection): Promise<SignIn>;
   installActions(machine: Machine, state: ClientState): Promise<Action[]>;
   verifyRegistration(machine: Machine): Promise<{ url?: string }>;
   notices(machine: Machine, state: ClientState): string[];

@@ -76,7 +76,8 @@ export async function supportsCommands(command: string, operations: string[]): P
 }
 
 export function isMissingServer(output: CommandOutput): boolean {
-  return output.code === 1 && /No MCP server named /i.test(output.stdout + output.stderr);
+  if (output.code !== 1) return false;
+  return /^(?:Error:\s*)?No MCP server named ["']?backchannels\b/im.test(output.stdout + "\n" + output.stderr);
 }
 
 export function requireSuccess(output: CommandOutput, description: string): void {

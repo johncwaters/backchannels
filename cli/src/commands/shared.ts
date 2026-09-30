@@ -1,6 +1,6 @@
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
-import { claude } from "../clients/claude.js";
+import { createClaudeAdapter } from "../clients/claude.js";
 import { codex } from "../clients/codex.js";
 import { cursor } from "../clients/cursor.js";
 import { AGENT_NAMES, MCP_URL } from "../constants.js";
@@ -8,8 +8,6 @@ import { installSkillActions, readInstalledSkillVersion, skillPlacement, type Sk
 import { installSessionHookActions, readSessionHookInstalled } from "../session-hook.js";
 import { run } from "../machine.js";
 import type { Action, AgentName, ClientAdapter, ClientState, CommandAction, Machine, Options, SignIn } from "../types.js";
-
-const adapterByName: Record<AgentName, ClientAdapter> = { claude, codex, cursor };
 
 export interface DetectedClient {
   adapter: ClientAdapter;
@@ -33,6 +31,7 @@ export interface ApplyOutcome {
 }
 
 export async function detectClients(machine: Machine, options: Options) {
+  const adapterByName: Record<AgentName, ClientAdapter> = { claude: createClaudeAdapter(), codex, cursor };
   const clients: DetectedClient[] = [];
   const detectedAgents: AgentName[] = [];
   let hasFailures = false;
@@ -49,8 +48,8 @@ export async function detectClients(machine: Machine, options: Options) {
         continue;
       }
       detectedAgents.push(name);
-      const registration = await adapter.readRegistration(machine);
-      const signIn = await adapter.readSignIn(machine);
+      const registration = await adapter.readRegistration(machine, detection);
+      const signIn = await adapter.readSignIn(machine, detection);
       clients.push({ adapter, state: { detection, registration, signIn } });
     } catch (error) {
       reportFailure(name, "detect/read", error);
@@ -199,6 +198,7 @@ export async function applyClient(client: PreparedClient, machine: Machine): Pro
   try {
     for (const action of client.actions) {
       step = action.kind === "command" ? action.argv.join(" ") : action.path;
+      client.adapter.clearReadCache?.();
       if (!isSignInAction(action)) {
         await executeAction(action);
         continue;

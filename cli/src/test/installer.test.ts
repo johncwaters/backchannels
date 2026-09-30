@@ -122,6 +122,9 @@ test("malformed Claude settings fail only the SessionStart hook and leave the se
     assert.match(output.stdout, /claude: registered, .*skill version .*, session hook unreadable/);
     assert.equal((await harness.state()).claude.url, url);
     assert.equal(await exists(join(harness.home, claudeSkill)), true);
+    assert.match(output.stderr, /settings\.json: Refusing to change hook settings: invalid JSON/);
+    assert.doesNotMatch(output.stderr, /SyntaxError|at JSON\.parse/);
+    assert.equal(await exists(join(harness.home, `${claudeHookSettings}.backchannels.bak`)), false);
     assert.equal(await readFile(join(harness.home, claudeHookSettings), "utf8"), malformedSettings);
   } finally { await harness.close(); }
 });
@@ -223,7 +226,8 @@ test("dry run lists commands and files without writing anything", async () => {
     const output = await harness.invoke(["--dry-run"]);
     assert.equal(output.code, 0, output.stderr);
     assert.match(output.stdout, /SKILL.md/);
-    assert.match(output.stdout, /codex mcp add/);
+    assert.match(output.stdout, /config.toml/);
+    assert.doesNotMatch(output.stdout, /codex mcp add/);
     assert.deepEqual(await snapshotFiles(harness.home), snapshot);
     assert.equal((await harness.state()).claude.url, undefined);
   } finally { await harness.close(); }
@@ -286,7 +290,7 @@ test("one failed agent does not stop the others and names the failing step", asy
     const output = await harness.invoke(["--yes"]);
     assert.equal(output.code, 1);
     assert.match(output.stderr, /claude.*add[\s\S]*no backchannels entry.*rerun/i);
-    assert.equal((await harness.state()).codex.signedIn, true);
+    assert.match(await readFile(harness.codexConfig, "utf8"), /mcp_servers.backchannels/);
     assert.equal(JSON.parse(await readFile(harness.cursorConfig, "utf8")).mcpServers.backchannels.url, url);
   } finally { await harness.close(); }
 });
@@ -374,7 +378,7 @@ test("the browser registration path backs up config.toml before the client rewri
   try {
     const foreign = '[mcp_servers.foreign]\nurl = "https://foreign.test"\n';
     await seedFile(harness.codexConfig, foreign);
-    assert.equal((await harness.invoke(["--yes"])).code, 0);
+    assert.equal((await harness.invoke(["--yes"], terminalWithBrowser)).code, 0);
     const backup = `${harness.codexConfig}.backchannels.bak`;
     assert.equal(await readFile(backup, "utf8"), foreign);
     assert.equal((await stat(backup)).mode & 0o777, 0o600);

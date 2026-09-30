@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { run } from "../machine.js";
+import { run, type CommandOutput } from "../machine.js";
 import type { Machine } from "../types.js";
 
 export interface FakeState {
@@ -12,6 +12,7 @@ export interface FakeState {
   unsupported?: string[];
   failing?: string[];
   agentVersion?: string;
+  outputs?: Record<string, CommandOutput>;
 }
 
 const fakeSource = String.raw`#!/usr/bin/env node
@@ -31,6 +32,12 @@ if (arguments_[0] === "--version") {
   process.exit(0);
 }
 if ((state.failing || []).includes(commandName)) process.exit(3);
+const capturedOutput = state.outputs && state.outputs[commandName];
+if (capturedOutput) {
+  process.stdout.write(capturedOutput.stdout);
+  process.stderr.write(capturedOutput.stderr);
+  process.exit(capturedOutput.code);
+}
 const configPath = join(process.env.CODEX_HOME, "config.toml");
 if (name === "codex") {
   state.codex.url = undefined;
@@ -131,4 +138,8 @@ export async function createHarness(clients = ["claude", "codex", "agent"]) {
       await rm(directory, { recursive: true, force: true });
     },
   };
+}
+
+export async function readOutputFixture(name: string): Promise<string> {
+  return readFile(new URL(`../../src/test/fixtures/${name}`, import.meta.url), "utf8");
 }

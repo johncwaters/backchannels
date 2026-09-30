@@ -12,7 +12,10 @@ export function parseClaudeRegistration(output: string): { url?: string } {
 export function parseClaudeSignIn(output: string): SignIn {
   const status = output.match(/^\s*Status:\s*(.+)$/m)?.[1];
   if (!status) return "unknown";
-  return status.startsWith("✔") ? "signed-in" : "signed-out";
+  if (/^✔\s*Connected\s*$/.test(status)) return "signed-in";
+  const statusText = status.replace(/^[^\p{L}]+/u, "");
+  if (/^(?:needs authentication|disconnected|not connected|failed to connect|failed)\s*$/i.test(statusText)) return "signed-out";
+  return "unknown";
 }
 
 async function isPresent(_machine: Machine): Promise<boolean> {
@@ -28,25 +31,29 @@ async function detect(machine: Machine): Promise<Detection> {
   };
 }
 
-async function get(): Promise<string> {
+async function get(): Promise<string | undefined> {
   const output = await run(["claude", "mcp", "get", "backchannels"]);
-  if (isMissingServer(output)) return "";
+  if (isMissingServer(output)) return undefined;
   requireSuccess(output, "Claude registration check");
   return output.stdout;
 }
 
-async function readRegistration(machine: Machine): Promise<{ url?: string }> {
-  if (!(await detect(machine)).supportsCommands) return {};
-  return parseClaudeRegistration(await get());
+async function readRegistration(machine: Machine, detection?: Detection, readOutput = get): Promise<{ url?: string }> {
+  if (!(detection ?? await detect(machine)).supportsCommands) return {};
+  const output = await readOutput();
+  if (output === undefined) return {};
+  const registration = parseClaudeRegistration(output);
+  if (!registration.url) throw new Error("Cannot read the Claude server URL; refusing to change its registration. Check claude mcp get backchannels from a terminal.");
+  return registration;
 }
 
-async function readSignIn(machine: Machine): Promise<SignIn> {
-  if (!(await detect(machine)).supportsCommands) return "unknown";
-  return parseClaudeSignIn(await get());
+async function readSignIn(machine: Machine, detection?: Detection, readOutput = get): Promise<SignIn> {
+  if (!(detection ?? await detect(machine)).supportsCommands) return "unknown";
+  return parseClaudeSignIn(await readOutput() ?? "");
 }
 
 function needsSignIn(state: ClientState): boolean {
-  return state.registration.url !== MCP_URL || state.signIn !== "signed-in";
+  return state.registration.url !== MCP_URL || state.signIn === "signed-out";
 }
 
 async function installActions(machine: Machine, state: ClientState): Promise<Action[]> {
@@ -71,10 +78,25 @@ function notices(machine: Machine, state: ClientState): string[] {
     `claude mcp add --transport http --scope user backchannels ${MCP_URL}`,
     LOGIN_COMMAND,
   ];
+  if (state.registration.url === MCP_URL && state.signIn === "unknown") return [`Claude sign-in state is unknown; check it from a terminal: ${LOGIN_COMMAND}`];
   if (!needsSignIn(state)) return [];
   if (!machine.canOpenBrowser) return [`Sign in where a browser is available: ${LOGIN_COMMAND}`];
   if (!machine.isInteractive) return [`Sign in from a terminal: ${LOGIN_COMMAND}`];
   return [];
 }
 
-export const claude: ClientAdapter = { name: "claude", isPresent, detect, readRegistration, readSignIn, installActions, verifyRegistration: readRegistration, notices };
+export function createClaudeAdapter(): ClientAdapter {
+  let cachedDetection: Promise<Detection> | undefined;
+  let cachedOutput: Promise<string | undefined> | undefined;
+  const detectOnce = (machine: Machine) => cachedDetection ??= detect(machine);
+  const readOutput = () => cachedOutput ??= get();
+  const registration = async (machine: Machine, detection?: Detection) => readRegistration(machine, detection ?? await detectOnce(machine), readOutput);
+  return {
+    name: "claude", isPresent, installActions, notices,
+    detect: detectOnce,
+    readRegistration: registration,
+    readSignIn: async (machine, detection) => readSignIn(machine, detection ?? await detectOnce(machine), readOutput),
+    verifyRegistration: registration,
+    clearReadCache: () => { cachedOutput = undefined; },
+  };
+}

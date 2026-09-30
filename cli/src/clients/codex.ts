@@ -4,6 +4,8 @@ import { backupOnce, fileUpdateAction, readText, readTomlTableUrl, resolveFile, 
 import { exists, hasCommand, homePath, isMissingServer, requireSuccess, run, supportsCommands } from "../machine.js";
 import type { Action, ClientAdapter, ClientState, Detection, Machine, SignIn } from "../types.js";
 
+const LOGIN_COMMAND = "codex mcp login backchannels";
+
 export function codexPath(): string {
   return join(process.env.CODEX_HOME || homePath(".codex"), "config.toml");
 }
@@ -42,16 +44,16 @@ async function verifyRegistration(_machine: Machine): Promise<{ url?: string }> 
   return url ? { url } : {};
 }
 
-async function readRegistration(machine: Machine): Promise<{ url?: string }> {
-  if (!(await detect(machine)).supportsCommands) return verifyRegistration(machine);
+async function readRegistration(machine: Machine, detection?: Detection): Promise<{ url?: string }> {
+  if (!(detection ?? await detect(machine)).supportsCommands) return verifyRegistration(machine);
   const output = await run(["codex", "mcp", "get", "backchannels", "--json"]);
   if (isMissingServer(output)) return {};
   requireSuccess(output, "Codex registration check");
   return parseCodexRegistration(output.stdout);
 }
 
-async function readSignIn(machine: Machine): Promise<SignIn> {
-  if (!(await detect(machine)).supportsCommands) return "unknown";
+async function readSignIn(machine: Machine, detection?: Detection): Promise<SignIn> {
+  if (!(detection ?? await detect(machine)).supportsCommands) return "unknown";
   const output = await run(["codex", "mcp", "list", "--json"]);
   requireSuccess(output, "Codex sign-in check");
   return parseCodexSignIn(output.stdout);
@@ -65,20 +67,21 @@ async function backupAction(): Promise<Action> {
 async function installActions(machine: Machine, state: ClientState): Promise<Action[]> {
   const needsRegistration = state.registration.url !== MCP_URL;
   const canUseCommands = state.detection.supportsCommands;
-  if (needsRegistration && canUseCommands && machine.canOpenBrowser) {
+  if (needsRegistration && canUseCommands && machine.canOpenBrowser && machine.isInteractive) {
     return [await backupAction(), { kind: "command", argv: ["codex", "mcp", "add", "backchannels", "--url", MCP_URL], interactive: true, signsIn: true }];
   }
   const actions: Action[] = [];
   if (needsRegistration) actions.push(...await fileUpdateAction(codexPath(), source => setTomlTable(source, MCP_URL), "set [mcp_servers.backchannels] URL"));
-  if (canUseCommands && machine.canOpenBrowser && state.signIn !== "signed-in") {
-    actions.push({ kind: "command", argv: ["codex", "mcp", "login", "backchannels"], interactive: true, signsIn: true, failureMessage: "Sign in from a terminal: codex mcp login backchannels" });
+  if (canUseCommands && machine.canOpenBrowser && machine.isInteractive && state.signIn !== "signed-in") {
+    actions.push({ kind: "command", argv: LOGIN_COMMAND.split(" "), interactive: true, signsIn: true, failureMessage: `Sign in from a terminal: ${LOGIN_COMMAND}` });
   }
   return actions;
 }
 
 function notices(machine: Machine, state: ClientState): string[] {
   if (!state.detection.supportsCommands) return ["Codex CLI commands are unavailable; Codex signs in on first use."];
-  if (!machine.canOpenBrowser && (state.registration.url !== MCP_URL || state.signIn !== "signed-in")) return ["Sign in without a browser: codex mcp login backchannels --no-browser"];
+  if (!machine.canOpenBrowser && (state.registration.url !== MCP_URL || state.signIn !== "signed-in")) return [`Sign in without a browser: ${LOGIN_COMMAND} --no-browser`];
+  if (!machine.isInteractive && (state.registration.url !== MCP_URL || state.signIn !== "signed-in")) return [`Sign in from a terminal: ${LOGIN_COMMAND}`];
   return [];
 }
 

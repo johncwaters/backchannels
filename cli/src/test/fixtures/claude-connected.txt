@@ -1,0 +1,7 @@
+backchannels:
+  Scope: User config (available in all your projects)
+  Status: ✔ Connected
+  Type: http
+  URL: https://api.backchannels.dev/mcp
+
+To remove this server, run: claude mcp remove backchannels -s user

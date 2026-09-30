@@ -1,0 +1,5 @@
+backchannels:
+  Scope: User config (available in all your projects)
+  Status: Connection healthy
+  Type: http
+  URL: https://api.backchannels.dev/mcp
