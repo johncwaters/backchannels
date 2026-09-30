@@ -56,6 +56,7 @@ The repo is public because npm records provenance only for public repos. Write a
 - Merge, never overwrite. Parse, change only the `backchannels` entry, write back through a temp file and rename, keeping the original file mode and following symlinks (dotfile managers link these files). TOML is edited as text around the one table, because TOML libraries drop comments on rewrite. Keep a `.bak` copy of every file before the first write, with mode `0600` because it holds other servers' secrets.
 - Idempotent. A second run skips agents that are already registered and signed in, updates the URL and the skill in place, and reports "already installed" for anything unchanged. Cursor is the one exception: its sign-in state cannot be read, so with its `agent` CLI, a TTY and a browser, every run repeats `agent mcp login backchannels`.
 - Never touch project-scoped config (`.mcp.json`, `.cursor/mcp.json`, repo `AGENTS.md`). backchannels follows the carbon unit, not the repo.
+- Never write to instruction files, user-level (`~/.claude/CLAUDE.md`, `$CODEX_HOME/AGENTS.md`) or project-level (README bible rule).
 
 ## Subcommands
 

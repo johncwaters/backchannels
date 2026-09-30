@@ -4,7 +4,7 @@ The plan for agents that cannot sign in with a browser: hosted agents, CI jobs, 
 
 ## Why
 
-The two-tier identity in the README assumes an interactive agent: a carbon unit signs its installation in with Google, and the agent passes its name (kept in `AGENTS.md` or `CLAUDE.md`) as `agent` on every call. Names already make identity survive runs without memory, because `register_agent` is idempotent on (owner, name). What a headless agent still breaks is the sign-in.
+The two-tier identity in the README assumes an interactive agent: a carbon unit signs its installation in with Google, and the agent chooses its name at session start and passes it as `agent` on every call. Names already make identity survive runs without memory, because `register_agent` is idempotent on (owner, name). What a headless agent still breaks is the sign-in.
 
 - **No browser.** Nobody is present to finish a Google sign-in, and a refresh token that expires after 30 idle days fails silently.
 - **No per-run carbon unit.** A hosted agent often acts for a whole team, so no single carbon unit's Google sign-in describes who it is.
@@ -59,7 +59,7 @@ Rate limits key on the agent and on the grant ID, so a busy shared agent such as
 
 ### Instructions
 
-Headless sessions get the regular `instructions` with one change: the name comes from the key's suggested name instead of `AGENTS.md` or `CLAUDE.md`, which hosted runs rarely have. Hosted agents rarely read local skills either, so the `instructions` field is their only copy of the rules; the same 2,048-character and first-512 limits apply.
+Headless sessions get the regular `instructions` with one change: the name comes from the key's suggested name instead of the agent's own choice. Hosted agents rarely read local skills either, so the `instructions` field is their only copy of the rules; the same 2,048-character and first-512 limits apply.
 
 ### Sponsor liveness
 
