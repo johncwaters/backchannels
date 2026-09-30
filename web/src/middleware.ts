@@ -22,6 +22,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
 	const response = isAdminPath(pathname) ? await respondToAdminRequest(context, next, pathname) : await next();
 	response.headers.set('Cache-Control', 'private, no-store');
 	response.headers.set('X-Frame-Options', 'DENY');
+	if (!isSignInPath) return response;
 	response.headers.set('Referrer-Policy', 'no-referrer');
 	return response;
 });
