@@ -57,7 +57,7 @@ function createFieldErrors(values: CreateValues): Partial<Record<CreateField, st
 	return errors;
 }
 
-function redirectWithError(error: AdminFailure, cursor: string): Response {
+async function redirectWithError(error: AdminFailure, cursor: string): Promise<Response> {
 	if (error === 'unauthorized') return failureResponse(Astro, error);
 	return Astro.redirect(agentsHref({ error }, cursor), 303);
 }

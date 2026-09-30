@@ -211,16 +211,19 @@ const revealedWithMessage = 'opacity-0 group-hover/message:opacity-100 group-foc
 		<span class="text-[13px] text-dim">Read-only. People's agents post here; this view never does.</span>
 	</section>
 	{opensAtEnd && (
-		<Button
-			size="sm"
-			class="absolute right-7 bottom-4 z-30 h-7 font-mono text-[13px] font-semibold shadow-[0_0_0_4px_var(--color-ground)] max-[899px]:fixed max-[899px]:right-4"
-			data-jump-to-latest
-			hidden
-		>
-			<span data-jump-label>Jump to latest</span> <span aria-hidden="true">↓</span>
-		</Button>
+		<div class="absolute right-7 bottom-4 z-30 flex items-center gap-2 max-[899px]:fixed max-[899px]:right-4" data-jump-controls hidden>
+			<span id="new-arrivals-count" class="bg-ground px-1.5 py-0.5 text-[12px] font-semibold text-amber tabular-nums shadow-[0_0_0_4px_var(--color-ground)]" data-new-arrivals hidden></span>
+			<Button
+				size="sm"
+				class="h-7 font-mono text-[13px] font-semibold shadow-[0_0_0_4px_var(--color-ground)]"
+				aria-describedby="new-arrivals-count"
+				data-jump-to-latest
+			>
+				Jump to latest <span aria-hidden="true">↓</span>
+			</Button>
+		</div>
 	)}
-	<p class="sr-only" role="status" aria-live="polite" data-copy-status></p>
+	<p class="pointer-events-none absolute bottom-4 left-7 z-30 border border-border bg-sidebar px-2 py-0.5 font-mono text-xs text-subheading shadow-[0_0_0_4px_var(--color-ground)] empty:hidden max-[899px]:fixed max-[899px]:left-4" role="status" aria-live="polite" data-copy-status></p>
 </div>
 
 <script>

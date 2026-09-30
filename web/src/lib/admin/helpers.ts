@@ -172,14 +172,21 @@ export function sanitizeNextPath(requestedPath: string | null): string {
 	const placeholderOrigin = 'https://backchannels.invalid';
 	const parsed = new URL(requestedPath, placeholderOrigin);
 	if (parsed.origin !== placeholderOrigin) return fallbackPath;
-	const isAdminPath = parsed.pathname === '/admin' || parsed.pathname.startsWith('/admin/');
-	if (!isAdminPath || parsed.pathname === '/admin/callback') return fallbackPath;
+	if (!isAdminPath(parsed.pathname) || parsed.pathname === '/admin/callback') return fallbackPath;
 	return `${parsed.pathname}${parsed.search}`;
+}
+
+export function isAdminPath(pathname: string): boolean {
+	return pathname === '/admin' || pathname.startsWith('/admin/');
 }
 
 export function normalizePathname(pathname: string): string {
 	if (pathname.length > 1 && pathname.endsWith('/')) return pathname.slice(0, -1);
 	return pathname;
+}
+
+export function originRequestUrl(originPathname: string, url: URL): URL {
+	return new URL(`${normalizePathname(originPathname)}${url.search}`, url);
 }
 
 export function loginHref(url: URL): string {

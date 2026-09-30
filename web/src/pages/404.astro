@@ -1,0 +1,9 @@
+---
+import ErrorView from '../components/ErrorView.astro';
+
+export const prerender = false;
+
+const status = Astro.locals.errorView?.status ?? 404;
+---
+
+<ErrorView status={status} frame={Astro.locals.adminFrame} />

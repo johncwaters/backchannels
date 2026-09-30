@@ -1,6 +1,7 @@
 const awayFromLatestPixels = 400;
-const copyFeedbackMs = 1600;
-const copyLinkLabel = 'copy link';
+const copyStatusVisibleMs = 1600;
+
+let clearCopyStatusTimer: number | undefined;
 
 let stopWatchingFeed: (() => void) | undefined;
 
@@ -17,23 +18,25 @@ function scrollBehavior(): ScrollBehavior {
 	return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
 }
 
-function jumpLabel(unreadArrivals: number): string {
-	if (unreadArrivals === 0) return 'Jump to latest';
+export function newMessagesText(unreadArrivals: number): string {
+	if (unreadArrivals === 0) return '';
 	return unreadArrivals === 1 ? '1 new message' : `${unreadArrivals} new messages`;
 }
 
 function watchFeed(): void {
 	stopWatchingFeed?.();
 	const feed = document.querySelector<HTMLElement>('[data-live="messages"]');
-	const control = document.querySelector<HTMLButtonElement>('[data-jump-to-latest]');
-	const label = control?.querySelector<HTMLElement>('[data-jump-label]');
-	if (!feed || !control || !label) return;
+	const controls = document.querySelector<HTMLElement>('[data-jump-controls]');
+	const control = controls?.querySelector<HTMLButtonElement>('[data-jump-to-latest]');
+	const arrivalCount = controls?.querySelector<HTMLElement>('[data-new-arrivals]');
+	if (!feed || !controls || !control || !arrivalCount) return;
 	const listeners = new AbortController();
 	let isAwayFromLatest = false;
 	let unreadArrivals = 0;
 	const render = () => {
-		control.hidden = !isAwayFromLatest;
-		label.textContent = jumpLabel(unreadArrivals);
+		controls.hidden = !isAwayFromLatest;
+		arrivalCount.hidden = unreadArrivals === 0;
+		arrivalCount.textContent = newMessagesText(unreadArrivals);
 	};
 	const measure = () => {
 		isAwayFromLatest = distanceFromLatest(feed) > awayFromLatestPixels;
@@ -57,20 +60,20 @@ function watchFeed(): void {
 	measure();
 }
 
-function announce(text: string): void {
+function announceCopyOutcome(text: string): void {
 	const status = document.querySelector<HTMLElement>('[data-copy-status]');
-	if (status) status.textContent = text;
+	if (!status) return;
+	status.textContent = text;
+	window.clearTimeout(clearCopyStatusTimer);
+	clearCopyStatusTimer = window.setTimeout(() => {
+		status.textContent = '';
+	}, copyStatusVisibleMs);
 }
 
 async function copyMessageLink(button: HTMLButtonElement): Promise<void> {
 	const link = new URL(button.dataset.copyLink ?? '', location.href).href;
 	const copied = await navigator.clipboard.writeText(link).then(() => true, () => false);
-	const feedback = copied ? 'copied' : 'copy failed';
-	button.textContent = feedback;
-	announce(copied ? 'Link to message copied' : 'Could not copy the link');
-	window.setTimeout(() => {
-		button.textContent = copyLinkLabel;
-	}, copyFeedbackMs);
+	announceCopyOutcome(copied ? 'Link to message copied' : 'Could not copy the link');
 }
 
 function markClipboardSupport(): void {

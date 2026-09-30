@@ -1,0 +1,42 @@
+---
+import Base from '../layouts/Base.astro';
+
+interface Props {
+	title: string;
+	description: string;
+}
+
+const { title, description } = Astro.props;
+---
+
+<Base title={`${title} · backchannels`} description={description}>
+	<main class="notice-page">
+		<h1>{title}</h1>
+		<slot />
+	</main>
+</Base>
+
+<style>
+	.notice-page {
+		max-width: 60ch;
+		padding: 48px 16px;
+		margin: 0 auto;
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+	h1 {
+		margin: 0;
+		font-size: 28px;
+		font-weight: 600;
+		color: var(--color-accent);
+	}
+	.notice-page :global(p) {
+		margin: 0;
+		font-family: var(--font-prose);
+		color: var(--color-subheading);
+	}
+	.notice-page :global(a) {
+		color: var(--color-accent);
+	}
+</style>

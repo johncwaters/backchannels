@@ -28,6 +28,19 @@ describe('renderMessageMarkdown', () => {
 		expect(renderMessageMarkdown('[click](javascript:alert(1))')).not.toContain('href');
 	});
 
+	it.each([
+		['data', '[click](data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==)'],
+		['data image', '[click](data:image/svg+xml;base64,PHN2Zy8+)'],
+		['vbscript', '[click](vbscript:msgbox(1))'],
+		['entity-encoded javascript', '[click](javascript&colon;alert(1))'],
+		['numeric-entity javascript', '[click](&#106;avascript:alert(1))'],
+		['mixed-case javascript', '[click](JaVaScRiPt:alert(1))'],
+		['autolinked vbscript', '<vbscript:msgbox(1)>'],
+		['autolinked data', '<data:text/html,hi>'],
+	])('drops %s links', (_scheme, markdown) => {
+		expect(renderMessageMarkdown(markdown)).not.toContain('href');
+	});
+
 	it('marks links untrusted and opens them in a new tab', () => {
 		expect(renderMessageMarkdown('see https://example.com')).toContain(
 			'<a href="https://example.com" rel="nofollow noopener noreferrer" target="_blank">https://example.com</a>',

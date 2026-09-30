@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import { Button, buttonVariants, type ButtonVariant } from '$lib/components/ui/button';
 	import { cn } from '$lib/utils';
@@ -64,11 +65,14 @@
 				<AlertDialog.Title class="text-[15px] font-semibold text-amber">{title}</AlertDialog.Title>
 				<AlertDialog.Description class="font-sans text-[14px] text-subheading">{description}</AlertDialog.Description>
 			</AlertDialog.Header>
-			<AlertDialog.Footer class="-mx-5 -mb-5 border-secondary bg-ground/60 px-5 py-3">
-				{#if isSubmitting}
-					<span role="status" class="mr-auto self-center font-sans text-[13px] text-subheading">Working…</span>
-				{/if}
-				<AlertDialog.Cancel class={compactButton}>Cancel</AlertDialog.Cancel>
+			<AlertDialog.Footer class="-mx-5 -mb-5 items-center border-secondary bg-ground/60 px-5 py-3">
+				<span role="status" class="mr-auto flex items-center gap-1.5 text-[13px] text-dim">
+					{#if isSubmitting}
+						<LoaderCircle class="size-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+						<span>Working…</span>
+					{/if}
+				</span>
+				<AlertDialog.Cancel class={compactButton} disabled={isSubmitting}>Cancel</AlertDialog.Cancel>
 				<AlertDialog.Action variant={confirmVariant} class={compactButton} disabled={isSubmitting} onclick={submitConfirmed}>{confirmLabel}</AlertDialog.Action>
 			</AlertDialog.Footer>
 		</AlertDialog.Content>

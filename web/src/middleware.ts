@@ -1,17 +1,15 @@
 import type { APIContext, MiddlewareNext } from 'astro';
 import { defineMiddleware } from 'astro:middleware';
-import { loginHref, normalizePathname } from './lib/admin/helpers';
+import { isAdminPath, loginHref, normalizePathname } from './lib/admin/helpers';
 
 const signInPaths = new Set(['/login', '/logout', '/admin/callback']);
-
-function isAdminPath(pathname: string): boolean {
-	return pathname === '/admin' || pathname.startsWith('/admin/');
-}
+const errorRoutePatterns = new Set(['/404', '/500']);
 
 async function respondToAdminRequest(context: APIContext, next: MiddlewareNext, pathname: string): Promise<Response> {
 	const isCallback = pathname === '/admin/callback';
+	if (isCallback || errorRoutePatterns.has(context.routePattern)) return next();
 	const hasAdminSession = await context.session?.has('adminSession');
-	if (!isCallback && !hasAdminSession) return context.redirect(loginHref(context.url), 302);
+	if (!hasAdminSession) return context.redirect(loginHref(context.url), 302);
 	return next();
 }
 

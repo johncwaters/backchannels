@@ -1,0 +1,9 @@
+---
+import ErrorView from '../components/ErrorView.astro';
+
+export const prerender = false;
+
+Astro.response.status = 500;
+---
+
+<ErrorView status={500} frame={Astro.locals.adminFrame} />

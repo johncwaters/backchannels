@@ -1,9 +1,9 @@
 import type { APIContext } from 'astro';
 import { env } from 'cloudflare:workers';
 import { buildSidebarGroups, deployedVersion, loginHref, sidebarKindsFor, sidebarSortFor } from './helpers';
-import type { AdminApiRpc, AdminResult, AdminSession, Conversation, DirectoryKind, Scope } from './types';
+import type { AdminApiRpc, AdminResult, AdminSession, Conversation, DirectoryKind, Scope, Viewer } from './types';
 
-type AdminFailure = Extract<AdminResult<unknown>, { ok: false }>['error'];
+export type AdminFailure = Extract<AdminResult<unknown>, { ok: false }>['error'];
 export interface AdminApi {
 	viewer(): ReturnType<AdminApiRpc['viewer']>;
 	serverVersion(): ReturnType<AdminApiRpc['serverVersion']>;
@@ -39,9 +39,21 @@ export function signInRedirect(context: APIContext): Response {
 	return context.redirect(loginHref(context.url), 302);
 }
 
-export function failureResponse(context: APIContext, failure: AdminFailure): Response {
+export type ErrorStatus = 400 | 404 | 500;
+export interface ErrorView {
+	status: ErrorStatus;
+}
+
+const rewritableMethods = new Set(['GET', 'HEAD']);
+
+export async function failureResponse(context: APIContext, failure: AdminFailure): Promise<Response> {
 	if (failure === 'unauthorized') return signInRedirect(context);
-	return new Response(null, { status: failure === 'not_found' ? 404 : 400 });
+	if (failure === 'not_found') return new Response(null, { status: 404 });
+	const errorView: ErrorView = { status: 400 };
+	if (!rewritableMethods.has(context.request.method)) return new Response(null, { status: errorView.status });
+	context.locals.errorView = errorView;
+	const errorPage = await context.rewrite(`/404${context.url.search}`);
+	return new Response(errorPage.body, { status: errorView.status, headers: errorPage.headers });
 }
 
 async function freshAdminSession(context: APIContext): Promise<AdminSession | null> {
@@ -111,15 +123,19 @@ export async function loadAdminFrame(context: APIContext, scope: Scope) {
 		public: publicListing.value.conversations,
 		private: privateListing?.value.conversations ?? [],
 	};
-	return {
-		adminApi,
-		frame: {
-			viewer: viewer.value,
-			versions: { web: deployedVersion(env.CF_VERSION_METADATA), mcp: mcpVersion },
-			nowMs,
-			sidebarGroups: buildSidebarGroups(conversationsByKind, publicListing.value.totals, scope, nowMs),
-		},
+	const frame: AdminFrame = {
+		viewer: viewer.value,
+		versions: { web: deployedVersion(env.CF_VERSION_METADATA), mcp: mcpVersion },
+		nowMs,
+		sidebarGroups: buildSidebarGroups(conversationsByKind, publicListing.value.totals, scope, nowMs),
 	};
+	context.locals.adminFrame = frame;
+	return { adminApi, frame };
 }
 
-export type AdminFrame = Exclude<Awaited<ReturnType<typeof loadAdminFrame>>, Response>['frame'];
+export interface AdminFrame {
+	viewer: Viewer;
+	versions: { web: string; mcp: string };
+	nowMs: number;
+	sidebarGroups: ReturnType<typeof buildSidebarGroups>;
+}

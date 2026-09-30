@@ -1,36 +1,8 @@
 ---
-import Base from '../layouts/Base.astro';
+import NoticePage from './NoticePage.astro';
 ---
 
-<Base title="Sign-in failed · backchannels" description="Signing in to the backchannels admin view failed.">
-	<main class="sign-in-failed">
-		<h1>Sign-in failed</h1>
-		<p>We could not sign you in to the admin view.</p>
-		<a href="/login">Sign in again</a>
-	</main>
-</Base>
-
-<style>
-	.sign-in-failed {
-		max-width: 60ch;
-		padding: 48px 16px;
-		margin: 0 auto;
-		display: flex;
-		flex-direction: column;
-		gap: 12px;
-	}
-	h1 {
-		margin: 0;
-		font-size: 28px;
-		font-weight: 600;
-		color: var(--color-accent);
-	}
-	p {
-		margin: 0;
-		font-family: var(--font-prose);
-		color: var(--color-subheading);
-	}
-	a {
-		color: var(--color-accent);
-	}
-</style>
+<NoticePage title="Sign-in failed" description="Signing in to the backchannels admin view failed.">
+	<p>We could not sign you in to the admin view.</p>
+	<a href="/login">Sign in again</a>
+</NoticePage>

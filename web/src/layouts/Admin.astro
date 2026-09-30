@@ -7,7 +7,7 @@ import SegmentedLinks from '../lib/components/admin/SegmentedLinks.svelte';
 import { Input } from '../lib/components/ui/input';
 import { Skeleton } from '../lib/components/ui/skeleton';
 import type { AdminFrame } from '../lib/admin/api';
-import { scopeHref } from '../lib/admin/helpers';
+import { originRequestUrl, scopeHref } from '../lib/admin/helpers';
 import type { DirectoryKind, Scope } from '../lib/admin/types';
 
 interface Props {
@@ -19,12 +19,14 @@ interface Props {
 	selectedConversation?: string;
 	directoryKind?: DirectoryKind;
 	query?: string;
+	isErrorView?: boolean;
 }
 
-const { frame, manualTitle, heading, subheading, scope, selectedConversation, directoryKind, query = '' } = Astro.props;
+const { frame, manualTitle, heading, subheading, scope, selectedConversation, directoryKind, query = '', isErrorView = false } = Astro.props;
+const requestedUrl = originRequestUrl(Astro.originPathname, Astro.url);
 const scopeLinks = [
-	{ label: 'My agents', href: scopeHref(Astro.url, 'mine'), isCurrent: scope === 'mine' },
-	{ label: 'Everyone', href: scopeHref(Astro.url, 'everyone'), isCurrent: scope === 'everyone' },
+	{ label: 'My agents', href: scopeHref(requestedUrl, 'mine'), isCurrent: scope === 'mine' },
+	{ label: 'Everyone', href: scopeHref(requestedUrl, 'everyone'), isCurrent: scope === 'everyone' },
 ];
 const skeletonWidths = [72, 88, 56, 94, 64, 80];
 const footerLinkClass = 'inline-flex min-h-8 items-center px-2.5 text-inherit no-underline transition-colors duration-150 hover:bg-ground hover:text-amber';
@@ -33,7 +35,7 @@ const footerLinkClass = 'inline-flex min-h-8 items-center px-2.5 text-inherit no
 <Base title={`${heading} · backchannels`} description="Read-only admin view of backchannels conversations.">
 	<ClientRouter slot="head" fallback="swap" />
 	<div class="route-progress" data-route-progress data-state="idle" aria-hidden="true" transition:persist="route-progress"></div>
-	<div class="admin-terminal flex h-dvh flex-col text-sm leading-[1.45] wrap-anywhere max-[899px]:h-auto max-[899px]:min-h-dvh">
+	<div data-error-view={isErrorView ? '' : undefined} class="admin-terminal flex h-dvh flex-col text-sm leading-[1.45] wrap-anywhere max-[899px]:h-auto max-[899px]:min-h-dvh">
 		<div class="grid min-h-0 grow grid-cols-[minmax(0,1fr)_320px] max-[899px]:grid-cols-1">
 			<main class="flex min-h-0 min-w-0 flex-col border-r border-amber max-[899px]:border-r-0 max-[899px]:border-b" transition:animate={fade({ duration: '160ms' })}>
 				<header class="view-header flex flex-col gap-[3px] border-b border-secondary px-7 pt-3 pb-2.5 max-[899px]:px-4">
@@ -78,7 +80,7 @@ const footerLinkClass = 'inline-flex min-h-8 items-center px-2.5 text-inherit no
 			<span>· admin view</span>
 			<span>· signed in as {frame.viewer.email}</span>
 			<span>· web {frame.versions.web} · mcp {frame.versions.mcp}</span>
-			<span class="live-status" data-live-status title="New messages load every 10 seconds">live</span>
+			{!isErrorView && <span class="live-status" data-live-status title="New messages load every 10 seconds">live</span>}
 			<a href="/admin/installations" class={`${footerLinkClass} ml-auto`} data-nav-title="Installations">Installations</a>
 			{frame.viewer.isAdmin && <a href="/admin/agents" class={footerLinkClass} data-nav-title="Headless agents">Agents</a>}
 			<form action="/logout" method="post" data-astro-reload data-nav-title="Signing out…">
@@ -89,7 +91,9 @@ const footerLinkClass = 'inline-flex min-h-8 items-center px-2.5 text-inherit no
 </Base>
 
 <script>
-	import '../lib/admin/live-feed';
+	import { installLiveFeed } from '../lib/admin/live-feed';
 	import '../lib/admin/navigation-feedback';
 	import '../lib/admin/read-tracking';
+
+	installLiveFeed();
 </script>
