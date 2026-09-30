@@ -20,7 +20,8 @@ import { MIGRATIONS } from "./schema";
 import { SEARCH_TUNING_META_KEY, searchMessages } from "./search";
 import type { TuningOverrides } from "./search/config";
 import { buildDocument, reindexJobs, type IndexDocument, type IndexJob, type PendingIndexJob } from "./search/indexing";
-import { fullHandle, ownerPart } from "./ids";
+import { findWorkspaceDomain } from "./directory";
+import { fullHandle, handleOwner } from "./ids";
 import { ToolError, all, one, run, type AgentRow, type Scope } from "./store";
 import { buildBrief, type Brief } from "./brief";
 
@@ -71,7 +72,6 @@ export interface NewAgent {
 
 export interface WorkspaceIdentity {
   workspaceId: string;
-  domain: string;
 }
 
 export interface ToolCaller extends WorkspaceIdentity {
@@ -95,6 +95,7 @@ export type RegisterOutcome =
 
 export class WorkspaceDO extends DurableObject<Env> {
   private sql: SqlStorage;
+  private workspaceDomain: string | undefined;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -119,12 +120,12 @@ export class WorkspaceDO extends DurableObject<Env> {
     return this.sql.exec<{ n: number }>("SELECT count(*) AS n FROM messages_fts").one().n >= 0;
   }
 
-  private rememberWorkspace(identity: WorkspaceIdentity): void {
-    this.sql.exec(
-      "INSERT OR IGNORE INTO meta (key, value) VALUES ('workspace_id', ?), ('domain', ?)",
-      identity.workspaceId,
-      identity.domain.toLowerCase(),
-    );
+  // The domain is the workspace's Google hd claim from D1, never the caller's email domain, which can be a secondary domain.
+  private async rememberWorkspace(identity: WorkspaceIdentity): Promise<string> {
+    this.workspaceDomain ??= (await findWorkspaceDomain(this.env.DB, identity.workspaceId)).toLowerCase();
+    this.sql.exec("INSERT OR IGNORE INTO meta (key, value) VALUES ('workspace_id', ?)", identity.workspaceId);
+    this.sql.exec("INSERT OR REPLACE INTO meta (key, value) VALUES ('domain', ?)", this.workspaceDomain);
+    return this.workspaceDomain;
   }
 
   private scopeFor(agent: AgentRow, workspaceId: string, now: number): Scope {
@@ -133,8 +134,8 @@ export class WorkspaceDO extends DurableObject<Env> {
 
   async registerAgent(agent: NewAgent, identity: WorkspaceIdentity, grantId: string): Promise<RegisterOutcome> {
     const now = Date.now();
-    this.rememberWorkspace(identity);
-    const handle = fullHandle(ownerPart(agent.ownerEmail), agent.agentName);
+    const domain = await this.rememberWorkspace(identity);
+    const handle = fullHandle(handleOwner(agent.ownerSub, agent.ownerEmail, domain), agent.agentName);
     return this.ctx.storage.transactionSync((): RegisterOutcome => {
       const existing = one<AgentRow>(this.sql, "SELECT * FROM agents WHERE handle = ?", handle);
       if (existing && existing.owner_sub !== agent.ownerSub) {
@@ -168,8 +169,8 @@ export class WorkspaceDO extends DurableObject<Env> {
     });
   }
 
-  private resolveCaller(caller: ToolCaller): AgentRow | string {
-    const owner = ownerPart(caller.ownerEmail);
+  private resolveCaller(caller: ToolCaller, domain: string): AgentRow | string {
+    const owner = handleOwner(caller.ownerSub, caller.ownerEmail, domain);
     const ref = caller.agent.trim().toLowerCase().replace(/^@/, "");
     const [refOwner, refName] = ref.includes("/") ? ref.split("/", 2) : [owner, ref];
     if (refOwner !== owner) return `@${ref} belongs to another carbon unit; you can act only as your own agents (@${owner}/…)`;
@@ -191,9 +192,9 @@ export class WorkspaceDO extends DurableObject<Env> {
   async tool(name: string, caller: ToolCaller, args: Record<string, unknown>): Promise<ToolOutcome> {
     const handler = TOOLS[name];
     if (!handler) return { error: `unknown tool ${name}` };
-    this.rememberWorkspace(caller);
+    const domain = await this.rememberWorkspace(caller);
     const now = Date.now();
-    const agent = this.resolveCaller(caller);
+    const agent = this.resolveCaller(caller, domain);
     if (typeof agent === "string") return { error: agent };
 
     run(this.sql, "UPDATE agents SET last_active_at = ? WHERE id = ? AND last_active_at < ?", now, agent.id, now - 60_000);

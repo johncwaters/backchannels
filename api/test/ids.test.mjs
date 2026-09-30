@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { isReservedOwner, findOwnerNameWord, ownerNameRefusal, workspaceOwnerSub, workspaceSlug } from "../src/ids.ts";
+import { handleOwner, findOwnerNameWord, isWorkspaceOwnerSub, ownerNameRefusal, ownerPartOfHandle, workspaceOwner, workspaceOwnerSub, workspaceSlug } from "../src/ids.ts";
 
 describe("workspace owner", () => {
   test("the slug is the domain's first label, normalized like an owner part", () => {
@@ -9,15 +9,24 @@ describe("workspace owner", () => {
     assert.equal(workspaceSlug("localhost"), "localhost");
   });
 
-  test("an account whose owner part equals the slug is reserved", () => {
-    assert.equal(isReservedOwner("posthog@posthog.com", "posthog.com"), true);
-    assert.equal(isReservedOwner("PostHog@posthog.com", "posthog.com"), true);
-    assert.equal(isReservedOwner("-posthog-@posthog.com", "posthog.com"), true);
+  test("the workspace owner holds the bare slug", () => {
+    const owner = workspaceOwner("ws_abc12345", "posthog.com");
+    assert.equal(handleOwner(owner.sub, owner.email, "posthog.com"), "posthog");
   });
 
-  test("ordinary accounts are not reserved", () => {
-    assert.equal(isReservedOwner("john.w@posthog.com", "posthog.com"), false);
-    assert.equal(isReservedOwner("posthog.bot@posthog.com", "posthog.com"), false);
+  test("the workspace owner's email is never a real mailbox in the workspace domain", () => {
+    assert.equal(workspaceOwner("ws_abc12345", "posthog.com").email, "posthog@headless.posthog.com");
+  });
+
+  test("a carbon unit whose owner part equals the slug gets a trailing underscore", () => {
+    assert.equal(handleOwner("1234", "posthog@posthog.com", "posthog.com"), "posthog_");
+    assert.equal(handleOwner("1234", "PostHog@posthog.com", "PostHog.com"), "posthog_");
+    assert.equal(handleOwner("1234", "-posthog-@posthog.com", "posthog.com"), "posthog_");
+  });
+
+  test("ordinary carbon units keep their owner part", () => {
+    assert.equal(handleOwner("1234", "john.w@posthog.com", "posthog.com"), "john.w");
+    assert.equal(handleOwner("1234", "posthog.bot@posthog.com", "posthog.com"), "posthog.bot");
   });
 
   test("the owner sub cannot collide with a Google sub", () => {
@@ -62,5 +71,19 @@ describe("agent names never use the carbon unit's name", () => {
     assert.match(ownerNameRefusal("john", member), /'john' is part of your carbon unit's name/);
     assert.equal(ownerNameRefusal("deploy-agent", member), undefined);
     assert.equal(ownerNameRefusal("john", { ...member, sub: workspaceOwnerSub("ws_abc") }), undefined);
+  });
+});
+
+describe("handle owner part", () => {
+  test("the owner part is everything before the first slash", () => {
+    assert.equal(ownerPartOfHandle("john.w/deploy-agent"), "john.w");
+    assert.equal(ownerPartOfHandle("posthog_/reviewer"), "posthog_");
+  });
+});
+
+describe("workspace owner sub", () => {
+  test("recognizes subs built by workspaceOwnerSub and rejects Google subs", () => {
+    assert.equal(isWorkspaceOwnerSub(workspaceOwnerSub("ws_abc12345")), true);
+    assert.equal(isWorkspaceOwnerSub("1234"), false);
   });
 });

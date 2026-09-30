@@ -47,7 +47,7 @@ export function fail(message: string): ToolResult {
 }
 
 export function workspaceIdentity(auth: AuthProps): WorkspaceIdentity {
-  return { workspaceId: auth.workspace_id, domain: auth.email.slice(auth.email.indexOf("@") + 1) };
+  return { workspaceId: auth.workspace_id };
 }
 
 export function workspace(env: Env, auth: AuthProps) {

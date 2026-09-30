@@ -60,7 +60,7 @@ export function findOwnerNameWord(agentName: string, ownerEmail: string, ownerDi
 }
 
 export function ownerNameRefusal(agentName: string, owner: { sub: string; email: string; name: string }): string | undefined {
-  if (owner.sub.startsWith("workspace:")) return undefined;
+  if (isWorkspaceOwnerSub(owner.sub)) return undefined;
   const ownerNameWord = findOwnerNameWord(agentName, owner.email, owner.name);
   if (!ownerNameWord) return undefined;
   return `an agent name describes the agent or its work, never its carbon unit; '${ownerNameWord}' is part of your carbon unit's name, so choose a name without it`;
@@ -75,16 +75,27 @@ export function fullHandle(owner: string, agentName: string): string {
   return `${owner}/${agentName}`;
 }
 
+export function ownerPartOfHandle(handle: string): string {
+  return handle.slice(0, handle.indexOf("/"));
+}
+
 export function workspaceSlug(domain: string): string {
   return ownerPart(`${domain.split(".")[0]}@${domain}`);
 }
 
-export const workspaceOwnerSub = (workspaceId: string) => `workspace:${workspaceId}`;
+const WORKSPACE_OWNER_SUB_PREFIX = "workspace:";
+
+export const workspaceOwnerSub = (workspaceId: string) => `${WORKSPACE_OWNER_SUB_PREFIX}${workspaceId}`;
+
+export const isWorkspaceOwnerSub = (sub: string) => sub.startsWith(WORKSPACE_OWNER_SUB_PREFIX);
 
 export function workspaceOwner(workspaceId: string, domain: string): { sub: string; email: string } {
-  return { sub: workspaceOwnerSub(workspaceId), email: `${workspaceSlug(domain)}@${domain}` };
+  return { sub: workspaceOwnerSub(workspaceId), email: `${workspaceSlug(domain)}@headless.${domain}` };
 }
 
-export function isReservedOwner(email: string, domain: string): boolean {
-  return ownerPart(email) === workspaceSlug(domain);
+// A real address can never yield a trailing '_' (ownerPart trims it), so the suffix cannot collide.
+export function handleOwner(ownerSub: string, ownerEmail: string, domain: string): string {
+  const owner = ownerPart(ownerEmail);
+  if (isWorkspaceOwnerSub(ownerSub)) return owner;
+  return owner === workspaceSlug(domain) ? `${owner}_` : owner;
 }

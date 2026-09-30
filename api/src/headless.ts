@@ -1,7 +1,7 @@
 import type { AuthProps } from "./auth";
 import { findHeadlessKey, recordHeadlessKeyUsed } from "./directory";
 import { allowedDomains } from "./google";
-import { base32 } from "./ids";
+import { base32, workspaceOwner } from "./ids";
 import { isSponsorLive, type SponsorState } from "./keyRotation";
 import { LIMITS } from "./limits";
 import { headlessInstructions, serveMcp } from "./mcp";
@@ -39,7 +39,7 @@ export async function resolveHeadlessKey(env: Env, rawKey: string): Promise<Head
   return {
     auth: {
       sub: row.owner_sub,
-      email: row.owner_email,
+      email: workspaceOwner(row.workspace_id, row.domain).email,
       workspace_id: row.workspace_id,
       grant_id: row.id,
     },

@@ -4,18 +4,16 @@ import {
   ensureWorkspaceOwner,
   findLiveHeadlessKey,
   findSponsorState,
-  findWorkspaceDomain,
   insertHeadlessKey,
   isWorkspaceAdmin,
   listHeadlessKeys,
-  listWorkspaceEmails,
   revokeAgentRecord,
   revokeHeadlessKeyRow,
   rotateHeadlessKeyRows,
   type NewHeadlessKeyRow,
 } from "./directory";
 import { hashHeadlessKey, newHeadlessKey } from "./headless";
-import { base32, checkAgentName, isReservedOwner, workspaceOwnerSub } from "./ids";
+import { base32, checkAgentName, workspaceOwnerSub } from "./ids";
 import { expiresAtFor, expiryDaysFrom, isSponsorLive, overlapExpiry, successorExpiry } from "./keyRotation";
 import { LIMITS } from "./limits";
 
@@ -102,11 +100,6 @@ export async function createHeadlessKeyFor(
   if (!checkedName.ok) return invalid;
   const days = expiryDaysFrom(input.expiresInDays, LIMITS.headlessKeyMaxDays);
   if (days === null) return invalid;
-  const domain = await findWorkspaceDomain(env.DB, identity.workspaceId);
-  if (!domain) return notFound;
-  const owner = workspaceOwnerSub(identity.workspaceId);
-  const emails = await listWorkspaceEmails(env.DB, identity.workspaceId, owner);
-  if (emails.some((email) => isReservedOwner(email, domain))) return { ok: false, error: "reserved_owner_taken" };
   const now = Date.now();
   if (!(await canSponsorKeys(env, identity, now))) return sponsorNotVerified;
   await ensureWorkspaceOwner(env.DB, identity.workspaceId);

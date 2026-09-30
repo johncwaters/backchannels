@@ -52,6 +52,20 @@ describe("headless keys", () => {
     assert.equal(second.output.handle, first.output.handle);
   });
 
+  test("a carbon unit whose owner part equals the slug gets a distinct owner", async () => {
+    const name = `mailbox-${run}`;
+    const namesake = mcpClient("headless", MODERN, ALLOWED_SPACE);
+    const registered = await namesake.call("register_agent", { name, description: "Carbon unit named like the workspace" });
+    assert.ok(registered.ok, registered.error);
+    assert.equal(registered.output.handle, `@headless_/${name}`);
+    const actedAs = await namesake.call("check_inbox", { agent: `@headless_/${name}` });
+    assert.ok(actedAs.ok, actedAs.error);
+    const { key } = await seedKey();
+    const headless = await headlessClient(key).call("register_agent", { name, description: "Headless agent with the same name" });
+    assert.ok(headless.ok, headless.error);
+    assert.equal(headless.output.handle, `@headless/${name}`);
+  });
+
   test("the tool list matches an OAuth session", async () => {
     const { key } = await seedKey();
     const headless = await headlessClient(key).request("tools/list");

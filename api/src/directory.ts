@@ -114,7 +114,6 @@ export interface HeadlessKeyRow {
   suggested_name: string;
   domain: string;
   owner_sub: string;
-  owner_email: string;
   sponsor_workspace_id: string;
   sponsor_verified_at: number | null;
   sponsor_suspended_at: number | null;
@@ -123,7 +122,7 @@ export interface HeadlessKeyRow {
 export async function findHeadlessKey(db: D1Database, keyHash: string, now: number): Promise<HeadlessKeyRow | null> {
   return db
     .prepare(
-      `SELECT k.id, k.workspace_id, k.suggested_name, w.domain, o.sub AS owner_sub, o.email AS owner_email,
+      `SELECT k.id, k.workspace_id, k.suggested_name, w.domain, o.sub AS owner_sub,
          s.workspace_id AS sponsor_workspace_id, s.last_verified_at AS sponsor_verified_at, s.headless_suspended_at AS sponsor_suspended_at
        FROM headless_keys k
        JOIN workspaces w ON w.id = k.workspace_id
@@ -135,6 +134,12 @@ export async function findHeadlessKey(db: D1Database, keyHash: string, now: numb
     .first<HeadlessKeyRow>();
 }
 
+export async function findWorkspaceDomain(db: D1Database, workspaceId: string): Promise<string> {
+  const domain = await db.prepare("SELECT domain FROM workspaces WHERE id = ?").bind(workspaceId).first<string>("domain");
+  if (!domain) throw new Error(`workspace ${workspaceId} is missing`);
+  return domain;
+}
+
 export async function ensureWorkspaceOwner(db: D1Database, workspaceId: string): Promise<{ sub: string; email: string }> {
   const workspace = await db.prepare("SELECT domain, name FROM workspaces WHERE id = ?").bind(workspaceId).first<{ domain: string; name: string }>();
   if (!workspace) throw new Error(`workspace ${workspaceId} is missing`);
@@ -143,7 +148,7 @@ export async function ensureWorkspaceOwner(db: D1Database, workspaceId: string):
   await db
     .prepare(
       `INSERT INTO carbon_units (sub, workspace_id, email, name, created_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT (sub) DO NOTHING`,
+       ON CONFLICT (sub) DO UPDATE SET email = excluded.email`,
     )
     .bind(owner.sub, workspaceId, owner.email, workspace.name, now, now)
     .run();
@@ -218,18 +223,6 @@ export async function isWorkspaceAdmin(db: D1Database, sub: string, workspaceId:
     .bind(sub, workspaceId)
     .first<number>("is_admin");
   return found === 1;
-}
-
-export async function findWorkspaceDomain(db: D1Database, workspaceId: string): Promise<string | null> {
-  return db.prepare("SELECT domain FROM workspaces WHERE id = ?").bind(workspaceId).first<string>("domain");
-}
-
-export async function listWorkspaceEmails(db: D1Database, workspaceId: string, exceptSub: string): Promise<string[]> {
-  const found = await db
-    .prepare("SELECT email FROM carbon_units WHERE workspace_id = ? AND sub != ?")
-    .bind(workspaceId, exceptSub)
-    .all<{ email: string }>();
-  return found.results.map((row) => row.email);
 }
 
 export interface HeadlessKeyListing {

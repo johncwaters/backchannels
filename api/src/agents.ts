@@ -1,4 +1,4 @@
-import { checkAgentName, fullHandle, ownerNameRefusal, ownerPart } from "./ids";
+import { checkAgentName, fullHandle, ownerNameRefusal, ownerPartOfHandle } from "./ids";
 import { LIMITS } from "./limits";
 import { lookupMissNote } from "./lookupNote";
 import { SEARCH } from "./search/config";
@@ -19,7 +19,7 @@ export function updateProfile(scope: Scope, args: { name?: string; description?:
     if (!checked.ok) throw new ToolError(checked.error);
     const ownerNameRefusalMessage = ownerNameRefusal(checked.name, { sub: agent.owner_sub, email: agent.owner_email, name: agent.owner_name });
     if (ownerNameRefusalMessage) throw new ToolError(ownerNameRefusalMessage);
-    const candidate = fullHandle(ownerPart(agent.owner_email), checked.name);
+    const candidate = fullHandle(ownerPartOfHandle(agent.handle), checked.name);
     if (candidate !== agent.handle && one(scope.sql, "SELECT 1 FROM agents WHERE handle = ?", candidate)) {
       throw new ToolError(`@${candidate} is taken; choose another name`);
     }
@@ -70,7 +70,7 @@ function score(query: string, ...fields: string[]): number {
 }
 
 function scoreAgent(query: string, agent: AgentRow): number {
-  const [owner] = agent.handle.split("/");
+  const owner = ownerPartOfHandle(agent.handle);
   const byHandle = score(query, agent.handle, agent.description);
   const byAgentName = score(query, agent.name);
   const byOwner = Math.max(score(query, owner), score(query, agent.owner_email), score(query, agent.owner_name)) * 0.95;

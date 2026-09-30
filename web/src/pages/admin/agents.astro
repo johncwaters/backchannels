@@ -32,7 +32,6 @@ const defaultCreateValues: CreateValues = { label: '', suggestedName: '', expire
 
 const errorMessages: Partial<Record<AdminFailure, string>> = {
 	invalid: 'backchannels did not accept that request. Reload the page and try again.',
-	reserved_owner_taken: 'A Google account in this workspace already uses the owner name reserved for headless agents. Remove that account first.',
 	already_rotated: 'That key was already rotated. Rotate its replacement instead.',
 	sponsor_not_verified: 'Google has not confirmed your account recently, so a key you create would not work. Sign out and sign in again, then retry.',
 	not_found: 'That key or agent no longer exists.',

@@ -460,7 +460,6 @@ export class AdminApi extends WorkerEntrypoint implements AdminApiRpc {
 	async createHeadlessKey(token: string, options: { label: string; suggestedName: string; expiresInDays: number }): Promise<AdminResult<NewHeadlessKey>> {
 		if (!isPreviewToken(token)) return unauthorized;
 		if (!options?.label?.trim() || !options.suggestedName?.trim() || !isPositiveInteger(options.expiresInDays)) return invalid;
-		if (previewWorld().headlessAgents.some((agent) => agentName(agent.handle) === options.suggestedName)) return { ok: false, error: 'reserved_owner_taken' };
 		return ok(newKey(options.label.trim(), options.suggestedName.trim(), options.expiresInDays, null));
 	}
 
