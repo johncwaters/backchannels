@@ -18,6 +18,7 @@ import {
   findAgent,
   findConversation,
   findMessage,
+  findReadableMessage,
   isChannel,
   isMember,
   label,
@@ -542,24 +543,46 @@ export function seqOf(ref: string | undefined): number | undefined {
   return parseMessageRef(ref).seq;
 }
 
-export function readMessages(
-  scope: Scope,
-  args: { conversation: string; before?: string; after?: string; limit?: number; detail?: "concise" | "full" },
-) {
+type ReadMessagesArgs = { conversation: string; before?: string; after?: string; limit?: number; detail?: "concise" | "full" };
+
+function isSingleMessageRef(ref: string): boolean {
+  return ref.includes("/") && !parseMessageRef(ref).thread;
+}
+
+function listingFilter(conversation: ConversationRow, root: MessageRow | null): { scopeSql: string; scopeArgs: number[] } {
+  if (root) return { scopeSql: "(id = ? OR thread_root_id = ?)", scopeArgs: [root.id, root.id] };
+  // Deleted messages without replies disappear, as they do for carbon units.
+  return {
+    scopeSql: "conversation_id = ? AND (thread_root_id IS NULL OR also_in_channel = 1) AND (deleted_at IS NULL OR reply_count > 0)",
+    scopeArgs: [conversation.id],
+  };
+}
+
+function readSingleMessage(scope: Scope, args: ReadMessagesArgs) {
+  if (args.before !== undefined || args.after !== undefined) {
+    throw new ToolError(`before and after page a conversation or thread, not the message ${args.conversation}; pass its conversation instead`);
+  }
+  const { conversation, message } = findReadableMessage(scope, args.conversation);
+  const root = message.thread_root_id ? one<MessageRow>(scope.sql, "SELECT * FROM messages WHERE id = ?", message.thread_root_id)! : null;
+  const { scopeSql, scopeArgs } = listingFilter(conversation, root);
+  const exists = (direction: "<" | ">") =>
+    !!one(scope.sql, `SELECT 1 FROM messages WHERE ${scopeSql} AND seq ${direction} ? LIMIT 1`, ...scopeArgs, message.seq);
+  recordSearchActions(scope, "open", (result) => result.id === message.id);
+  return {
+    conversation: root ? `${messageRef(conversation, root.seq)}/t` : label(conversation),
+    messages: [viewMessage(scope, conversation, message, args.detail === "full")],
+    has_more_before: exists("<"),
+    has_more_after: exists(">"),
+  };
+}
+
+export function readMessages(scope: Scope, args: ReadMessagesArgs) {
+  if (isSingleMessageRef(args.conversation)) return readSingleMessage(scope, args);
   const limit = Math.min(Math.max(args.limit ?? 20, 1), 100);
   const before = seqOf(args.before) ?? Number.MAX_SAFE_INTEGER;
   const after = seqOf(args.after) ?? 0;
   const { conversation, root } = conversationOrThread(scope, args.conversation);
-  let scopeSql: string;
-  let scopeArgs: number[];
-  if (root) {
-    scopeSql = "(id = ? OR thread_root_id = ?)";
-    scopeArgs = [root.id, root.id];
-  } else {
-    // Deleted messages without replies disappear, as they do for carbon units.
-    scopeSql = "conversation_id = ? AND (thread_root_id IS NULL OR also_in_channel = 1) AND (deleted_at IS NULL OR reply_count > 0)";
-    scopeArgs = [conversation.id];
-  }
+  const { scopeSql, scopeArgs } = listingFilter(conversation, root);
   if (!canSee(scope, conversation)) throw new ToolError(`${args.conversation} not found`);
 
   // Newest first unless the caller pages forward with `after`.

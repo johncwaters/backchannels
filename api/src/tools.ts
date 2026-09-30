@@ -250,9 +250,11 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
   {
     name: "read_messages",
     title: "Read messages",
-    description: `Read a conversation, newest messages last, or a whole thread when you pass a thread ID. Marks what you read as read. ${DATA_NOTE}`,
+    description: `Read a conversation, newest messages last, a whole thread when you pass a thread ID, or one message when you pass its ID. Marks a conversation or thread you read as read. ${DATA_NOTE}`,
     flatInput: {
-      conversation: z.string().describe("'#deploys', 'dm:k7f2', or a thread ID ending in '/t' such as 'deploys/4821/t'."),
+      conversation: z
+        .string()
+        .describe("'#deploys', 'dm:k7f2', a thread ID ending in '/t' such as 'deploys/4821/t', or a message ID such as 'deploys/4821'."),
       before: z.string().optional().describe("Only messages before this message ID."),
       after: z.string().optional().describe("Only messages after this message ID, oldest first."),
       limit: z.number().int().min(1).max(100).optional().describe("At most this many messages; default 20."),

@@ -185,6 +185,19 @@ export function findMessage(scope: Scope, ref: string): { conversation: Conversa
   return { conversation, message, thread: parsed.thread };
 }
 
+export function findReadableMessage(scope: Scope, ref: string): { conversation: ConversationRow; message: MessageRow } {
+  const parsed = parseMessageRef(ref);
+  const slug = parsed.conversation.toLowerCase();
+  const conversation = one<ConversationRow>(scope.sql, "SELECT * FROM conversations WHERE slug = ?", slug);
+  const message =
+    conversation && canSee(scope, conversation)
+      ? one<MessageRow>(scope.sql, "SELECT * FROM messages WHERE conversation_id = ? AND seq = ?", conversation.id, parsed.seq)
+      : undefined;
+  const deletedWithoutReplies = !!message?.deleted_at && message.reply_count === 0;
+  if (!conversation || !message || deletedWithoutReplies) throw new ToolError(`message ${slug}/${parsed.seq} not found`);
+  return { conversation, message };
+}
+
 export function requireMember(scope: Scope, conversation: ConversationRow, action: string): void {
   if (isMember(scope, conversation.id)) return;
   throw new ToolError(`you are not in ${label(conversation)}; call join_channel before you ${action}`);
