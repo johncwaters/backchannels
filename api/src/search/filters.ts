@@ -1,10 +1,12 @@
 import { ToolError, all, closest, findAgent, findConversation, one, type Scope } from "../store";
 import type { Modifier, ModifierKey } from "./query";
+import type { VectorFilter } from "./semantic";
 
 export interface Filters {
   clauses: string[];
   params: (string | number)[];
   matchesNothing: boolean;
+  vector: VectorFilter;
 }
 
 const DAY_MS = 24 * 60 * 60_000;
@@ -85,7 +87,13 @@ const HAS_CLAUSES: Record<string, string> = {
 };
 
 export function buildFilters(scope: Scope, modifiers: Modifier[]): Filters {
-  const filters: Filters = { clauses: [], params: [], matchesNothing: false };
+  const filters: Filters = { clauses: [], params: [], matchesNothing: false, vector: {} };
+  const narrowDays = (from: number, before: number) => {
+    const fromDay = Math.floor(from / DAY_MS);
+    const beforeDay = Math.ceil(before / DAY_MS);
+    filters.vector.dayFrom = Math.max(filters.vector.dayFrom ?? fromDay, fromDay);
+    filters.vector.dayBefore = Math.min(filters.vector.dayBefore ?? beforeDay, beforeDay);
+  };
   const byKey = new Map<ModifierKey, string[]>();
   for (const modifier of modifiers) byKey.set(modifier.key, [...(byKey.get(modifier.key) ?? []), modifier.value]);
   const add = (clause: string, ...params: (string | number)[]) => {
@@ -98,12 +106,14 @@ export function buildFilters(scope: Scope, modifiers: Modifier[]): Filters {
     const ids = inValues.map((value) => conversationIdFor(scope, value)).filter((id): id is number => id !== null);
     if (!ids.length) filters.matchesNothing = true;
     else add(`m.conversation_id IN (${placeholders(ids.length)})`, ...ids);
+    filters.vector.conversationIds = ids;
   }
 
   const fromValues = byKey.get("from");
   if (fromValues) {
     const ids = [...new Set(fromValues.flatMap((value) => authorIds(scope, value)))];
     add(`m.author_id IN (${placeholders(ids.length)})`, ...ids);
+    filters.vector.authorIds = ids;
   }
 
   for (const value of byKey.get("with") ?? []) {
@@ -127,16 +137,17 @@ export function buildFilters(scope: Scope, modifiers: Modifier[]): Filters {
     );
   }
 
-  for (const value of byKey.get("before") ?? []) add("m.created_at < ?", startOfDay(value, "before"));
-  for (const value of byKey.get("after") ?? []) add("m.created_at >= ?", startOfDay(value, "after") + DAY_MS);
+  const addDateRange = (from: number, before: number) => {
+    add("m.created_at >= ? AND m.created_at < ?", from, before);
+    narrowDays(from, before);
+  };
+  for (const value of byKey.get("before") ?? []) addDateRange(0, startOfDay(value, "before"));
+  for (const value of byKey.get("after") ?? []) addDateRange(startOfDay(value, "after") + DAY_MS, Number.MAX_SAFE_INTEGER);
   for (const value of byKey.get("on") ?? []) {
     const start = startOfDay(value, "on");
-    add("m.created_at >= ? AND m.created_at < ?", start, start + DAY_MS);
+    addDateRange(start, start + DAY_MS);
   }
-  for (const value of byKey.get("during") ?? []) {
-    const [start, end] = period(value, scope.now);
-    add("m.created_at >= ? AND m.created_at < ?", start, end);
-  }
+  for (const value of byKey.get("during") ?? []) addDateRange(...period(value, scope.now));
 
   for (const value of byKey.get("has") ?? []) {
     const flag = value.toLowerCase();

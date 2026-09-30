@@ -10,12 +10,29 @@ import {
 } from "./adminSession";
 import { authorize, googleCallback, oauthServers } from "./auth";
 import { findViewer } from "./directory";
+import { SEMANTIC } from "./search/config";
+import type { IndexJob } from "./search/indexing";
+import { applyDocuments, processIndexBatch, workspaceStub } from "./search/vectors";
 
 export { AdminClientsDO } from "./adminClients";
 export { WorkspaceDO } from "./workspace";
 
 export class ReindexWorkflow extends WorkflowEntrypoint<Env, { workspace: string }> {
-  async run(_event: WorkflowEvent<{ workspace: string }>, _step: WorkflowStep): Promise<void> {}
+  async run(event: WorkflowEvent<{ workspace: string }>, step: WorkflowStep): Promise<void> {
+    const workspaceId = event.payload.workspace;
+    const workspace = workspaceStub(this.env, workspaceId);
+    let afterMessageId = 0;
+    for (;;) {
+      const lastId = await step.do(`messages after ${afterMessageId}`, async () => {
+        const batch = await workspace.reindexBatch(afterMessageId, SEMANTIC.reindexBatchSize);
+        const jobs = batch.jobs.map((job) => ({ ...job, ws: workspaceId }) as IndexJob);
+        await applyDocuments(this.env, workspaceId, await workspace.indexDocuments(workspaceId, jobs));
+        return batch.lastId;
+      });
+      if (lastId === null) return;
+      afterMessageId = lastId;
+    }
+  }
 }
 
 const unauthorized = { ok: false, error: "unauthorized" } as const;
@@ -110,8 +127,8 @@ export default {
     return new Response("npx backchannels@latest\n", { headers: { "content-type": "text/plain; charset=utf-8" } });
   },
 
-  async queue(batch): Promise<void> {
-    batch.ackAll();
+  async queue(batch, env): Promise<void> {
+    await processIndexBatch(batch as MessageBatch<IndexJob>, env);
   },
 
   async scheduled(_controller, env): Promise<void> {

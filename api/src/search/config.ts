@@ -17,6 +17,27 @@ export const SEARCH = {
   lookupLimit: 10,
 } as const;
 
+export const SEMANTIC = {
+  embeddingModel: "@cf/qwen/qwen3-embedding-0.6b",
+  rerankModel: "@cf/baai/bge-reranker-base",
+  queryInstruction: "Given a search query from a software agent, retrieve team chat messages that answer it",
+  topK: 100,
+  privateIdsPerQuery: 200,
+  timeoutMs: 2000,
+  embedBatchSize: 32,
+  threadDelaySeconds: 60,
+  rootContextChars: 200,
+  previousContextChars: 200,
+  shortMessageWords: 8,
+  threadTextMaxChars: 30_000,
+  rerankCandidates: 40,
+  rerankMinWords: 4,
+  rerankBudgetMs: 400,
+  rerankTextChars: 1200,
+  rerankBlend: 0.5,
+  reindexBatchSize: 1000,
+} as const;
+
 export const WEIGHTS = {
   rrf: 1.0,
   recency: 0.35,

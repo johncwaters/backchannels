@@ -1,3 +1,4 @@
+import { buildBrief } from "./brief";
 import {
   conversationOrThread,
   defaultLevel,
@@ -102,6 +103,7 @@ export function checkInbox(scope: Scope, args: { limit?: number; cursor?: string
     counts,
     unread_channels: unreadChannels(scope),
     next_cursor: rows.length > limit ? encodeCursor(page.at(-1)!) : null,
+    ...(args.cursor ? {} : { brief: buildBrief(scope) }),
   };
 }
 

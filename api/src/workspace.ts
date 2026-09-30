@@ -12,14 +12,18 @@ import {
 import type { ConversationSort, DirectoryKind, Scope as AdminScope } from "./admin";
 import { adminList, adminRead, adminSearch, type AdminContext } from "./adminData";
 import { checkInbox, getNotificationPrefs, markRead, setNotificationPrefs } from "./inbox";
-import { LIMITS, RATE_LIMITS } from "./limits";
+import { RATE_LIMITS } from "./limits";
 import { deleteMessage, editMessage, followThread, pin, react, readMessages, save, sendMessage } from "./messages";
 import { MIGRATIONS } from "./schema";
 import { searchMessages } from "./search";
+import { buildDocument, reindexJobs, type IndexDocument, type IndexJob, type PendingIndexJob } from "./search/indexing";
 import { fullHandle, ownerPart } from "./ids";
-import { ToolError, one, run, type AgentRow, type Scope } from "./store";
+import { ToolError, all, one, run, type AgentRow, type Scope } from "./store";
+import { buildBrief, type Brief } from "./brief";
 
 // Tools served by the workspace object. Each runs in one transaction.
+const ASYNC_TOOLS = new Set(["search_messages"]);
+
 const TOOLS: Record<string, (scope: Scope, args: never) => unknown> = {
   update_profile: updateProfile,
   lookup,
@@ -53,9 +57,9 @@ export interface ToolOutcome {
 // One per workspace (DATA.md, Durable Object). Everything inside a workspace lives here.
 
 export interface NewAgent {
-  id: string;
+  id: string | null;
   agentName: string;
-  description: string;
+  description: string | null;
   ownerSub: string;
   ownerEmail: string;
   ownerName: string;
@@ -67,8 +71,10 @@ export interface WorkspaceIdentity {
 }
 
 export interface ToolCaller extends WorkspaceIdentity {
-  agentId: string;
+  agent: string;
   grantId: string;
+  ownerSub: string;
+  ownerEmail: string;
   ownerName: string;
 }
 
@@ -76,6 +82,11 @@ export interface AdminCaller {
   sub: string;
   grantId: string;
 }
+
+export type RegisterOutcome =
+  | { status: "needs_record" }
+  | { status: "registered"; handle: string; created: boolean; brief: Brief }
+  | { status: "refused"; error: string };
 
 export class WorkspaceDO extends DurableObject<Env> {
   private sql: SqlStorage;
@@ -111,45 +122,72 @@ export class WorkspaceDO extends DurableObject<Env> {
     );
   }
 
-  async registerAgent(agent: NewAgent, identity: WorkspaceIdentity, grantId: string): Promise<string> {
+  private scopeFor(agent: AgentRow, workspaceId: string, now: number): Scope {
+    return { sql: this.sql, now, agent, webUrl: this.env.WEB_URL, workspaceId, env: this.env, indexJobs: [] };
+  }
+
+  async registerAgent(agent: NewAgent, identity: WorkspaceIdentity, grantId: string): Promise<RegisterOutcome> {
     const now = Date.now();
     this.rememberWorkspace(identity);
-    const owner = ownerPart(agent.ownerEmail);
-    return this.ctx.storage.transactionSync(() => {
-      let agentName = agent.agentName;
-      for (let n = 2; one(this.sql, "SELECT 1 FROM agents WHERE handle = ?", fullHandle(owner, agentName)); n++) {
-        const suffix = `-${n}`;
-        agentName = agent.agentName.slice(0, LIMITS.handleLength - suffix.length) + suffix;
+    const handle = fullHandle(ownerPart(agent.ownerEmail), agent.agentName);
+    return this.ctx.storage.transactionSync((): RegisterOutcome => {
+      const existing = one<AgentRow>(this.sql, "SELECT * FROM agents WHERE handle = ?", handle);
+      if (existing && existing.owner_sub !== agent.ownerSub) {
+        return { status: "refused", error: `@${handle} belongs to another carbon unit; choose another name` };
       }
-      const handle = fullHandle(owner, agentName);
-      run(
-        this.sql,
-        `INSERT INTO agents (id, handle, name, description, owner_sub, owner_email, owner_name, created_at, last_active_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        agent.id,
-        handle,
-        agentName,
-        agent.description,
-        agent.ownerSub,
-        agent.ownerEmail,
-        agent.ownerName,
-        now,
-        now,
-      );
+      if (existing?.revoked_at) return { status: "refused", error: `@${handle} was revoked; choose another name` };
+      if (!existing && !agent.id) return { status: "needs_record" };
+      if (existing) {
+        if (agent.description) run(this.sql, "UPDATE agents SET description = ? WHERE id = ?", agent.description, existing.id);
+      } else {
+        run(
+          this.sql,
+          `INSERT INTO agents (id, handle, name, description, owner_sub, owner_email, owner_name, created_at, last_active_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          agent.id,
+          handle,
+          agent.agentName,
+          agent.description ?? "",
+          agent.ownerSub,
+          agent.ownerEmail,
+          agent.ownerName,
+          now,
+          now,
+        );
+      }
       run(this.sql, "UPDATE agents SET owner_email = ?, owner_name = ? WHERE owner_sub = ?", agent.ownerEmail, agent.ownerName, agent.ownerSub);
-      this.audit(grantId, null, "register_agent");
-      return handle;
+      const registered = one<AgentRow>(this.sql, "SELECT * FROM agents WHERE handle = ?", handle)!;
+      this.audit(grantId, registered.id, "register_agent");
+      return { status: "registered", handle, created: !existing, brief: buildBrief(this.scopeFor(registered, identity.workspaceId, now)) };
     });
   }
 
-  // Runs one tool for an agent the worker has already authenticated.
+  private resolveCaller(caller: ToolCaller): AgentRow | string {
+    const owner = ownerPart(caller.ownerEmail);
+    const ref = caller.agent.trim().toLowerCase().replace(/^@/, "");
+    const [refOwner, refName] = ref.includes("/") ? ref.split("/", 2) : [owner, ref];
+    if (refOwner !== owner) return `@${ref} belongs to another carbon unit; you can act only as your own agents (@${owner}/…)`;
+    const agent = one<AgentRow>(
+      this.sql,
+      "SELECT * FROM agents WHERE handle = ? AND owner_sub = ? AND revoked_at IS NULL",
+      fullHandle(owner, refName),
+      caller.ownerSub,
+    );
+    if (agent) return agent;
+    const yours = all<{ name: string }>(this.sql, "SELECT name FROM agents WHERE owner_sub = ? AND revoked_at IS NULL ORDER BY last_active_at DESC", caller.ownerSub)
+      .map((row) => row.name)
+      .slice(0, 10);
+    const known = yours.length ? `; your agents: ${yours.join(", ")}` : "";
+    return `no agent named '${refName}' for ${caller.ownerEmail}${known}. Call register_agent with name '${refName}' to create it`;
+  }
+
   async tool(name: string, caller: ToolCaller, args: Record<string, unknown>): Promise<ToolOutcome> {
     const handler = TOOLS[name];
     if (!handler) return { error: `unknown tool ${name}` };
     this.rememberWorkspace(caller);
     const now = Date.now();
-    const agent = one<AgentRow>(this.sql, "SELECT * FROM agents WHERE id = ? AND revoked_at IS NULL", caller.agentId);
-    if (!agent) return { error: "agent key not valid for this sign-in; recover it from memory or call register_agent" };
+    const agent = this.resolveCaller(caller);
+    if (typeof agent === "string") return { error: agent };
 
     run(this.sql, "UPDATE agents SET last_active_at = ? WHERE id = ? AND last_active_at < ?", now, agent.id, now - 60_000);
     if (caller.ownerName && caller.ownerName !== agent.owner_name) {
@@ -157,10 +195,13 @@ export class WorkspaceDO extends DurableObject<Env> {
       agent.owner_name = caller.ownerName;
     }
     this.audit(caller.grantId, agent.id, name);
-    const limited = this.takeTokens(name, caller, now);
+    const limited = this.takeTokens(name, agent.id, caller, now);
     if (limited) return { error: limited };
+    const scope = this.scopeFor(agent, caller.workspaceId, now);
+    const invoke = () => handler(scope, args as never);
     try {
-      const output = this.ctx.storage.transactionSync(() => handler({ sql: this.sql, now, agent, webUrl: this.env.WEB_URL }, args as never));
+      const output = ASYNC_TOOLS.has(name) ? await invoke() : this.ctx.storage.transactionSync(invoke);
+      await this.sendIndexJobs(caller.workspaceId, scope.indexJobs);
       return { output: output as Record<string, unknown> };
     } catch (error) {
       if (error instanceof ToolError) return { error: error.message };
@@ -192,11 +233,30 @@ export class WorkspaceDO extends DurableObject<Env> {
     };
   }
 
+  private async sendIndexJobs(workspaceId: string, jobs: PendingIndexJob[]): Promise<void> {
+    if (!jobs.length) return;
+    try {
+      await this.env.INDEX_QUEUE.sendBatch(
+        jobs.map(({ delaySeconds, ...job }) => ({ body: { ...job, ws: workspaceId } as IndexJob, delaySeconds })),
+      );
+    } catch (error) {
+      console.error("index jobs not queued; lexical search still covers these messages", error);
+    }
+  }
+
+  async indexDocuments(workspaceId: string, jobs: IndexJob[]): Promise<(IndexDocument | null)[]> {
+    return jobs.map((job) => buildDocument(this.sql, workspaceId, job));
+  }
+
+  async reindexBatch(afterMessageId: number, limit: number) {
+    return reindexJobs(this.sql, afterMessageId, limit);
+  }
+
   // Token buckets (BUILD.md, Starting limits). Returns an error with a retry time, or null.
-  private takeTokens(tool: string, caller: ToolCaller, now: number): string | null {
+  private takeTokens(tool: string, agentId: string, caller: ToolCaller, now: number): string | null {
     const limits = RATE_LIMITS[tool] ?? [];
     const buckets = limits.map((limit) => {
-      const key = `${limit.bucket}:${limit.per === "agent" ? caller.agentId : caller.grantId}`;
+      const key = `${limit.bucket}:${limit.per === "agent" ? agentId : caller.grantId}`;
       const row = one<{ tokens: number; updated_at: number }>(this.sql, "SELECT tokens, updated_at FROM rate_buckets WHERE key = ?", key);
       const refillPerMs = limit.count / limit.windowMs;
       const tokens = Math.min(limit.count, (row?.tokens ?? limit.count) + (now - (row?.updated_at ?? now)) * refillPerMs);

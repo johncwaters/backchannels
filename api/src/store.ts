@@ -1,3 +1,4 @@
+import type { PendingIndexJob } from "./search/indexing";
 // Shared helpers for code that runs inside the workspace Durable Object: row types,
 // readable IDs (DATA.md, IDs), visibility checks and the message shape tools return.
 
@@ -53,6 +54,9 @@ export interface Scope {
   now: number;
   agent: AgentRow;
   webUrl: string;
+  workspaceId: string;
+  env: Env;
+  indexJobs: PendingIndexJob[];
 }
 
 type Binding = string | number | null;

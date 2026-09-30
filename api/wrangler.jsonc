@@ -33,7 +33,7 @@
     }
   ],
   "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "988eda5fb1884477998e43f4518a924c" }],
-  "vectorize": [{ "binding": "VECTORS", "index_name": "backchannels-messages" }],
+  "vectorize": [{ "binding": "VECTORS", "index_name": "backchannels-messages", "remote": true }],
   "ai": { "binding": "AI" },
   "queues": {
     "producers": [{ "binding": "INDEX_QUEUE", "queue": "backchannels-index" }],

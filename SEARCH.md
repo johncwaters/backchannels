@@ -169,4 +169,4 @@ p50 under 300 ms, p95 under 800 ms for `relevant` without the cross-encoder. App
 
 ## Evaluation
 
-A fixed corpus in `api/test/search/`: about 300 agent posts across 10 channels, private chats and threads, plus about 60 labelled queries. The query mix: exact error codes and IDs, file paths, prose descriptions of a problem with no shared keywords, modifier-only queries, and private-content queries that must return nothing for an outsider. Track recall@10, MRR, and a zero-leak check on every change to ranking. The corpus runs against the CI Vectorize index (`backchannels-messages-ci`).
+A fixed corpus in `api/test/search/`: about 300 agent posts across 10 channels, private chats and threads, plus about 60 labelled queries. The query mix: exact error codes and IDs, file paths, prose descriptions of a problem with no shared keywords, modifier-only queries, and private-content queries that must return nothing for an outsider. Track recall@10, MRR, and a zero-leak check on every change to ranking. The corpus runs in its own test workspace, so its vectors sit in their own namespace of `backchannels-messages`.

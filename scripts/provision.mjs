@@ -14,6 +14,17 @@ const wranglerBin = join(repoRoot, 'api', 'node_modules', '.bin', 'wrangler');
 // KV titles are not in wrangler.jsonc, so they live here, keyed by binding.
 const kvTitles = { OAUTH_KV: 'backchannels-oauth', SESSION: 'backchannels-sessions' };
 const vectorizeShape = { dimensions: 1024, metric: 'cosine' };
+const vectorizeMetadataIndexes = [
+  { propertyName: 'vis', type: 'string' },
+  { propertyName: 'kind', type: 'string' },
+  { propertyName: 'author', type: 'string' },
+  { propertyName: 'ch', type: 'number' },
+  { propertyName: 'day', type: 'number' },
+];
+const metadataIndexPollMs = 5000;
+const metadataIndexPollAttempts = 60;
+const onlyKinds = process.argv.filter((arg) => arg.startsWith('--only=')).flatMap((arg) => arg.slice('--only='.length).split(','));
+const shouldProvision = (kind) => onlyKinds.length === 0 || onlyKinds.includes(kind);
 
 const workers = [
   { dir: 'api', secrets: ['GOOGLE_CLIENT_SECRET'] },
@@ -120,29 +131,64 @@ function warnOnMissingSecrets(config, secrets) {
   }
 }
 
-const kvNamespaces = jsonFrom(wrangler(['kv', 'namespace', 'list']));
+function metadataIndexNames(indexName) {
+  return jsonFrom(wrangler(['vectorize', 'list-metadata-index', indexName, '--json'], { quiet: true })).map((row) => row.propertyName);
+}
+
+function sleep(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function ensureMetadataIndexes(indexName) {
+  for (const { propertyName, type } of vectorizeMetadataIndexes) {
+    if (metadataIndexNames(indexName).includes(propertyName)) {
+      console.log(`ok      vectorize ${indexName} metadata ${propertyName}`);
+      continue;
+    }
+    console.log(`create  vectorize ${indexName} metadata ${propertyName} (${type})`);
+    wrangler(['vectorize', 'create-metadata-index', indexName, `--propertyName=${propertyName}`, `--type=${type}`]);
+    for (let attempt = 0; !metadataIndexNames(indexName).includes(propertyName); attempt++) {
+      if (attempt >= metadataIndexPollAttempts) throw new Error(`metadata index ${propertyName} on ${indexName} did not appear`);
+      sleep(metadataIndexPollMs);
+    }
+  }
+}
+
+function vectorizeIndexes(config) {
+  const environments = Object.values(config.env ?? {});
+  return [...new Set([config, ...environments].flatMap((section) => section.vectorize ?? []).map((index) => index.index_name))];
+}
+
+const kvNamespaces = shouldProvision('kv') ? jsonFrom(wrangler(['kv', 'namespace', 'list'])) : [];
 
 for (const worker of workers) {
   const { path, config } = readConfig(worker.dir);
   console.log(`\n${config.name}`);
 
-  for (const database of config.d1_databases ?? []) ensureD1(path, database);
-  for (const namespace of config.kv_namespaces ?? []) ensureKv(path, namespace, kvNamespaces);
-  for (const bucket of config.r2_buckets ?? []) {
-    ensureByName('r2', bucket.bucket_name, ['r2', 'bucket', 'info', bucket.bucket_name], ['r2', 'bucket', 'create', bucket.bucket_name]);
+  if (shouldProvision('d1')) for (const database of config.d1_databases ?? []) ensureD1(path, database);
+  if (shouldProvision('kv')) for (const namespace of config.kv_namespaces ?? []) ensureKv(path, namespace, kvNamespaces);
+  if (shouldProvision('r2')) {
+    for (const bucket of config.r2_buckets ?? []) {
+      ensureByName('r2', bucket.bucket_name, ['r2', 'bucket', 'info', bucket.bucket_name], ['r2', 'bucket', 'create', bucket.bucket_name]);
+    }
   }
-  for (const queue of queueNames(config)) {
-    ensureByName('queue', queue, ['queues', 'info', queue], ['queues', 'create', queue]);
+  if (shouldProvision('queues')) {
+    for (const queue of queueNames(config)) {
+      ensureByName('queue', queue, ['queues', 'info', queue], ['queues', 'create', queue]);
+    }
   }
-  for (const index of config.vectorize ?? []) {
-    ensureByName('vectorize', index.index_name, ['vectorize', 'get', index.index_name], [
-      'vectorize',
-      'create',
-      index.index_name,
-      `--dimensions=${vectorizeShape.dimensions}`,
-      `--metric=${vectorizeShape.metric}`,
-    ]);
+  if (shouldProvision('vectorize')) {
+    for (const indexName of vectorizeIndexes(config)) {
+      ensureByName('vectorize', indexName, ['vectorize', 'get', indexName], [
+        'vectorize',
+        'create',
+        indexName,
+        `--dimensions=${vectorizeShape.dimensions}`,
+        `--metric=${vectorizeShape.metric}`,
+      ]);
+      ensureMetadataIndexes(indexName);
+    }
   }
 
-  warnOnMissingSecrets(config, worker.secrets);
+  if (onlyKinds.length === 0) warnOnMissingSecrets(config, worker.secrets);
 }

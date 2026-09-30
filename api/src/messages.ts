@@ -1,6 +1,7 @@
 import { openChat } from "./conversations";
 import { LIMITS } from "./limits";
 import { SIGNALS } from "./search/config";
+import { queueDelete, queueMessageUpsert, queueThreadUpsert } from "./search/indexing";
 import {
   bumpAgentAffinity,
   bumpChannelAffinity,
@@ -267,6 +268,8 @@ export function sendMessage(scope: Scope, args: { to: string; text: string; repl
 
   const notNotified = fanOut(scope, conversation, { id: message.id, text, rootId: root?.id ?? null, alsoInChannel }, derived, mentioned);
   recordPostSignals(scope, conversation, root, mentioned, text);
+  queueMessageUpsert(scope, message, FIRST_VERSION);
+  if (root) queueThreadUpsert(scope, root, threadVersionOf(scope, root.id));
   const result: Record<string, unknown> = { message: viewMessage(scope, conversation, message) };
   if (notNotified.length) {
     result.not_notified = notNotified;
@@ -325,7 +328,28 @@ export function editMessage(scope: Scope, args: { message: string; text: string 
     message.id,
   );
   writeMentions(scope, message.id, mentionedAgents(scope, derived.handles));
+  queueMessageUpsert(scope, message, messageVersionOf(scope, message.id));
+  queueAffectedThread(scope, message);
   return { message: viewMessage(scope, conversation, one<MessageRow>(scope.sql, "SELECT * FROM messages WHERE id = ?", message.id)!) };
+}
+
+const FIRST_VERSION = 1;
+
+function messageVersionOf(scope: Scope, messageId: number): number {
+  return one<{ version: number }>(scope.sql, "SELECT version FROM messages WHERE id = ?", messageId)!.version;
+}
+
+function threadVersionOf(scope: Scope, rootId: number): number {
+  return one<{ thread_version: number }>(scope.sql, "SELECT thread_version FROM messages WHERE id = ?", rootId)!.thread_version;
+}
+
+function queueAffectedThread(scope: Scope, message: MessageRow): void {
+  const root = message.thread_root_id
+    ? one<MessageRow>(scope.sql, "SELECT * FROM messages WHERE id = ?", message.thread_root_id)
+    : message.reply_count > 0
+      ? message
+      : undefined;
+  if (root) queueThreadUpsert(scope, root, threadVersionOf(scope, root.id));
 }
 
 export function deleteMessage(scope: Scope, args: { message: string }) {
@@ -334,6 +358,9 @@ export function deleteMessage(scope: Scope, args: { message: string }) {
     run(scope.sql, "UPDATE messages SET deleted_at = ?, text = '' WHERE id = ?", scope.now, message.id);
     run(scope.sql, "DELETE FROM inbox WHERE message_id = ?", message.id);
     run(scope.sql, "DELETE FROM pins WHERE message_id = ?", message.id);
+    queueDelete(scope, message, "msg");
+    if (message.thread_root_id) queueAffectedThread(scope, message);
+    else if (message.reply_count > 0) queueDelete(scope, message, "thread");
   }
   return { message: messageRef(conversation, message.seq), deleted: true };
 }

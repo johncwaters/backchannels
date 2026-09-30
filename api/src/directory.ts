@@ -1,11 +1,6 @@
 import type { GoogleIdentity } from "./google";
-import { agentId, randomToken, sha256Hex, workspaceId } from "./ids";
+import { agentId, workspaceId } from "./ids";
 import { LIMITS } from "./limits";
-
-// D1 access for the directory (DATA.md, D1): workspaces, carbon units,
-// installations, and agent key hashes. Agent profiles live in the workspace object.
-
-const AGENT_KEY_PREFIX = "bc_agent_";
 
 // The first sign-in from an allowed domain creates its workspace.
 export async function recordSignIn(db: D1Database, identity: GoogleIdentity): Promise<string> {
@@ -73,52 +68,29 @@ export async function recordUsed(db: D1Database, grantId: string): Promise<void>
   await db.prepare("UPDATE installations SET last_used_at = ? WHERE grant_id = ?").bind(now, grantId).run();
 }
 
-export type NewAgentKey = { ok: true; id: string; key: string } | { ok: false; error: string };
+export type NewAgentRecord = { ok: true; id: string } | { ok: false; error: string };
 
-// Creates the agent's auth row and returns its key, shown once; only the hash is kept.
-export async function createAgentKey(db: D1Database, owner: { sub: string; workspaceId: string }): Promise<NewAgentKey> {
+export async function createAgentRecord(db: D1Database, owner: { sub: string; workspaceId: string }): Promise<NewAgentRecord> {
   const counts = await db
-    .prepare(
-      `SELECT SUM(created_at > ?) AS today, SUM(revoked_at IS NULL) AS live FROM agents WHERE owner_sub = ?`,
-    )
+    .prepare("SELECT SUM(created_at > ?) AS today, SUM(revoked_at IS NULL) AS live FROM agents WHERE owner_sub = ?")
     .bind(Date.now() - 24 * 60 * 60 * 1000, owner.sub)
     .first<{ today: number | null; live: number | null }>();
   if ((counts?.today ?? 0) >= LIMITS.registerAgentPerDay) {
-    return { ok: false, error: `Your agents registered ${LIMITS.registerAgentPerDay} times in the last 24 hours. Reuse a saved agent key, or try again tomorrow.` };
+    return { ok: false, error: `Your carbon unit created ${LIMITS.registerAgentPerDay} agents in the last 24 hours. Reuse an existing agent name, or try again tomorrow.` };
   }
   if ((counts?.live ?? 0) >= LIMITS.liveAgentsPerCarbonUnit) {
-    return { ok: false, error: `You have ${LIMITS.liveAgentsPerCarbonUnit} live agents. Reuse a saved agent key, or revoke an agent in the admin UI.` };
+    return { ok: false, error: `Your carbon unit has ${LIMITS.liveAgentsPerCarbonUnit} live agents. Reuse an existing agent name, or revoke one in the admin UI.` };
   }
   const id = agentId();
-  const key = AGENT_KEY_PREFIX + randomToken(32);
   await db
-    .prepare("INSERT INTO agents (id, workspace_id, owner_sub, key_hash, created_at) VALUES (?, ?, ?, ?, ?)")
-    .bind(id, owner.workspaceId, owner.sub, await sha256Hex(key), Date.now())
+    .prepare("INSERT INTO agents (id, workspace_id, owner_sub, created_at) VALUES (?, ?, ?, ?)")
+    .bind(id, owner.workspaceId, owner.sub, Date.now())
     .run();
-  return { ok: true, id, key };
+  return { ok: true, id };
 }
 
-export async function deleteAgentKey(db: D1Database, id: string): Promise<void> {
+export async function deleteAgentRecord(db: D1Database, id: string): Promise<void> {
   await db.prepare("DELETE FROM agents WHERE id = ?").bind(id).run();
-}
-
-const keyCache = new Map<string, { agentId: string; expires: number }>();
-
-// An agent key works only with its owner's OAuth token, in its owner's workspace.
-// Successful lookups are cached for a minute, so a revocation lands within a minute.
-export async function findAgentId(db: D1Database, key: string, owner: { sub: string; workspaceId: string }): Promise<string | null> {
-  if (!key.startsWith(AGENT_KEY_PREFIX)) return null;
-  const hash = await sha256Hex(key);
-  const cacheKey = `${hash}:${owner.sub}`;
-  const cached = keyCache.get(cacheKey);
-  if (cached && cached.expires > Date.now()) return cached.agentId;
-
-  const id = await db
-    .prepare("SELECT id FROM agents WHERE key_hash = ? AND owner_sub = ? AND workspace_id = ? AND revoked_at IS NULL")
-    .bind(hash, owner.sub, owner.workspaceId)
-    .first<string>("id");
-  if (id) keyCache.set(cacheKey, { agentId: id, expires: Date.now() + LIMITS.agentKeyCacheMs });
-  return id;
 }
 
 const OWNER_NAME_CACHE_MS = 10 * 60_000;

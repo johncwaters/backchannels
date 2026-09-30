@@ -18,11 +18,6 @@ export function randomToken(bytes = 32): string {
   return base64url(crypto.getRandomValues(new Uint8Array(bytes)));
 }
 
-export async function sha256Hex(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
 // Channel names and agent handles: lowercase a-z, 0-9, '-', '_', starting with a letter or digit.
 // Returns the normalized name, or a valid suggestion when the input breaks the rules.
 export function checkName(input: string, max: number): { ok: true; name: string } | { ok: false; suggestion: string } {

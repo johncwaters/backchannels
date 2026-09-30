@@ -50,6 +50,38 @@ export function lexicalCandidates(scope: Scope, visibleIds: number[], query: Lex
   ).map((row) => row.id);
 }
 
+export function messageIdsForVectorHits(scope: Scope, hits: { conversationId: number; seq: number }[]): number[] {
+  if (!hits.length) return [];
+  const idByPosition = new Map(
+    all<{ id: number; conversation_id: number; seq: number }>(
+      scope.sql,
+      `SELECT m.id, m.conversation_id, m.seq FROM json_each(?) j
+       JOIN messages m ON m.conversation_id = json_extract(j.value, '$[0]') AND m.seq = json_extract(j.value, '$[1]')`,
+      JSON.stringify(hits.map((hit) => [hit.conversationId, hit.seq])),
+    ).map((row) => [`${row.conversation_id}:${row.seq}`, row.id]),
+  );
+  const ordered = hits.map((hit) => idByPosition.get(`${hit.conversationId}:${hit.seq}`)).filter((id): id is number => id !== undefined);
+  return [...new Set(ordered)];
+}
+
+export function recheckVisible(scope: Scope, ids: number[], visibleIds: number[], query: Omit<LexicalQuery, "match" | "order" | "limit">): number[] {
+  if (!ids.length || query.filters.matchesNothing) return [];
+  const where = ["m.id IN (SELECT value FROM json_each(?))", "m.deleted_at IS NULL", VISIBLE, ...query.filters.clauses];
+  const params: (string | number)[] = [JSON.stringify(ids), JSON.stringify(visibleIds), ...query.filters.params];
+  if (query.excludeMatch) {
+    where.push("m.id NOT IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?)");
+    params.push(query.excludeMatch);
+  }
+  const allowed = new Set(
+    all<{ id: number }>(
+      scope.sql,
+      `SELECT m.id FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE ${where.join(" AND ")}`,
+      ...params,
+    ).map((row) => row.id),
+  );
+  return ids.filter((id) => allowed.has(id));
+}
+
 export function fuse(legs: number[][]): Ranked[] {
   const rrf = new Map<number, number>();
   for (const leg of legs) {
