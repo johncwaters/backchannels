@@ -1,4 +1,4 @@
-import type { AdminResult, Conversation, ConversationSort, DirectoryKind, Message, Scope } from './types';
+import type { AdminResult, Conversation, ConversationSort, DirectoryKind, Message, Scope, SearchSort } from './types';
 
 const millisecondsPerMinute = 60_000;
 const agentColorTokens = ['--agent-claude-code', '--agent-codex', '--agent-cursor'];
@@ -186,29 +186,83 @@ export function loginHref(url: URL): string {
 	return `/login?${new URLSearchParams({ next: `${url.pathname}${url.search}` })}`;
 }
 
-const MAX_SEARCH_QUERY_LENGTH = 200;
-const MAX_SEARCH_QUERY_TERMS = 16;
+export function searchSortFrom(url: URL): SearchSort {
+	return url.searchParams.get('sort') === 'recent' ? 'recent' : 'relevant';
+}
 
-export type InvalidSearchQueryCause = 'too-long' | 'no-words';
+export function conversationQueryPrefix(conversationId: string, isChannel: boolean): string {
+	return `in:${isChannel ? '#' : ''}${conversationId}`;
+}
 
-export function invalidSearchQueryCause(query: string): InvalidSearchQueryCause | null {
-	if (query.length > MAX_SEARCH_QUERY_LENGTH) return 'too-long';
-	const distinctTerms = new Set<string>();
-	for (const word of query.split(/\s+/)) {
-		const term = word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
-		if (term.length > 0) distinctTerms.add(term.toLowerCase());
+export function queryWithin(query: string, conversationPrefix: string | null): string {
+	const trimmed = query.trim();
+	if (!conversationPrefix || trimmed.split(/\s+/).includes(conversationPrefix)) return trimmed;
+	return `${conversationPrefix} ${trimmed}`.trim();
+}
+
+export function messageAnchor(seq: number): string {
+	return `m-${seq}`;
+}
+
+export function messageHref(conversationId: string, scope: Scope, message: Pick<Message, 'seq' | 'threadRootSeq' | 'alsoInChannel'>): string {
+	const threadParameters: Record<string, string> = message.threadRootSeq && !message.alsoInChannel ? { thread: String(message.threadRootSeq) } : {};
+	return `${conversationHref(conversationId, scope, { ...threadParameters, around: String(message.seq) })}#${messageAnchor(message.seq)}`;
+}
+
+export function fileHref(conversationId: string, fileId: string): string {
+	return `/admin/c/${encodeURIComponent(conversationId)}/files/${encodeURIComponent(fileId)}`;
+}
+
+const fileSizeUnits = ['KB', 'MB', 'GB'];
+
+export function formatFileSize(bytes: number): string {
+	if (bytes < 1024) return `${bytes} B`;
+	let size = bytes / 1024;
+	let unitIndex = 0;
+	while (size >= 1024 && unitIndex < fileSizeUnits.length - 1) {
+		size /= 1024;
+		unitIndex += 1;
 	}
-	if (distinctTerms.size === 0) return 'no-words';
-	return distinctTerms.size > MAX_SEARCH_QUERY_TERMS ? 'too-long' : null;
+	return `${size < 10 ? size.toFixed(1) : Math.round(size)} ${fileSizeUnits[unitIndex]}`;
+}
+
+const inlineImageTypes = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
+
+export function isInlineImage(mime: string): boolean {
+	return inlineImageTypes.has(mime);
+}
+
+export function snippetAround(text: string, ranges: [number, number][], contextCharacters = 220) {
+	const firstRange = [...ranges].sort((first, second) => first[0] - second[0])[0];
+	if (text.length <= contextCharacters * 2 || !firstRange) {
+		const clipped = text.length > contextCharacters * 2 ? `${text.slice(0, contextCharacters * 2)}…` : text;
+		return { text: clipped, ranges: ranges.filter(([start]) => start < contextCharacters * 2) };
+	}
+	const start = Math.max(0, firstRange[0] - Math.floor(contextCharacters / 2));
+	const end = Math.min(text.length, start + contextCharacters * 2);
+	const prefix = start > 0 ? '…' : '';
+	const suffix = end < text.length ? '…' : '';
+	const shift = prefix.length - start;
+	return {
+		text: `${prefix}${text.slice(start, end)}${suffix}`,
+		ranges: ranges
+			.filter(([rangeStart, rangeEnd]) => rangeEnd > start && rangeStart < end)
+			.map(([rangeStart, rangeEnd]): [number, number] => [Math.max(rangeStart, start) + shift, Math.min(rangeEnd, end) + shift]),
+	};
 }
 
 export function searchSummary(options: { matchCount: number; conversationCount: number; cursor?: string; hasNextCursor: boolean }): string {
 	const { matchCount, conversationCount, cursor, hasNextCursor } = options;
 	if (cursor === undefined && !hasNextCursor) return `${matchCount} messages in ${conversationCount} conversations.`;
-	const isNumericCursor = cursor === undefined || /^\d+$/.test(cursor);
-	if (!isNumericCursor || matchCount === 0) return `Showing ${matchCount} matches.`;
-	const firstMatchNumber = Number(cursor ?? 0) + 1;
+	const offset = cursor === undefined ? 0 : cursorOffset(cursor);
+	if (offset === null || matchCount === 0) return `Showing ${matchCount} matches.`;
+	const firstMatchNumber = offset + 1;
 	return `Showing matches ${firstMatchNumber}–${firstMatchNumber + matchCount - 1}.`;
+}
+
+function cursorOffset(cursor: string): number | null {
+	const offset = /^(?:s\d+\.)?(\d+)$/.exec(cursor)?.[1];
+	return offset === undefined ? null : Number(offset);
 }
 
 export type RevocationOutcome = AdminResult<null> | 'unreachable';

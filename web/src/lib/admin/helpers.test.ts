@@ -9,7 +9,12 @@ import {
 	formatRelative,
 	groupMessagesByDay,
 	highlightSegments,
-	invalidSearchQueryCause,
+	conversationQueryPrefix,
+	formatFileSize,
+	messageHref,
+	queryWithin,
+	searchSortFrom,
+	snippetAround,
 	isServerSessionEnded,
 	loginHref,
 	normalizePathname,
@@ -252,21 +257,44 @@ describe('pkce', () => {
 	});
 });
 
-describe('invalidSearchQueryCause', () => {
-	it('flags a query over 200 characters as too long', () => {
-		expect(invalidSearchQueryCause('a'.repeat(201))).toBe('too-long');
+describe('search helpers', () => {
+	it('reads the sort from the URL and defaults to relevant', () => {
+		expect(searchSortFrom(new URL('https://x.test/admin/search?sort=recent'))).toBe('recent');
+		expect(searchSortFrom(new URL('https://x.test/admin/search?sort=bogus'))).toBe('relevant');
 	});
-
-	it('flags more than 16 distinct words as too long', () => {
-		expect(invalidSearchQueryCause(Array.from({ length: 17 }, (_, index) => `word${index}`).join(' '))).toBe('too-long');
+	it('prefixes a query with its conversation once', () => {
+		const prefix = conversationQueryPrefix('deploys', true);
+		expect(prefix).toBe('in:#deploys');
+		expect(conversationQueryPrefix('dm:k7f2', false)).toBe('in:dm:k7f2');
+		expect(queryWithin(' rollback ', prefix)).toBe('in:#deploys rollback');
+		expect(queryWithin('in:#deploys rollback', prefix)).toBe('in:#deploys rollback');
+		expect(queryWithin('rollback', null)).toBe('rollback');
 	});
-
-	it('does not count repeated words differing only by case', () => {
-		expect(invalidSearchQueryCause('Deploy deploy DEPLOY')).toBeNull();
+	it('links a message into its thread unless it is also in the channel', () => {
+		const channelMessage = { seq: 7, threadRootSeq: null, alsoInChannel: false };
+		expect(messageHref('deploys', 'mine', channelMessage)).toBe('/admin/c/deploys?scope=mine&around=7#m-7');
+		expect(messageHref('deploys', 'mine', { seq: 9, threadRootSeq: 4, alsoInChannel: false })).toBe('/admin/c/deploys?scope=mine&thread=4&around=9#m-9');
+		expect(messageHref('deploys', 'mine', { seq: 9, threadRootSeq: 4, alsoInChannel: true })).toBe('/admin/c/deploys?scope=mine&around=9#m-9');
 	});
+	it('cuts long text around the first match and shifts the ranges', () => {
+		const text = `${'a'.repeat(1000)}needle${'b'.repeat(1000)}`;
+		const snippet = snippetAround(text, [[1000, 1006]], 50);
+		expect(snippet.text.startsWith('…')).toBe(true);
+		expect(snippet.text.endsWith('…')).toBe(true);
+		const [[start, end]] = snippet.ranges;
+		expect(snippet.text.slice(start, end)).toBe('needle');
+	});
+	it('keeps short text whole', () => {
+		expect(snippetAround('short needle', [[6, 12]])).toEqual({ text: 'short needle', ranges: [[6, 12]] });
+	});
+});
 
-	it('flags a query with no letters or digits', () => {
-		expect(invalidSearchQueryCause('??? ---')).toBe('no-words');
+describe('formatFileSize', () => {
+	it('uses bytes, then one decimal under ten, then whole units', () => {
+		expect(formatFileSize(9)).toBe('9 B');
+		expect(formatFileSize(1536)).toBe('1.5 KB');
+		expect(formatFileSize(5 * 1024 * 1024)).toBe('5.0 MB');
+		expect(formatFileSize(40 * 1024)).toBe('40 KB');
 	});
 });
 
@@ -281,6 +309,10 @@ describe('searchSummary', () => {
 
 	it('offsets the range by the numeric cursor', () => {
 		expect(searchSummary({ matchCount: 10, conversationCount: 2, cursor: '25', hasNextCursor: false })).toBe('Showing matches 26–35.');
+	});
+
+	it('offsets the range by a search cursor', () => {
+		expect(searchSummary({ matchCount: 10, conversationCount: 2, cursor: 's41.50', hasNextCursor: false })).toBe('Showing matches 51–60.');
 	});
 
 	it('falls back to a plain count when the cursor is not numeric', () => {
