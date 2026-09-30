@@ -1,6 +1,10 @@
 ---
 import { adminHref, conversationHref, formatRelative, type buildSidebarGroups } from '../lib/admin/helpers';
 import type { DirectoryKind, Scope } from '../lib/admin/types';
+import { buttonVariants } from '../lib/components/ui/button';
+import PrivacyMarker from '../lib/components/admin/directory/PrivacyMarker.svelte';
+import { conversationLabel, messagesTodayLabel, privacyMarkerFor } from '../lib/components/admin/directory/conversation-labels';
+import { cn } from '../lib/utils';
 
 interface Props {
 	groups: ReturnType<typeof buildSidebarGroups>;
@@ -8,33 +12,50 @@ interface Props {
 	scope: Scope;
 	selectedConversation?: string;
 	directoryKind?: DirectoryKind;
+	viewerEmail?: string;
 }
 
-const { groups, nowMs, scope, selectedConversation, directoryKind } = Astro.props;
+const { groups, nowMs, scope, selectedConversation, directoryKind, viewerEmail } = Astro.props;
+const rowClass = 'conversation group flex min-w-0 flex-col px-2.5 py-[5px] text-foreground no-underline shadow-[inset_0_0_0_var(--color-amber)] outline-none hover:bg-secondary focus-visible:bg-secondary focus-visible:shadow-[inset_0_0_0_1px_var(--color-amber)] aria-[current=page]:bg-secondary aria-[current=page]:shadow-[inset_2px_0_0_var(--color-amber)]';
+const browseClass = cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'mx-2.5 mt-1 self-start bg-transparent font-mono text-[13px] font-normal text-foreground dark:bg-transparent aria-[current=page]:border-amber aria-[current=page]:text-amber');
 ---
 
-<nav aria-label="Conversations" data-live="sidebar">
+<nav aria-label="Conversations" data-live="sidebar" class="flex grow flex-col gap-3.5 overflow-auto px-1.5 pt-2.5 pb-3.5 max-[899px]:overflow-visible">
 	{groups.map((group) => (
-		<section>
-			<div class="group-header">
-				<h2>{group.title}</h2>
-				<span>{group.conversations.length} of {group.total}</span>
+		<section class="flex min-w-0 flex-col gap-0.5">
+			<div class="flex items-baseline justify-between gap-2 px-2 pb-1.5 text-xs text-dim">
+				<h2 class="m-0 text-[length:inherit] font-normal tracking-[0.08em]">{group.title}</h2>
+				<span class="whitespace-nowrap tabular-nums">{group.conversations.length} of {group.total}</span>
 			</div>
-			{group.conversations.map((conversation) => (
-				<a
-					class="conversation"
-					href={conversationHref(conversation.id, scope)}
-					aria-current={conversation.id === selectedConversation ? 'page' : undefined}
-				>
-					<span class="conversation-header">
-						<strong>{conversation.name}</strong>
-						<span class="last-active">{formatRelative(conversation.lastActivity, nowMs)}</span>
-					</span>
-					<span class="preview">{conversation.preview}</span>
-				</a>
-			))}
+			{group.conversations.map((conversation) => {
+				const label = conversationLabel(conversation, viewerEmail);
+				return (
+					<a
+						class={rowClass}
+						href={conversationHref(conversation.id, scope)}
+						aria-current={conversation.id === selectedConversation ? 'page' : undefined}
+						title={label.fullName !== label.shownName ? label.fullName : undefined}
+					>
+						<span class="flex min-w-0 items-center gap-1.5">
+							<PrivacyMarker marker={privacyMarkerFor(conversation)} />
+							<strong class="min-w-0 truncate text-[13px] font-semibold group-aria-[current=page]:text-amber">{label.shownName}</strong>
+							{label.hiddenMemberCount > 0 && <span class="shrink-0 text-xs text-dim">+{label.hiddenMemberCount}</span>}
+							<span class="last-active ml-auto shrink-0 text-xs whitespace-nowrap text-dim tabular-nums group-data-[updated]:animate-[sidebar-pulse-accent_1400ms_var(--ease-out-quint)]">{formatRelative(conversation.lastActivity, nowMs)}</span>
+						</span>
+						<span class="flex min-w-0 items-baseline gap-2">
+							<span class="preview min-w-0 grow truncate font-sans text-xs text-preview">{conversation.preview}</span>
+							{conversation.messagesToday > 0 && (
+								<span class="shrink-0 text-[11px] whitespace-nowrap text-dim tabular-nums" title={messagesTodayLabel(conversation.messagesToday)}>
+									<span aria-hidden="true">{conversation.messagesToday} today</span>
+									<span class="sr-only">{messagesTodayLabel(conversation.messagesToday)}</span>
+								</span>
+							)}
+						</span>
+					</a>
+				);
+			})}
 			<a
-				class:list={['browse', { selected: directoryKind === group.kind }]}
+				class={browseClass}
 				href={adminHref(`/admin/browse/${group.kind}`, scope)}
 				aria-current={directoryKind === group.kind ? 'page' : undefined}
 			>Browse all</a>
@@ -42,118 +63,10 @@ const { groups, nowMs, scope, selectedConversation, directoryKind } = Astro.prop
 	))}
 </nav>
 
-<style>
-	nav {
-		flex-grow: 1;
-		overflow: auto;
-		padding: 10px 6px 14px;
-		display: flex;
-		flex-direction: column;
-		gap: 14px;
-	}
-	section {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		min-width: 0;
-	}
-	.group-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: baseline;
-		gap: 8px;
-		padding: 0 8px 6px;
-		font-size: 12px;
-		color: var(--color-dim);
-	}
-	h2 {
-		margin: 0;
-		font-size: inherit;
-		font-weight: 400;
-		letter-spacing: 0.08em;
-	}
-	.group-header > span {
-		white-space: nowrap;
-	}
-	a {
-		color: var(--color-text);
-		text-decoration: none;
-	}
-	.conversation {
-		padding: 5px 10px;
-		display: flex;
-		flex-direction: column;
-		gap: 0;
-		min-width: 0;
-	}
-	.conversation:hover, .selected, .conversation[aria-current='page'] {
-		background: var(--color-selection);
-	}
-	.conversation[aria-current='page'] strong {
-		color: var(--color-accent);
-	}
-	.conversation {
-		box-shadow: inset 0 0 0 var(--color-accent);
-		transition: background-color 140ms var(--ease-out-quint), box-shadow 180ms var(--ease-out-quint);
-	}
-	.conversation[aria-current='page'] {
-		box-shadow: inset 2px 0 0 var(--color-accent);
-	}
-	.conversation[data-updated] .last-active {
-		animation: pulse-accent 1400ms var(--ease-out-quint);
-	}
-	@keyframes pulse-accent {
+<style is:global>
+	@keyframes sidebar-pulse-accent {
 		from {
 			color: var(--color-accent);
-		}
-	}
-	.conversation-header {
-		display: flex;
-		align-items: baseline;
-		gap: 8px;
-	}
-	strong {
-		font-size: 13px;
-		font-weight: 600;
-	}
-	.conversation-header strong {
-		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-	.last-active {
-		flex-shrink: 0;
-		white-space: nowrap;
-		margin-left: auto;
-		font-size: 12px;
-		color: var(--color-dim);
-	}
-	.preview {
-		font-family: var(--font-prose);
-		font-size: 12px;
-		color: var(--color-preview);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	.browse {
-		margin: 4px 10px 0;
-		align-self: flex-start;
-		min-height: 28px;
-		padding: 0 10px;
-		border: 1px solid var(--color-control-border);
-		display: inline-flex;
-		align-items: center;
-		font-size: 13px;
-	}
-	.browse:hover {
-		background: var(--color-selection);
-	}
-	@media (max-width: 899px) {
-		nav {
-			overflow: visible;
-			padding-inline: 6px;
 		}
 	}
 </style>

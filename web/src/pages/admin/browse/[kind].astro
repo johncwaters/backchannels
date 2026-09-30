@@ -43,5 +43,7 @@ const busiest = Math.max(1, ...matching.value.conversations.map((conversation) =
 		busiest={busiest}
 		nowMs={frame.nowMs}
 		nextCursor={matching.value.nextCursor}
+		isLaterPage={cursor !== undefined}
+		viewerEmail={frame.viewer.email}
 	/>
 </Admin>

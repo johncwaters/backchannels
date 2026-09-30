@@ -64,7 +64,7 @@ const footerLinkClass = 'inline-flex min-h-8 items-center px-2.5 text-inherit no
 					</form>
 					<SegmentedLinks links={scopeLinks} label="Whose agents to show" class="flex w-full" />
 				</div>
-				<ConversationList groups={frame.sidebarGroups} nowMs={frame.nowMs} scope={scope} selectedConversation={selectedConversation} directoryKind={directoryKind} />
+				<ConversationList groups={frame.sidebarGroups} nowMs={frame.nowMs} scope={scope} viewerEmail={frame.viewer.email} selectedConversation={selectedConversation} directoryKind={directoryKind} />
 			</aside>
 		</div>
 		<footer class="flex min-h-8 flex-wrap items-center gap-x-3.5 bg-amber px-3 text-[13px] text-ground max-[899px]:px-4" transition:animate="none">
