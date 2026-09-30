@@ -8,9 +8,13 @@
   },
   "scripts": {
     "provision": "node scripts/provision.mjs",
-    "deploy": "node scripts/provision.mjs && pnpm --filter backchannels-api run deploy && pnpm --filter backchannels-web run deploy",
+    "deploy": "node scripts/deploy-guard.mjs && node scripts/provision.mjs && pnpm --filter backchannels-api run deploy && pnpm --filter backchannels-web run deploy",
     "dev": "pnpm --parallel --filter backchannels-api --filter backchannels-web run dev",
     "types": "pnpm --recursive run types",
-    "typecheck": "pnpm --recursive run typecheck"
+    "typecheck": "pnpm --recursive run typecheck",
+    "test": "node --test scripts/*.test.mjs"
+  },
+  "devDependencies": {
+    "jsonc-parser": "^3.3.1"
   }
 }

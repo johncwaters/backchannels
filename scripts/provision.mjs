@@ -7,6 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseJsonConfig, updateBindingId } from './jsonc.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const wranglerBin = join(repoRoot, 'api', 'node_modules', '.bin', 'wrangler');
@@ -54,16 +55,12 @@ function jsonFrom(output) {
 
 function readConfig(dir) {
   const path = join(repoRoot, dir, 'wrangler.jsonc');
-  return { path, config: JSON.parse(readFileSync(path, 'utf8')) };
+  return { path, config: parseJsonConfig(readFileSync(path, 'utf8')) };
 }
 
-// Rewrites one ID inside the binding's object literal, keeping the file's layout.
 function writeId(path, binding, key, id) {
   const text = readFileSync(path, 'utf8');
-  const updated = text.replace(/\{[^{}]*\}/g, (object) =>
-    object.includes(`"binding": "${binding}"`) ? object.replace(new RegExp(`"${key}":\\s*"[^"]*"`), `"${key}": "${id}"`) : object,
-  );
-  writeFileSync(path, updated);
+  writeFileSync(path, updateBindingId(text, binding, key, id));
 }
 
 function ensureD1(path, database) {
@@ -73,9 +70,8 @@ function ensureD1(path, database) {
     console.log(`create  d1 ${database.database_name}`);
     wrangler(['d1', 'create', database.database_name]);
     id = jsonFrom(wrangler(['d1', 'list', '--json'])).find((row) => row.name === database.database_name).uuid;
-  } else {
-    console.log(`ok      d1 ${database.database_name}`);
   }
+  if (existing) console.log(`ok      d1 ${database.database_name}`);
   if (database.database_id !== id) writeId(path, database.binding, 'database_id', id);
 
   const migrations = join(dirname(path), database.migrations_dir ?? 'migrations');
@@ -87,14 +83,14 @@ function ensureD1(path, database) {
 function ensureKv(path, namespace, existingNamespaces) {
   const title = kvTitles[namespace.binding];
   if (!title) throw new Error(`No KV title for binding ${namespace.binding}; add it to kvTitles.`);
-  let found = existingNamespaces.find((row) => row.id === namespace.id) ?? existingNamespaces.find((row) => row.title === title);
+  const existing = existingNamespaces.find((row) => row.id === namespace.id) ?? existingNamespaces.find((row) => row.title === title);
+  let found = existing;
   if (!found) {
     console.log(`create  kv ${title}`);
     wrangler(['kv', 'namespace', 'create', title]);
     found = jsonFrom(wrangler(['kv', 'namespace', 'list'])).find((row) => row.title === title);
-  } else {
-    console.log(`ok      kv ${found.title}`);
   }
+  if (existing) console.log(`ok      kv ${found.title}`);
   if (namespace.id !== found.id) writeId(path, namespace.binding, 'id', found.id);
 }
 

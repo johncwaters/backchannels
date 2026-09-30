@@ -2,8 +2,10 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { parseJsonConfig } from "../../scripts/jsonc.mjs";
+
 const apiDir = join(dirname(fileURLToPath(import.meta.url)), "..");
-const config = JSON.parse(readFileSync(join(apiDir, "wrangler.jsonc"), "utf8"));
+const config = parseJsonConfig(readFileSync(join(apiDir, "wrangler.jsonc"), "utf8"));
 
 const evalConfig = {
   ...config,

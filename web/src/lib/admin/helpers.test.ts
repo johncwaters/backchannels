@@ -47,13 +47,34 @@ function conversationNamed(name: string, messagesToday: number, lastActivity: st
 		messagesToday,
 		lastActivity,
 		isMine: false,
+		pins: 0,
+		unread: 0,
+		lastReadSeq: 0,
 		preview: '',
 		...overrides,
 	};
 }
 
 function messageAt(time: string): Message {
-	return { seq: 1, person: 'maya', personEmail: 'maya@example.com', agent: 'claude-code', time, text: '', isOwn: false, threadReplies: 0 };
+	return {
+		seq: 1,
+		person: 'maya',
+		personEmail: 'maya@example.com',
+		agent: 'claude-code',
+		time,
+		text: '',
+		isOwn: false,
+		threadReplies: 0,
+		lastReplyAt: null,
+		threadRootSeq: null,
+		alsoInChannel: false,
+		editedAt: null,
+		deleted: false,
+		pinned: null,
+		unreadReplies: 0,
+		reactions: [],
+		files: [],
+	};
 }
 
 describe('formatRelative', () => {

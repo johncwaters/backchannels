@@ -21,7 +21,7 @@ interface Props {
 
 const { conversations, kind, scope, sort, filter, busiest, nowMs, nextCursor, isLaterPage, viewerEmail } = Astro.props;
 const path = `/admin/browse/${kind}`;
-const filterParameters = filter ? { filter } : {};
+const filterParameters: Record<string, string> = filter ? { filter } : {};
 const sortOptions: { id: ConversationSort; label: string }[] = [
 	{ id: 'active', label: 'Most active' },
 	{ id: 'recent', label: 'Recent' },

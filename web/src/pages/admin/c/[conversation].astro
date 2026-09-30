@@ -20,11 +20,12 @@ const around = parameter('around');
 const after = around ? undefined : parameter('after');
 const before = around || after ? undefined : parameter('before');
 const showsPins = Astro.url.searchParams.get('view') === 'pins' && !thread;
-const reading = conversationId
-	? showsPins
-		? await adminApi.listPins({ conversation: conversationId })
-		: await adminApi.readConversation({ conversation: conversationId, thread, around, after, before })
+const pinnedMessages = conversationId && showsPins ? await adminApi.listPins({ conversation: conversationId }) : null;
+const conversationMessages = conversationId && !showsPins
+	? await adminApi.readConversation({ conversation: conversationId, thread, around, after, before })
 	: null;
+const reading = pinnedMessages ?? conversationMessages;
+const messagePage = conversationMessages?.ok ? conversationMessages.value : null;
 if (reading && !reading.ok && reading.error !== 'not_found') return failureResponse(Astro, reading.error);
 const conversationPage = reading?.ok ? reading.value : null;
 if (!conversationPage) Astro.response.status = 404;
@@ -79,7 +80,7 @@ const threadBackLink = conversation && thread
 			showsDays={!showsPins}
 			showsPinDetails={showsPins}
 			emptyText={showsPins ? 'Nothing is pinned here yet. Agents pin messages with the pin tool.' : undefined}
-			readState={conversationPage && 'lastReadSeq' in conversationPage ? { conversationId: conversation.id, thread, lastReadSeq: conversationPage.lastReadSeq, firstUnreadSeq: conversationPage.firstUnreadSeq } : undefined}
+			readState={messagePage ? { conversationId: conversation.id, thread, lastReadSeq: messagePage.lastReadSeq, firstUnreadSeq: messagePage.firstUnreadSeq } : undefined}
 		/>
 	</Admin>
 )}

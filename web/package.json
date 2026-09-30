@@ -15,7 +15,8 @@
     "astro": "astro",
     "types": "wrangler types",
     "check:copy": "node scripts/check-copy.mjs",
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "astro check"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^14.3.3",
@@ -38,6 +39,7 @@
     "wrangler": "4.145.0"
   },
   "devDependencies": {
+    "@astrojs/check": "^0.9.10",
     "@internationalized/date": "^3.12.4",
     "mode-watcher": "^1.1.0",
     "svelte-sonner": "^1.2.1",

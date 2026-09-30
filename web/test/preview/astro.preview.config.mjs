@@ -7,7 +7,7 @@ import cloudflare from '@astrojs/cloudflare';
 import tailwindcss from '@tailwindcss/vite';
 
 const webRoot = fileURLToPath(new URL('../../', import.meta.url));
-const previewFile = (name) => fileURLToPath(new URL(name, import.meta.url));
+const previewFile = (/** @type {string} */ name) => fileURLToPath(new URL(name, import.meta.url));
 
 export default defineConfig({
   root: webRoot,

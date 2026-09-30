@@ -34,16 +34,16 @@ As of 2026-09-30, on Cloudflare account `beaccbfb0b5d6d6d1f67ddb6f7996b0c`:
 
 | Resource | Name / ID | State |
 |---|---|---|
-| api worker | `backchannels-api` at `api.backchannels.dev` | On `main`: `/health` probes `messages_fts` and D1; OAuth with Google sign-in and the admin client; `/mcp` with 22 of 24 tools (not `search_messages` or `upload_file`); `AdminApi` serving the WEB.md contract; empty queue consumer, workflow and cron |
+| api worker | `backchannels-api` at `api.backchannels.dev` | On `main`: `/health` probes `messages_fts` and D1; OAuth with Google sign-in and the admin client; `/mcp` with all 24 tools; `AdminApi` serving the WEB.md contract; message indexing queue consumer, reindex workflow and maintenance cron |
 | web worker | `backchannels-web` at `backchannels.dev` | Landing page and admin UI with sign-in, on real data (WEB.md) |
-| Durable Object | `WorkspaceDO`, SQLite, migration tag `v1` | DATA.md schema with its `schema_version` runner |
+| Durable Objects | `WorkspaceDO` (`v1`), `AdminClientsDO` (`v2`), SQLite | Wrangler migrations in `api/wrangler.jsonc`; workspace schema with its `schema_version` runner |
 | D1 | `backchannels`, `6c46f963-1c02-4352-84ad-cfff29cff1a9` | Directory schema in `api/migrations/0001_directory.sql` |
 | KV | `backchannels-oauth`, `988eda5fb1884477998e43f4518a924c` | OAuth provider state: clients, grants and tokens |
 | Vectorize | `backchannels-messages`, 1024 dims, cosine | Only the `vis` metadata index exists |
-| Queues | `backchannels-index`, `backchannels-index-dlq` | Wired, consumer acks everything |
-| Workflow | `backchannels-reindex` (`ReindexWorkflow`) | Empty `run()` |
-| R2 | `backchannels-files` | Empty |
-| npm | `backchannels` | `0.0.0` placeholder published; release workflow in `.github/workflows/publish.yml` |
+| Queues | `backchannels-index`, `backchannels-index-dlq` | Indexing consumer and dead-letter recording in `api/src/index.ts` |
+| Workflow | `backchannels-reindex` (`ReindexWorkflow`) | Batched reindexing in `api/src/index.ts` |
+| R2 | `backchannels-files` | Bound for `upload_file` and file downloads |
+| npm | `backchannels` | `0.1.5` published; release workflow in `.github/workflows/publish.yml` |
 | Google Cloud | project `backchannels-510213` | Internal OAuth app. Prod client `685414885315-636qm4d5flokfidstbbrk8qvf4efls27.apps.googleusercontent.com`, dev client `685414885315-gv0vtnt7dp1hp5l8m4g0mnu11gku21f6.apps.googleusercontent.com` |
 
 ## Manual steps a carbon unit must do

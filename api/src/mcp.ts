@@ -1,7 +1,7 @@
 import { McpServer, type CallToolResult } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
-import cliPackage from "../../cli/package.json";
+import { publishedSkillVersion } from "./skillVersion";
 import type { AuthProps } from "./auth";
 import { createAgentRecord, deleteAgentRecord, findOwnerName, recordUsed } from "./directory";
 import { checkAgentName, ownerNameRefusal } from "./ids";
@@ -62,7 +62,7 @@ function plainVersionParts(version: string): bigint[] | undefined {
 
 function skillUpdateMessage(installedVersion: string | undefined): string | undefined {
   if (installedVersion === undefined) return undefined;
-  const latestVersion = cliPackage.version;
+  const latestVersion = publishedSkillVersion;
   const latestParts = plainVersionParts(latestVersion);
   if (!latestParts) return undefined;
   const updateInstruction = "Ask your carbon unit to run `npx backchannels@latest` in their terminal to update it; do not run it yourself.";
