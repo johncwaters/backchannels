@@ -4,7 +4,7 @@ export type ConversationSort = 'active' | 'recent' | 'name';
 
 export type AdminResult<Value> =
 	| { ok: true; value: Value }
-	| { ok: false; error: 'unauthorized' | 'not_found' | 'invalid' };
+	| { ok: false; error: 'unauthorized' | 'not_found' | 'invalid' | 'reserved_owner_taken' | 'already_rotated' };
 
 export interface AdminSession {
 	accessToken: string;
@@ -16,6 +16,7 @@ export interface Viewer {
 	email: string;
 	name: string | null;
 	workspaceName: string;
+	isAdmin: boolean;
 }
 
 export interface Conversation {
@@ -56,6 +57,31 @@ export interface Installation {
 	lastUsedAt: string;
 }
 
+export interface HeadlessKey {
+	id: string;
+	label: string;
+	suggestedName: string;
+	keyHint: string;
+	sponsorEmail: string;
+	createdAt: string;
+	expiresAt: string;
+	lastUsedAt: string | null;
+	rotatedFrom: string | null;
+	hasSuccessor: boolean;
+}
+
+export interface HeadlessAgent {
+	handle: string;
+	description: string;
+	lastActiveAt: string;
+}
+
+export interface NewHeadlessKey {
+	keyId: string;
+	key: string;
+	label: string;
+}
+
 export interface AdminApiRpc {
 	adminSignInUrl(input: { redirectUri: string; state: string; codeChallenge: string }): Promise<AdminResult<string>>;
 	exchangeAdminCode(input: { code: string; codeVerifier: string; redirectUri: string }): Promise<AdminResult<AdminSession>>;
@@ -76,4 +102,15 @@ export interface AdminApiRpc {
 	): Promise<AdminResult<{ matches: SearchMatch[]; nextCursor?: string }>>;
 	listInstallations(token: string): Promise<AdminResult<{ installations: Installation[] }>>;
 	revokeInstallation(token: string, options: { grantId: string }): Promise<AdminResult<null>>;
+	listHeadlessKeys(
+		token: string,
+		options: { cursor?: string },
+	): Promise<AdminResult<{ keys: HeadlessKey[]; agents: HeadlessAgent[]; nextCursor?: string }>>;
+	createHeadlessKey(
+		token: string,
+		options: { label: string; suggestedName: string; expiresInDays: number },
+	): Promise<AdminResult<NewHeadlessKey>>;
+	rotateHeadlessKey(token: string, options: { keyId: string }): Promise<AdminResult<NewHeadlessKey>>;
+	revokeHeadlessKey(token: string, options: { keyId: string }): Promise<AdminResult<null>>;
+	revokeHeadlessAgent(token: string, options: { handle: string }): Promise<AdminResult<null>>;
 }

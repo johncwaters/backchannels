@@ -204,9 +204,172 @@ export async function findOwnerName(db: D1Database, sub: string): Promise<string
 export async function findViewer(db: D1Database, sub: string, workspaceId: string) {
   return db
     .prepare(
-      `SELECT carbon_units.email, carbon_units.name, workspaces.name AS workspace_name FROM carbon_units
+      `SELECT carbon_units.email, carbon_units.name, carbon_units.is_admin, workspaces.name AS workspace_name FROM carbon_units
        JOIN workspaces ON workspaces.id = carbon_units.workspace_id WHERE carbon_units.sub = ? AND carbon_units.workspace_id = ?`,
     )
     .bind(sub, workspaceId)
-    .first<{ email: string; name: string | null; workspace_name: string }>();
+    .first<{ email: string; name: string | null; is_admin: number; workspace_name: string }>();
+}
+
+export async function isWorkspaceAdmin(db: D1Database, sub: string, workspaceId: string): Promise<boolean> {
+  const found = await db
+    .prepare("SELECT is_admin FROM carbon_units WHERE sub = ? AND workspace_id = ?")
+    .bind(sub, workspaceId)
+    .first<number>("is_admin");
+  return found === 1;
+}
+
+export async function findWorkspaceDomain(db: D1Database, workspaceId: string): Promise<string | null> {
+  return db.prepare("SELECT domain FROM workspaces WHERE id = ?").bind(workspaceId).first<string>("domain");
+}
+
+export async function listWorkspaceEmails(db: D1Database, workspaceId: string, exceptSub: string): Promise<string[]> {
+  const found = await db
+    .prepare("SELECT email FROM carbon_units WHERE workspace_id = ? AND sub != ?")
+    .bind(workspaceId, exceptSub)
+    .all<{ email: string }>();
+  return found.results.map((row) => row.email);
+}
+
+export interface HeadlessKeyListing {
+  id: string;
+  label: string;
+  suggested_name: string;
+  key_hint: string;
+  sponsor_email: string;
+  created_at: number;
+  expires_at: number;
+  last_used_at: number | null;
+  rotated_from: string | null;
+  has_successor: number;
+}
+
+export async function listHeadlessKeys(
+  db: D1Database,
+  workspaceId: string,
+  options: { now: number; before?: { createdAt: number; id: string }; limit: number },
+): Promise<HeadlessKeyListing[]> {
+  const before = options.before ?? { createdAt: Number.MAX_SAFE_INTEGER, id: "" };
+  const found = await db
+    .prepare(
+      `SELECT k.id, k.label, k.suggested_name, k.key_hint, s.email AS sponsor_email, k.created_at, k.expires_at, k.last_used_at, k.rotated_from,
+         EXISTS (SELECT 1 FROM headless_keys n WHERE n.rotated_from = k.id) AS has_successor
+       FROM headless_keys k JOIN carbon_units s ON s.sub = k.sponsor_sub
+       WHERE k.workspace_id = ? AND k.revoked_at IS NULL AND k.expires_at > ?
+         AND (k.created_at < ? OR (k.created_at = ? AND k.id < ?))
+       ORDER BY k.created_at DESC, k.id DESC LIMIT ?`,
+    )
+    .bind(workspaceId, options.now, before.createdAt, before.createdAt, before.id, options.limit)
+    .all<HeadlessKeyListing>();
+  return found.results;
+}
+
+export interface LiveHeadlessKey {
+  id: string;
+  label: string;
+  suggested_name: string;
+  created_at: number;
+  expires_at: number;
+  rotated_from: string | null;
+  has_successor: number;
+}
+
+export async function findLiveHeadlessKey(db: D1Database, keyId: string, workspaceId: string, now: number): Promise<LiveHeadlessKey | null> {
+  return db
+    .prepare(
+      `SELECT id, label, suggested_name, created_at, expires_at, rotated_from,
+         EXISTS (SELECT 1 FROM headless_keys n WHERE n.rotated_from = headless_keys.id) AS has_successor
+       FROM headless_keys WHERE id = ? AND workspace_id = ? AND revoked_at IS NULL AND expires_at > ?`,
+    )
+    .bind(keyId, workspaceId, now)
+    .first<LiveHeadlessKey>();
+}
+
+export interface NewHeadlessKeyRow {
+  id: string;
+  workspaceId: string;
+  label: string;
+  suggestedName: string;
+  keyHash: string;
+  keyHint: string;
+  sponsorSub: string;
+  createdAt: number;
+  expiresAt: number;
+  rotatedFrom: string | null;
+}
+
+const HEADLESS_KEY_INSERT_COLUMNS =
+  "INSERT INTO headless_keys (id, workspace_id, label, suggested_name, key_hash, key_hint, sponsor_sub, created_at, expires_at, rotated_from)";
+
+function headlessKeyInsertValues(key: NewHeadlessKeyRow): unknown[] {
+  return [key.id, key.workspaceId, key.label, key.suggestedName, key.keyHash, key.keyHint, key.sponsorSub, key.createdAt, key.expiresAt, key.rotatedFrom];
+}
+
+export async function insertHeadlessKey(db: D1Database, key: NewHeadlessKeyRow): Promise<void> {
+  await db
+    .prepare(`${HEADLESS_KEY_INSERT_COLUMNS} VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(...headlessKeyInsertValues(key))
+    .run();
+}
+
+function insertSuccessorIfRotatedKeyLiveStatement(
+  db: D1Database,
+  successor: NewHeadlessKeyRow,
+  rotatedKeyId: string,
+  now: number,
+): D1PreparedStatement {
+  return db
+    .prepare(
+      `${HEADLESS_KEY_INSERT_COLUMNS}
+       SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+       WHERE EXISTS (SELECT 1 FROM headless_keys WHERE id = ? AND revoked_at IS NULL AND expires_at > ?)`,
+    )
+    .bind(...headlessKeyInsertValues(successor), rotatedKeyId, now);
+}
+
+export type HeadlessKeyRotationOutcome = "rotated" | "already_rotated" | "not_live";
+
+export async function rotateHeadlessKeyRows(
+  db: D1Database,
+  rotation: { successor: NewHeadlessKeyRow; rotatedKeyId: string; rotatedExpiresAt: number; predecessorId: string | null; now: number },
+): Promise<HeadlessKeyRotationOutcome> {
+  const successorExists = "EXISTS (SELECT 1 FROM headless_keys WHERE id = ?)";
+  const statements = [
+    insertSuccessorIfRotatedKeyLiveStatement(db, rotation.successor, rotation.rotatedKeyId, rotation.now),
+    db
+      .prepare(`UPDATE headless_keys SET expires_at = ? WHERE id = ? AND revoked_at IS NULL AND ${successorExists}`)
+      .bind(rotation.rotatedExpiresAt, rotation.rotatedKeyId, rotation.successor.id),
+  ];
+  if (rotation.predecessorId) {
+    statements.push(
+      db
+        .prepare(`UPDATE headless_keys SET expires_at = MIN(expires_at, ?) WHERE id = ? AND ${successorExists}`)
+        .bind(rotation.now, rotation.predecessorId, rotation.successor.id),
+    );
+  }
+  try {
+    const [successorInsert] = await db.batch(statements);
+    if (successorInsert.meta.changes === 0) return "not_live";
+    return "rotated";
+  } catch (error) {
+    if (isRotatedFromConflict(error)) return "already_rotated";
+    throw error;
+  }
+}
+
+function isRotatedFromConflict(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("UNIQUE constraint failed") && message.includes("rotated_from");
+}
+
+export async function revokeHeadlessKeyRow(db: D1Database, keyId: string, workspaceId: string): Promise<boolean> {
+  const result = await db
+    .prepare("UPDATE headless_keys SET revoked_at = ? WHERE id = ? AND workspace_id = ? AND revoked_at IS NULL")
+    .bind(Date.now(), keyId, workspaceId)
+    .run();
+  return result.meta.changes > 0;
+}
+
+export async function revokeAgentRecord(db: D1Database, agentId: string, ownerSub: string): Promise<void> {
+  await db.prepare("UPDATE agents SET revoked_at = ? WHERE id = ? AND owner_sub = ? AND revoked_at IS NULL").bind(Date.now(), agentId, ownerSub).run();
 }

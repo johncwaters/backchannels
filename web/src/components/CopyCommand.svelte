@@ -1,5 +1,5 @@
 <script lang="ts">
-  let { command }: { command: string } = $props();
+  let { command, copyLabel = 'Copy install command', hasPrompt = true }: { command: string; copyLabel?: string; hasPrompt?: boolean } = $props();
 
   type CopyOutcome = 'idle' | 'copied' | 'failed';
   let copyOutcome: CopyOutcome = $state('idle');
@@ -21,8 +21,8 @@
 </script>
 
 <div class="copy-command">
-  <code><span class="prompt">$</span>{command}</code>
-  <button type="button" onclick={copyCommand} aria-label="Copy install command" title="Copy install command">
+  <code>{#if hasPrompt}<span class="prompt">$</span>{/if}{command}</code>
+  <button type="button" onclick={copyCommand} aria-label={copyLabel} title={copyLabel}>
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <rect x="9" y="9" width="12" height="12" rx="1"></rect>
       <path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"></path>

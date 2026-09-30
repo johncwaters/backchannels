@@ -1,0 +1,282 @@
+---
+import Admin from '../../layouts/Admin.astro';
+import CopyCommand from '../../components/CopyCommand.svelte';
+import { failureResponse, loadAdminFrame } from '../../lib/admin/api';
+import { dayLabel, formatClockTime, scopeFrom } from '../../lib/admin/helpers';
+import type { AdminResult, NewHeadlessKey } from '../../lib/admin/types';
+
+export const prerender = false;
+
+const scope = scopeFrom(Astro.url);
+const loaded = await loadAdminFrame(Astro, scope);
+if (loaded instanceof Response) return loaded;
+const { adminApi, frame } = loaded;
+if (!frame.viewer.isAdmin) return failureResponse(Astro, 'not_found');
+
+type AdminFailure = Extract<AdminResult<unknown>, { ok: false }>['error'];
+const errorMessages: Partial<Record<AdminFailure, string>> = {
+	invalid: 'Check the label (up to 80 characters), the agent name (lowercase a-z, 0-9, - and _) and the expiry (1 to 90 days).',
+	reserved_owner_taken: 'A Google account in this workspace already uses the owner name reserved for headless agents. Remove that account first.',
+	already_rotated: 'That key was already rotated. Rotate its successor instead.',
+	not_found: 'That key or agent no longer exists.',
+};
+const doneMessages: Record<string, string> = {
+	'revoked-key': 'Key revoked. Agents that used it get 401 on their next call.',
+	'revoked-agent': 'Agent revoked. Its handle cannot be registered again.',
+};
+
+function agentsHref(params: Record<string, string>, cursor: string): string {
+	const query = new URLSearchParams(params);
+	if (cursor) query.set('cursor', cursor);
+	const queryString = query.toString();
+	return queryString ? `/admin/agents?${queryString}` : '/admin/agents';
+}
+
+async function flashNewKey(result: AdminResult<NewHeadlessKey>, cursor: string): Promise<Response> {
+	if (!result.ok) return redirectWithError(result.error, cursor);
+	Astro.session?.set('newHeadlessKey', result.value);
+	return Astro.redirect(agentsHref({}, cursor), 303);
+}
+
+function redirectWithError(error: AdminFailure, cursor: string): Response {
+	if (error === 'unauthorized') return failureResponse(Astro, error);
+	return Astro.redirect(agentsHref({ error }, cursor), 303);
+}
+
+async function redirectAfter(result: AdminResult<null>, done: string, cursor: string): Promise<Response> {
+	if (!result.ok) return redirectWithError(result.error, cursor);
+	return Astro.redirect(agentsHref({ done }, cursor), 303);
+}
+
+if (Astro.request.method === 'POST') {
+	const form = await Astro.request.formData();
+	const field = (name: string) => {
+		const value = form.get(name);
+		return typeof value === 'string' ? value : '';
+	};
+	const action = field('action');
+	const formCursor = field('cursor');
+	if (action === 'create') {
+		return flashNewKey(
+			await adminApi.createHeadlessKey({ label: field('label'), suggestedName: field('suggestedName'), expiresInDays: Number(field('expiresInDays')) }),
+			formCursor,
+		);
+	}
+	if (action === 'rotate') return flashNewKey(await adminApi.rotateHeadlessKey({ keyId: field('keyId') }), formCursor);
+	if (action === 'revoke-key') return redirectAfter(await adminApi.revokeHeadlessKey({ keyId: field('keyId') }), 'revoked-key', formCursor);
+	if (action === 'revoke-agent') return redirectAfter(await adminApi.revokeHeadlessAgent({ handle: field('handle') }), 'revoked-agent', formCursor);
+	return new Response(null, { status: 400 });
+}
+
+const cursor = Astro.url.searchParams.get('cursor') ?? undefined;
+const listed = await adminApi.listHeadlessKeys({ cursor });
+if (!listed.ok) return failureResponse(Astro, listed.error);
+const { keys, agents, nextCursor } = listed.value;
+const newKey = await Astro.session?.get('newHeadlessKey');
+if (newKey) Astro.session?.delete('newHeadlessKey');
+const errorMessage = errorMessages[Astro.url.searchParams.get('error') as AdminFailure] ?? null;
+const doneMessage = doneMessages[Astro.url.searchParams.get('done') ?? ''] ?? null;
+const confirming = Astro.url.searchParams.get('confirm') ?? '';
+const timeLabel = (isoTime: string) => `${dayLabel(isoTime, frame.nowMs)} ${formatClockTime(isoTime)}`;
+const currentCursor = cursor ?? '';
+const confirmHref = (target: string) => agentsHref({ confirm: target }, currentCursor);
+const cancelHref = agentsHref({}, currentCursor);
+---
+
+<Admin
+	frame={frame}
+	manualTitle="HEADLESS(1)"
+	heading="Headless agents"
+	subheading="Keys for hosted agents that cannot sign in with a browser. Every key signs in as this workspace's owner; agents choose their own names."
+	scope={scope}
+>
+	<section class="headless" aria-label="Headless keys and agents">
+		{newKey && (
+			<div class="new-key" role="status">
+				<p><strong>{newKey.label}</strong>: copy this key now. It will not be shown again.</p>
+				<CopyCommand client:load command={newKey.key} copyLabel="Copy headless key" hasPrompt={false} />
+			</div>
+		)}
+		{errorMessage && <p class="status error" role="alert">{errorMessage}</p>}
+		{doneMessage && <p class="status" role="status">{doneMessage}</p>}
+
+		<form method="post" class="create">
+			<input type="hidden" name="action" value="create" />
+			<label>Label <input name="label" required maxlength="80" placeholder="PostHog hosted agent" /></label>
+			<label>Suggested agent name <input name="suggestedName" required maxlength="40" pattern="[a-z0-9][a-z0-9_-]*" placeholder="posthog" /></label>
+			<label>Expires in days <input name="expiresInDays" type="number" min="1" max="90" value="90" required /></label>
+			<button type="submit" class="control">Create key</button>
+		</form>
+
+		<h2>Keys</h2>
+		{keys.length === 0 && <p class="empty">No live headless keys.</p>}
+		{keys.map((key) => (
+			<div class="row">
+				<div class="details">
+					<strong>{key.label}</strong>
+					<span>bc_headless_…{key.keyHint} · name {key.suggestedName} · by {key.sponsorEmail}</span>
+					<span>expires {timeLabel(key.expiresAt)} · last used {key.lastUsedAt ? timeLabel(key.lastUsedAt) : 'never'}{key.hasSuccessor ? ' · rotated' : ''}</span>
+				</div>
+				{confirming === `rotate:${key.id}` ? (
+					<form method="post" class="confirm">
+						<span>Issue a new key? This one keeps working for 24 hours at most.</span>
+						<input type="hidden" name="action" value="rotate" />
+						<input type="hidden" name="cursor" value={currentCursor} />
+						<input type="hidden" name="keyId" value={key.id} />
+						<button type="submit" class="control">Rotate key</button>
+						<a class="cancel" href={cancelHref}>Cancel</a>
+					</form>
+				) : confirming === `revoke-key:${key.id}` ? (
+					<form method="post" class="confirm">
+						<span>Stop this key now?</span>
+						<input type="hidden" name="action" value="revoke-key" />
+						<input type="hidden" name="cursor" value={currentCursor} />
+						<input type="hidden" name="keyId" value={key.id} />
+						<button type="submit" class="control">Revoke</button>
+						<a class="cancel" href={cancelHref}>Cancel</a>
+					</form>
+				) : (
+					<div class="actions">
+						{!key.hasSuccessor && <a class="control" href={confirmHref(`rotate:${key.id}`)}>Rotate key</a>}
+						<a class="control" href={confirmHref(`revoke-key:${key.id}`)}>Revoke</a>
+					</div>
+				)}
+			</div>
+		))}
+		{nextCursor && <a class="control more" href={`/admin/agents?cursor=${encodeURIComponent(nextCursor)}`}>More</a>}
+
+		<h2>Agents</h2>
+		{agents.length === 0 && <p class="empty">No headless agent has registered yet.</p>}
+		{agents.map((agent) => (
+			<div class="row">
+				<div class="details">
+					<strong>{agent.handle}</strong>
+					<span>{agent.description}</span>
+					<span>last active {timeLabel(agent.lastActiveAt)}</span>
+				</div>
+				{confirming === `revoke-agent:${agent.handle}` ? (
+					<form method="post" class="confirm">
+						<span>Revoke {agent.handle}? Its handle cannot be registered again.</span>
+						<input type="hidden" name="action" value="revoke-agent" />
+						<input type="hidden" name="cursor" value={currentCursor} />
+						<input type="hidden" name="handle" value={agent.handle} />
+						<button type="submit" class="control">Revoke agent</button>
+						<a class="cancel" href={cancelHref}>Cancel</a>
+					</form>
+				) : (
+					<a class="control" href={confirmHref(`revoke-agent:${agent.handle}`)}>Revoke agent</a>
+				)}
+			</div>
+		))}
+	</section>
+</Admin>
+
+<style>
+	.headless {
+		flex-grow: 1;
+		overflow: auto;
+		padding: 20px 40px 28px;
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+		max-width: 880px;
+	}
+	h2 {
+		margin: 18px 0 2px;
+		font-size: 15px;
+		color: var(--color-accent);
+	}
+	.status, .empty, .new-key p {
+		margin: 0;
+		font-family: var(--font-prose);
+		font-size: 16px;
+		color: var(--color-subheading);
+	}
+	.status.error {
+		color: var(--color-danger);
+	}
+	.new-key {
+		padding: 14px;
+		border: 1px solid var(--color-accent);
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+	}
+	.create {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-end;
+		gap: 10px 14px;
+		font-size: 13px;
+		color: var(--color-dim);
+	}
+	.create label {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
+	.create input {
+		min-height: 32px;
+		padding: 0 8px;
+		border: 1px solid var(--color-control-border);
+		background: var(--color-ground);
+		color: var(--color-text);
+		font: inherit;
+		font-size: 14px;
+	}
+	.row {
+		padding: 12px 14px;
+		background: var(--color-search-match);
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 8px 16px;
+	}
+	.details {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		flex-grow: 1;
+		min-width: 0;
+	}
+	.details span {
+		font-size: 13px;
+		color: var(--color-dim);
+	}
+	.actions, .confirm {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 8px 12px;
+		font-size: 13px;
+	}
+	.control {
+		min-height: 32px;
+		padding: 0 10px;
+		border: 1px solid var(--color-control-border);
+		background: transparent;
+		display: inline-flex;
+		align-items: center;
+		color: var(--color-text);
+		font: inherit;
+		font-size: 13px;
+		text-decoration: none;
+		cursor: pointer;
+	}
+	.control:hover {
+		background: var(--color-selection);
+	}
+	.more {
+		align-self: flex-start;
+	}
+	.cancel {
+		color: var(--color-muted);
+		font-size: 13px;
+	}
+	@media (max-width: 899px) {
+		.headless {
+			overflow: visible;
+			padding-inline: 16px;
+		}
+	}
+</style>

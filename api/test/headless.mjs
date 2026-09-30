@@ -116,3 +116,73 @@ describe("headless keys", () => {
     assert.match(refusal, /try again|retry/i);
   });
 });
+
+function headlessAdmin(op, input, { who = "keyadmin", isAdmin = true, space = ALLOWED_SPACE } = {}) {
+  return evalRequest(`/eval/headless-admin?space=${space}`, "POST", { op, input, who, isAdmin });
+}
+
+describe("headless key administration", () => {
+  const run = Date.now().toString(36);
+
+  test("a carbon unit who is not an admin gets unauthorized", async () => {
+    assert.deepEqual(await headlessAdmin("list", {}, { who: "notadmin", isAdmin: false }), { ok: false, error: "unauthorized" });
+    const created = await headlessAdmin("create", { label: "x", suggestedName: "x", expiresInDays: 1 }, { who: "notadmin", isAdmin: false });
+    assert.deepEqual(created, { ok: false, error: "unauthorized" });
+  });
+
+  test("invalid key fields are refused", async () => {
+    for (const input of [
+      { label: "", suggestedName: "valid-name", expiresInDays: 30 },
+      { label: "x".repeat(81), suggestedName: "valid-name", expiresInDays: 30 },
+      { label: "ok", suggestedName: "Not Valid", expiresInDays: 30 },
+      { label: "ok", suggestedName: "valid-name", expiresInDays: 91 },
+      { label: "ok", suggestedName: "valid-name", expiresInDays: 0 },
+    ]) {
+      assert.deepEqual(await headlessAdmin("create", input), { ok: false, error: "invalid" }, JSON.stringify(input));
+    }
+  });
+
+  test("create, rotate, revoke key and revoke agent end to end", async () => {
+    const name = `lifecycle-${run}`;
+    const created = await headlessAdmin("create", { label: "Lifecycle key", suggestedName: name, expiresInDays: 30 });
+    assert.ok(created.ok, JSON.stringify(created));
+    assert.match(created.value.key, /^bc_headless_[0-9a-z]{32}$/);
+    const first = created.value;
+    assert.ok((await headlessClient(first.key).call("register_agent", { name, description: "Lifecycle agent" })).ok);
+
+    const listed = await headlessAdmin("list", {});
+    assert.ok(listed.value.keys.some((key) => key.id === first.keyId && key.keyHint === first.key.slice(-4)));
+    assert.ok(listed.value.agents.some((agent) => agent.handle === `@headless/${name}`));
+
+    const rotated = await headlessAdmin("rotate", { keyId: first.keyId });
+    assert.ok(rotated.ok, JSON.stringify(rotated));
+    const second = rotated.value;
+    assert.ok((await headlessClient(second.key).handshake()).instructions.includes(`Your agent name is ${name}`));
+    assert.ok((await headlessClient(first.key).handshake()).instructions, "the rotated key keeps its overlap");
+    assert.deepEqual(await headlessAdmin("rotate", { keyId: first.keyId }), { ok: false, error: "already_rotated" });
+
+    const third = (await headlessAdmin("rotate", { keyId: second.keyId })).value;
+    assert.equal((await discoverStatus(first.key)).status, 401, "rotating the successor ends the first key's overlap");
+    assert.ok((await headlessClient(second.key).handshake()).instructions, "the second key is now in its overlap");
+
+    assert.ok((await headlessAdmin("revokeKey", { keyId: third.keyId })).ok);
+    assert.equal((await discoverStatus(third.key)).status, 401);
+    assert.deepEqual(await headlessAdmin("revokeKey", { keyId: third.keyId }), { ok: false, error: "not_found" });
+
+    assert.ok((await headlessAdmin("revokeAgent", { handle: `@headless/${name}` })).ok);
+    const afterRevoke = await headlessAdmin("list", {});
+    assert.ok(!afterRevoke.value.agents.some((agent) => agent.handle === `@headless/${name}`));
+    const reregistered = await headlessClient(second.key).call("register_agent", { name, description: "again" });
+    assert.equal(reregistered.ok, false);
+    assert.match(reregistered.error, /revoked/);
+  });
+
+  test("an admin of another workspace cannot touch this workspace's keys", async () => {
+    const created = await headlessAdmin("create", { label: "Isolation key", suggestedName: `isolation-${run}`, expiresInDays: 1 });
+    assert.ok(created.ok);
+    const outsider = { who: "outsider", space: "offlist" };
+    assert.deepEqual(await headlessAdmin("rotate", { keyId: created.value.keyId }, outsider), { ok: false, error: "not_found" });
+    assert.deepEqual(await headlessAdmin("revokeKey", { keyId: created.value.keyId }, outsider), { ok: false, error: "not_found" });
+    assert.ok((await headlessClient(created.value.key).handshake()).instructions);
+  });
+});

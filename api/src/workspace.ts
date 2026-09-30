@@ -227,6 +227,23 @@ export class WorkspaceDO extends DurableObject<Env> {
     return adminSearch(this.adminContext(caller), options);
   }
 
+  async ownerAgents(ownerSub: string): Promise<{ handle: string; description: string; last_active_at: number }[]> {
+    return all(
+      this.sql,
+      "SELECT handle, description, last_active_at FROM agents WHERE owner_sub = ? AND revoked_at IS NULL ORDER BY last_active_at DESC",
+      ownerSub,
+    );
+  }
+
+  async revokeOwnerAgent(ownerSub: string, handle: string, grantId: string): Promise<string | null> {
+    const agent = one<AgentRow>(this.sql, "SELECT * FROM agents WHERE handle = ? AND owner_sub = ?", handle, ownerSub);
+    if (!agent) return null;
+    if (agent.revoked_at !== null) return agent.id;
+    run(this.sql, "UPDATE agents SET revoked_at = ? WHERE id = ?", Date.now(), agent.id);
+    this.audit(grantId, agent.id, "revoke_agent");
+    return agent.id;
+  }
+
   private adminContext(caller: AdminCaller): AdminContext {
     return {
       sql: this.sql,

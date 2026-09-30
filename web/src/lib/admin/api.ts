@@ -11,6 +11,11 @@ export interface AdminApi {
 	search(options: Parameters<AdminApiRpc['search']>[1]): ReturnType<AdminApiRpc['search']>;
 	listInstallations(): ReturnType<AdminApiRpc['listInstallations']>;
 	revokeInstallation(options: Parameters<AdminApiRpc['revokeInstallation']>[1]): ReturnType<AdminApiRpc['revokeInstallation']>;
+	listHeadlessKeys(options: Parameters<AdminApiRpc['listHeadlessKeys']>[1]): ReturnType<AdminApiRpc['listHeadlessKeys']>;
+	createHeadlessKey(options: Parameters<AdminApiRpc['createHeadlessKey']>[1]): ReturnType<AdminApiRpc['createHeadlessKey']>;
+	rotateHeadlessKey(options: Parameters<AdminApiRpc['rotateHeadlessKey']>[1]): ReturnType<AdminApiRpc['rotateHeadlessKey']>;
+	revokeHeadlessKey(options: Parameters<AdminApiRpc['revokeHeadlessKey']>[1]): ReturnType<AdminApiRpc['revokeHeadlessKey']>;
+	revokeHeadlessAgent(options: Parameters<AdminApiRpc['revokeHeadlessAgent']>[1]): ReturnType<AdminApiRpc['revokeHeadlessAgent']>;
 }
 
 const refreshWindowMs = 60_000;
@@ -58,6 +63,11 @@ export async function adminApiFor(context: APIContext): Promise<AdminApi | Respo
 		search: (options) => rpc.search(accessToken, options),
 		listInstallations: () => rpc.listInstallations(accessToken),
 		revokeInstallation: (options) => rpc.revokeInstallation(accessToken, options),
+		listHeadlessKeys: (options) => rpc.listHeadlessKeys(accessToken, options),
+		createHeadlessKey: (options) => rpc.createHeadlessKey(accessToken, options),
+		rotateHeadlessKey: (options) => rpc.rotateHeadlessKey(accessToken, options),
+		revokeHeadlessKey: (options) => rpc.revokeHeadlessKey(accessToken, options),
+		revokeHeadlessAgent: (options) => rpc.revokeHeadlessAgent(accessToken, options),
 	};
 }
 

@@ -1,5 +1,6 @@
 import { ensureWorkspaceOwner } from "../src/directory";
 import { hashHeadlessKey, newHeadlessKey } from "../src/headless";
+import { createHeadlessKeyFor, listHeadlessKeysFor, revokeHeadlessAgentFor, revokeHeadlessKeyFor, rotateHeadlessKeyFor } from "../src/headlessAdmin";
 import worker from "../src/index";
 import { serveMcp } from "../src/mcp";
 import type { TuningOverrides } from "../src/search/config";
@@ -84,6 +85,24 @@ async function seedHeadlessKey(env: Env, space: EvalSpace, seed: HeadlessSeed): 
   return Response.json({ key, keyId });
 }
 
+const HEADLESS_ADMIN_OPERATIONS = {
+  list: listHeadlessKeysFor,
+  create: createHeadlessKeyFor,
+  rotate: rotateHeadlessKeyFor,
+  revokeKey: revokeHeadlessKeyFor,
+  revokeAgent: revokeHeadlessAgentFor,
+} as const;
+
+async function runHeadlessAdmin(env: Env, space: EvalSpace, body: { op: keyof typeof HEADLESS_ADMIN_OPERATIONS; who: string; isAdmin: boolean; input: never }) {
+  const operation = HEADLESS_ADMIN_OPERATIONS[body.op];
+  if (!operation) return new Response("unknown op", { status: 400 });
+  await ensureCarbonUnit(env, space, body.who);
+  const sub = `${space.workspaceId}-${body.who}`;
+  await env.DB.prepare("UPDATE carbon_units SET is_admin = ?, last_verified_at = ? WHERE sub = ?").bind(body.isAdmin ? 1 : 0, Date.now(), sub).run();
+  const identity = { sub, workspaceId: space.workspaceId, grantId: `eval-${sub}` };
+  return Response.json(await operation(env, identity, body.input));
+}
+
 function workspace(env: Env, space: EvalSpace) {
   return env.WORKSPACE.get(env.WORKSPACE.idFromName(space.workspaceId));
 }
@@ -146,6 +165,9 @@ export default {
         return Response.json({ id: instance.id });
       }
       if (url.pathname === "/eval/purge-vectors" && request.method === "POST") return purgeVectors(env, space);
+      if (url.pathname === "/eval/headless-admin" && request.method === "POST") {
+        return runHeadlessAdmin(env, space, (await request.json()) as Parameters<typeof runHeadlessAdmin>[2]);
+      }
       if (url.pathname === "/eval/seed-headless" && request.method === "POST") {
         return seedHeadlessKey(env, space, (await request.json()) as HeadlessSeed);
       }
