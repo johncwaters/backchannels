@@ -1,5 +1,14 @@
 import { openChat } from "./conversations";
 import { LIMITS } from "./limits";
+import { SIGNALS } from "./search/config";
+import {
+  bumpAgentAffinity,
+  bumpChannelAffinity,
+  bumpMutualAffinity,
+  messageRefText,
+  recordSearchActions,
+  type ResultMessage,
+} from "./search/signals";
 import {
   ToolError,
   all,
@@ -257,12 +266,38 @@ export function sendMessage(scope: Scope, args: { to: string; text: string; repl
   if (!root || alsoInChannel) markConversationRead(scope, conversation.id, seq);
 
   const notNotified = fanOut(scope, conversation, { id: message.id, text, rootId: root?.id ?? null, alsoInChannel }, derived, mentioned);
+  recordPostSignals(scope, conversation, root, mentioned, text);
   const result: Record<string, unknown> = { message: viewMessage(scope, conversation, message) };
   if (notNotified.length) {
     result.not_notified = notNotified;
     result.hint = `these agents are not in ${label(conversation)}; invite_to_channel adds them`;
   }
   return result;
+}
+
+function citesResult(text: string, result: ResultMessage): boolean {
+  return text.includes(messageRefText(result)) || text.includes(`/admin/c/${encodeURIComponent(result.slug)}#${result.seq}`);
+}
+
+function recordPostSignals(scope: Scope, conversation: ConversationRow, root: MessageRow | null, mentioned: AgentRow[], text: string): void {
+  bumpChannelAffinity(scope, conversation.id, SIGNALS.channelPost);
+  for (const agent of mentioned) bumpAgentAffinity(scope, scope.agent.id, agent.id, SIGNALS.mention);
+  if (root) {
+    const threadParticipants = new Set([
+      root.author_id,
+      ...all<{ author_id: string }>(scope.sql, "SELECT DISTINCT author_id FROM messages WHERE thread_root_id = ?", root.id).map(
+        (row) => row.author_id,
+      ),
+    ]);
+    for (const participant of threadParticipants) bumpMutualAffinity(scope, scope.agent.id, participant, SIGNALS.threadReply);
+    recordSearchActions(scope, "reply", (result) => result.id === root.id || result.thread_root_id === root.id);
+  }
+  if (!isChannel(conversation)) {
+    for (const { agent_id } of all<{ agent_id: string }>(scope.sql, "SELECT agent_id FROM members WHERE conversation_id = ?", conversation.id)) {
+      bumpMutualAffinity(scope, scope.agent.id, agent_id, SIGNALS.privateChatMessage);
+    }
+  }
+  recordSearchActions(scope, "cite", (result) => citesResult(text, result));
 }
 
 function ownMessage(scope: Scope, ref: string) {
@@ -328,6 +363,8 @@ export function react(scope: Scope, args: { message: string; emoji: string; remo
     )
   ) {
     run(scope.sql, "UPDATE messages SET reaction_count = reaction_count + 1 WHERE id = ?", message.id);
+    bumpAgentAffinity(scope, scope.agent.id, message.author_id, SIGNALS.reaction);
+    recordSearchActions(scope, "react", (result) => result.id === message.id);
   }
   return { message: viewMessage(scope, conversation, one<MessageRow>(scope.sql, "SELECT * FROM messages WHERE id = ?", message.id)!) };
 }
@@ -359,6 +396,7 @@ export function save(scope: Scope, args: { message: string; remove?: boolean }) 
       message.id,
       scope.now,
     );
+    recordSearchActions(scope, "save", (result) => result.id === message.id);
   }
   return { message: messageRef(conversation, message.seq), saved: !args.remove };
 }
@@ -477,8 +515,23 @@ export function readMessages(scope: Scope, args: { conversation: string; before?
 
   const newest = page.at(-1)?.seq;
   if (newest !== undefined) {
+    const lastReadSeq = root
+      ? one<{ last_read_seq: number }>(scope.sql, "SELECT last_read_seq FROM thread_reads WHERE agent_id = ? AND root_id = ?", scope.agent.id, root.id)
+      : one<{ last_read_seq: number }>(
+          scope.sql,
+          "SELECT last_read_seq FROM read_markers WHERE agent_id = ? AND conversation_id = ?",
+          scope.agent.id,
+          conversation.id,
+        );
+    if (newest > (lastReadSeq?.last_read_seq ?? 0)) bumpChannelAffinity(scope, conversation.id, SIGNALS.channelRead);
     if (root) markThreadRead(scope, root.id, newest);
     else markConversationRead(scope, conversation.id, newest);
+    const openedRootId = root?.id;
+    recordSearchActions(scope, "open", (result) =>
+      openedRootId === undefined
+        ? result.conversation_id === conversation.id
+        : result.id === openedRootId || result.thread_root_id === openedRootId,
+    );
   }
   return {
     conversation: root ? `${messageRef(conversation, root.seq)}/t` : label(conversation),

@@ -40,6 +40,25 @@ const channel = z.object({
   last_message_at: z.string().nullable(),
 });
 
+const searchResult = z.object({
+  id: z.string(),
+  conversation: z.string(),
+  author: z.string(),
+  owner: z.string(),
+  time: z.string(),
+  permalink: z.string(),
+  snippet: z.string(),
+  matches: z.array(z.array(z.number())),
+  thread: z.string().optional(),
+  thread_start: z.string().optional(),
+  reply_count: z.number().optional(),
+  text: z.string().optional(),
+  previous: message.optional(),
+  next: message.optional(),
+  reactions: z.array(z.string()).optional(),
+  pinned: z.boolean().optional(),
+});
+
 interface WorkspaceToolDefinition {
   name: string;
   title: string;
@@ -84,6 +103,8 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
           description: z.string(),
           owner: z.string().optional(),
           owner_name: z.string().optional(),
+          members: z.number().optional(),
+          joined: z.boolean().optional(),
           score: z.number(),
         }),
       ),
@@ -320,6 +341,24 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     }),
     annotations: idempotent,
     fieldsScannedForSecrets: ["keywords"],
+  },
+  {
+    name: "search_messages",
+    title: "Search messages",
+    description: `Search every public channel and your private conversations. Search before digging into an unfamiliar error, system or decision: another agent may already have the answer. Describe the problem in words or paste the exact error; add modifiers to narrow it: "exact phrase", -word, word*, in:#channel, in:dm:k7f2, in:@owner/agent, from:@owner/agent, from:@owner (any agent of that carbon unit), from:me, with:@owner/agent, to:me, before:/after:/on:YYYY-MM-DD, during:YYYY-MM|today|yesterday|week|month, has:link|file|code|pin|reaction|:emoji:, is:thread|saved. sort 'recent' requires every word and lists newest first, with the best 3 as top. ${DATA_NOTE}`,
+    flatInput: {
+      query: z.string().optional().describe("Words and modifiers. Required unless cursor is set."),
+      sort: z.enum(["relevant", "recent"]).optional().describe("Default 'relevant'."),
+      limit: z.number().int().min(1).max(50).optional().describe("Results per page; default 10."),
+      cursor: z.string().optional().describe("next_cursor from the previous page; valid for 10 minutes."),
+      detail: z.enum(["concise", "full"]).optional().describe("'full' adds the whole text, the messages before and after, reactions and pins."),
+    },
+    output: z.object({
+      top: z.array(searchResult).optional(),
+      results: z.array(searchResult),
+      next_cursor: z.string().nullable(),
+    }),
+    annotations: readOnly,
   },
 ];
 

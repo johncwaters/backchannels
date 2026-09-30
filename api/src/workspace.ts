@@ -10,9 +10,10 @@ import {
   updateChannel,
 } from "./conversations";
 import { checkInbox, getNotificationPrefs, markRead, setNotificationPrefs } from "./inbox";
-import { LIMITS, RATE_LIMITS, type RateLimit } from "./limits";
+import { LIMITS, RATE_LIMITS } from "./limits";
 import { deleteMessage, editMessage, followThread, pin, react, readMessages, save, sendMessage } from "./messages";
 import { MIGRATIONS } from "./schema";
+import { searchMessages } from "./search";
 import { fullHandle, ownerPart } from "./ids";
 import { ToolError, one, run, type AgentRow, type Scope } from "./store";
 
@@ -39,6 +40,7 @@ const TOOLS: Record<string, (scope: Scope, args: never) => unknown> = {
   mark_read: markRead,
   get_notification_prefs: getNotificationPrefs,
   set_notification_prefs: setNotificationPrefs,
+  search_messages: searchMessages,
 };
 
 export interface ToolOutcome {
@@ -148,10 +150,10 @@ export class WorkspaceDO extends DurableObject<Env> {
       agent.owner_name = caller.ownerName;
     }
     this.audit(caller.grantId, agent.id, name);
-    const limited = this.takeToken(name, agent.id, now);
+    const limited = this.takeTokens(name, caller, now);
     if (limited) return { error: limited };
     try {
-      const output = this.ctx.storage.transactionSync(() => handler({ sql: this.sql, now, agent }, args as never));
+      const output = this.ctx.storage.transactionSync(() => handler({ sql: this.sql, now, agent, webUrl: this.env.WEB_URL }, args as never));
       return { output: output as Record<string, unknown> };
     } catch (error) {
       if (error instanceof ToolError) return { error: error.message };
@@ -160,24 +162,30 @@ export class WorkspaceDO extends DurableObject<Env> {
   }
 
   // Token buckets (BUILD.md, Starting limits). Returns an error with a retry time, or null.
-  private takeToken(tool: string, agentId: string, now: number): string | null {
-    const limit: RateLimit | undefined = RATE_LIMITS[tool];
-    if (!limit) return null;
-    const key = `${limit.bucket}:${agentId}`;
-    const row = one<{ tokens: number; updated_at: number }>(this.sql, "SELECT tokens, updated_at FROM rate_buckets WHERE key = ?", key);
-    const refill = limit.count / limit.windowMs;
-    const tokens = Math.min(limit.count, (row?.tokens ?? limit.count) + (now - (row?.updated_at ?? now)) * refill);
-    if (tokens < 1) {
-      const wait = Math.ceil((1 - tokens) / refill / 1000);
-      return `rate limit: at most ${limit.count} ${limit.label} per ${limit.windowMs >= 3_600_000 ? "hour" : "minute"}; retry in ${wait}s`;
+  private takeTokens(tool: string, caller: ToolCaller, now: number): string | null {
+    const limits = RATE_LIMITS[tool] ?? [];
+    const buckets = limits.map((limit) => {
+      const key = `${limit.bucket}:${limit.per === "agent" ? caller.agentId : caller.grantId}`;
+      const row = one<{ tokens: number; updated_at: number }>(this.sql, "SELECT tokens, updated_at FROM rate_buckets WHERE key = ?", key);
+      const refillPerMs = limit.count / limit.windowMs;
+      const tokens = Math.min(limit.count, (row?.tokens ?? limit.count) + (now - (row?.updated_at ?? now)) * refillPerMs);
+      return { limit, key, tokens, refillPerMs };
+    });
+    const empty = buckets.find((bucket) => bucket.tokens < 1);
+    if (empty) {
+      const waitSeconds = Math.ceil((1 - empty.tokens) / empty.refillPerMs / 1000);
+      const period = empty.limit.windowMs >= 3_600_000 ? "hour" : "minute";
+      return `rate limit: at most ${empty.limit.count} ${empty.limit.label} per ${period}; retry in ${waitSeconds}s`;
     }
-    run(
-      this.sql,
-      "INSERT INTO rate_buckets (key, tokens, updated_at) VALUES (?, ?, ?) ON CONFLICT (key) DO UPDATE SET tokens = excluded.tokens, updated_at = excluded.updated_at",
-      key,
-      tokens - 1,
-      now,
-    );
+    for (const bucket of buckets) {
+      run(
+        this.sql,
+        "INSERT INTO rate_buckets (key, tokens, updated_at) VALUES (?, ?, ?) ON CONFLICT (key) DO UPDATE SET tokens = excluded.tokens, updated_at = excluded.updated_at",
+        bucket.key,
+        bucket.tokens - 1,
+        now,
+      );
+    }
     return null;
   }
 

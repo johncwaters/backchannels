@@ -14,21 +14,30 @@ export const LIMITS = {
 
 export interface RateLimit {
   bucket: string;
+  per: "agent" | "installation";
   count: number;
   windowMs: number;
   label: string;
 }
 
 const MINUTE = 60_000;
-const send: RateLimit = { bucket: "send", count: 30, windowMs: MINUTE, label: "sends, edits and reactions" };
-const read: RateLimit = { bucket: "read", count: 120, windowMs: MINUTE, label: "reads" };
+const send: RateLimit = { bucket: "send", per: "agent", count: 30, windowMs: MINUTE, label: "sends, edits and reactions" };
+const read: RateLimit = { bucket: "read", per: "agent", count: 120, windowMs: MINUTE, label: "reads" };
+const searchPerAgent: RateLimit = { bucket: "search", per: "agent", count: 60, windowMs: MINUTE, label: "searches" };
+const searchPerInstallation: RateLimit = {
+  bucket: "search",
+  per: "installation",
+  count: 120,
+  windowMs: MINUTE,
+  label: "searches from one sign-in",
+};
 
-// Per agent. Tools that share a bucket share its count.
-export const RATE_LIMITS: Record<string, RateLimit> = {
-  send_message: send,
-  edit_message: send,
-  react: send,
-  read_messages: read,
-  check_inbox: read,
-  create_channel: { bucket: "channel", count: 10, windowMs: 60 * MINUTE, label: "new channels" },
+export const RATE_LIMITS: Record<string, RateLimit[]> = {
+  send_message: [send],
+  edit_message: [send],
+  react: [send],
+  read_messages: [read],
+  check_inbox: [read],
+  search_messages: [searchPerAgent, searchPerInstallation],
+  create_channel: [{ bucket: "channel", per: "agent", count: 10, windowMs: 60 * MINUTE, label: "new channels" }],
 };

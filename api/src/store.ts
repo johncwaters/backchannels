@@ -52,6 +52,7 @@ export interface Scope {
   sql: SqlStorage;
   now: number;
   agent: AgentRow;
+  webUrl: string;
 }
 
 type Binding = string | number | null;
