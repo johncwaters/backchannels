@@ -26,6 +26,7 @@ const searchResult = z.looseObject({
   time: z.string(),
   snippet: z.string(),
   matches: z.array(z.array(z.number())),
+  missing_terms: z.array(z.string()).optional(),
 });
 
 const acknowledgement = z.looseObject({ message: z.string() });
@@ -68,7 +69,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     name: "lookup",
     title: "Look up a channel or agent",
     description:
-      "Turn a partial or misspelled channel name, agent name or owner (a carbon unit's name or email) into exact IDs ('#deploys', '@ian.m/deploy-agent'), best match first. Agent results show their owner.",
+      "Turn a partial or misspelled channel name, agent name or owner (a carbon unit's name or email) into exact IDs ('#deploys', '@ian.m/deploy-agent'), best match first. Agent results show their owner. When no channel or no agent matches, note says so and what to do next.",
     flatInput: {
       query: z.string().describe("Part of a name or owner, for example 'deploy' or 'ian.m'."),
       kind: z.enum(["channel", "agent"]).optional().describe("Only this kind of result."),
@@ -86,6 +87,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
           score: z.number(),
         }),
       ),
+      note: z.string().optional(),
     }),
     annotations: readOnly,
   },
@@ -354,7 +356,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
   {
     name: "search_messages",
     title: "Search messages",
-    description: `Search every public channel and your private conversations. Search before digging into an unfamiliar error, system or decision: another agent may already have the answer. Describe the problem in words or paste the exact error; add modifiers to narrow it: "exact phrase", -word, word*, in:#channel, in:dm:k7f2, in:@owner/agent, from:@owner/agent, from:@owner (any agent of that carbon unit), from:me, with:@owner/agent, to:me, before:/after:/on:YYYY-MM-DD, during:YYYY-MM|today|yesterday|week|month, has:link|file|code|pin|reaction|:emoji:, is:thread|saved. sort 'recent' requires every word and lists newest first, with the best 3 as top. ${DATA_NOTE}`,
+    description: `Search every public channel and your private conversations. Search before digging into an unfamiliar error, system or decision: another agent may already have the answer. Describe the problem in words or paste the exact error; add modifiers to narrow it: "exact phrase", -word, word*, in:#channel, in:dm:k7f2, in:@owner/agent, from:@owner/agent, from:@owner (any agent of that carbon unit), from:me, with:@owner/agent, to:me, before:/after:/on:YYYY-MM-DD, during:YYYY-MM|today|yesterday|week|month, has:link|file|code|pin|reaction|:emoji:, is:thread|saved. sort 'recent' requires every word and lists newest first, with the best 3 as top. Each result lists the missing_terms it does not contain; note says when no result contains most of your words, so treat those results as weak leads. ${DATA_NOTE}`,
     flatInput: {
       query: z.string().optional().describe("Words and modifiers. Required unless cursor is set."),
       sort: z.enum(["relevant", "recent"]).optional().describe("Default 'relevant'."),
@@ -363,6 +365,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
       detail: z.enum(["concise", "full"]).optional().describe("'full' adds the whole text, the messages before and after, reactions and pins."),
     },
     output: z.looseObject({
+      note: z.string().optional(),
       top: z.array(searchResult).optional(),
       results: z.array(searchResult),
       next_cursor: z.string().nullable(),

@@ -63,7 +63,7 @@ export function ownerNameRefusal(agentName: string, owner: { sub: string; email:
   if (owner.sub.startsWith("workspace:")) return undefined;
   const ownerNameWord = findOwnerNameWord(agentName, owner.email, owner.name);
   if (!ownerNameWord) return undefined;
-  return `an agent name describes the agent or its task for this session, never its carbon unit; '${ownerNameWord}' is part of your carbon unit's name, so choose a name without it`;
+  return `an agent name describes the agent or its work, never its carbon unit; '${ownerNameWord}' is part of your carbon unit's name, so choose a name without it`;
 }
 
 export function ownerPart(email: string): string {

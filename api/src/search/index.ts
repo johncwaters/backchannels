@@ -1,5 +1,6 @@
 import { ToolError, all, label, messageRef, one, viewMessage, type ConversationRow, type MessageRow, type Scope } from "../store";
 import { SEARCH, SEMANTIC, withOverrides, type Tuning, type TuningOverrides } from "./config";
+import { missingTerms, termPattern, weakMatchNote } from "./coverage";
 import { buildFilters, type Filters } from "./filters";
 import { ftsMatch, parseQuery, withoutStopWords, type FreeTerm, type ParsedQuery, type SortOrder } from "./query";
 import { fuse, lexicalCandidates, messageIdsForVectorHits, privateConversationIds, recheckVisible, rerank, type Ranked } from "./rank";
@@ -21,15 +22,6 @@ interface ResultRow extends MessageRow {
   kind: ConversationRow["kind"];
   author_handle: string;
   owner_email: string;
-}
-
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function termPattern(term: FreeTerm): string {
-  const body = term.text.trim().split(/\s+/).map(escapeRegExp).join("\\s+");
-  return term.phrase ? `(?<![\\p{L}\\p{N}])${body}(?![\\p{L}\\p{N}])` : `(?<![\\p{L}\\p{N}])${body}[\\p{L}\\p{N}_]*`;
 }
 
 export function matchOffsets(text: string, terms: FreeTerm[]): [number, number][] {
@@ -186,6 +178,8 @@ function formatResult(scope: Scope, row: ResultRow, snippet: string | undefined,
     snippet: snippet ?? row.text.slice(0, SEARCH.snippetFallbackChars),
     matches: matchOffsets(row.text, terms),
   };
+  const missing = missingTerms(row.text, withoutStopWords(terms));
+  if (missing.length) result.missing_terms = missing;
   if (row.thread_root_id) {
     const root = one<{ seq: number; text: string }>(scope.sql, "SELECT seq, text FROM messages WHERE id = ?", row.thread_root_id);
     if (root) {
@@ -278,6 +272,11 @@ export async function searchMessages(scope: Scope, args: SearchArgs) {
   )!.id;
 
   const firstPage = page(scope, searchId, ordered, 0, limit, parsed, detail);
+  if (sort === "relevant") {
+    const missingPerResult = firstPage.results.map((result) => (result.missing_terms as string[] | undefined) ?? []);
+    const note = weakMatchNote(withoutStopWords(parsed.include), missingPerResult);
+    if (note) return { note, ...firstPage };
+  }
   const top = sort === "recent" ? await topForRecent(scope, parsed, ordered, visibleIds, tuning) : undefined;
   if (!top) return firstPage;
   const topRows = loadRows(scope, top);

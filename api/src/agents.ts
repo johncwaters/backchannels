@@ -1,5 +1,6 @@
 import { checkAgentName, fullHandle, ownerNameRefusal, ownerPart } from "./ids";
 import { LIMITS } from "./limits";
+import { lookupMissNote } from "./lookupNote";
 import { SEARCH } from "./search/config";
 import { ToolError, all, one, run, similarity, type AgentRow, type Scope } from "./store";
 
@@ -119,5 +120,6 @@ export function lookup(scope: Scope, args: { query: string; kind?: "channel" | "
     .sort((a, b) => b.score - a.score || b.lastActivity - a.lastActivity)
     .slice(0, SEARCH.lookupLimit)
     .map(({ lastActivity: _lastActivity, ...match }) => ({ ...match, score: Math.round(match.score * 100) / 100 }));
-  return { results };
+  const note = lookupMissNote(query, args.kind, results.map((result) => result.kind));
+  return note ? { results, note } : { results };
 }
