@@ -2,6 +2,7 @@ import { openChat } from "./conversations";
 import { attachFiles } from "./files";
 import { LIMITS } from "./limits";
 import { SIGNALS } from "./search/config";
+import { termPattern } from "./search/coverage";
 import { queueDelete, queueMessageUpsert, queueThreadUpsert } from "./search/indexing";
 import {
   bumpAgentAffinity,
@@ -129,10 +130,34 @@ export function defaultLevel(scope: Scope, agentId: string): string {
   return one<{ level: string | null }>(scope.sql, "SELECT level FROM prefs WHERE agent_id = ? AND conversation_id IS NULL", agentId)?.level ?? "mentions";
 }
 
-function hasKeyword(scope: Scope, agentId: string, words: Set<string>): boolean {
-  return all<{ keyword: string }>(scope.sql, "SELECT keyword FROM keywords WHERE agent_id = ?", agentId).some((row) =>
-    row.keyword.includes(" ") ? [...words].join(" ").includes(row.keyword) : words.has(row.keyword),
-  );
+export interface KeywordMatcher {
+  matches(keyword: string): boolean;
+  readonly scannedPhraseCount: number;
+}
+
+export function keywordMatcher(text: string): KeywordMatcher {
+  const normalizedText = text.normalize("NFKC").toLowerCase().replace(/\s+/gu, " ");
+  const words = new Set(normalizedText.split(/[^\p{L}\p{N}_-]+/u).filter(Boolean));
+  const phraseMatches = new Map<string, boolean>();
+  return {
+    matches(keyword) {
+      const normalizedKeyword = keyword.normalize("NFKC").toLowerCase();
+      if (/^[\p{L}\p{N}]+$/u.test(normalizedKeyword)) return words.has(normalizedKeyword);
+      const known = phraseMatches.get(normalizedKeyword);
+      if (known !== undefined) return known;
+      const phrase = termPattern({ text: normalizedKeyword, phrase: true, prefix: false });
+      const found = new RegExp(`(?<![_-])${phrase}(?![_-])`, "iu").test(normalizedText);
+      phraseMatches.set(normalizedKeyword, found);
+      return found;
+    },
+    get scannedPhraseCount() {
+      return phraseMatches.size;
+    },
+  };
+}
+
+function hasKeyword(scope: Scope, agentId: string, matcher: KeywordMatcher): boolean {
+  return all<{ keyword: string }>(scope.sql, "SELECT keyword FROM keywords WHERE agent_id = ?", agentId).some(({ keyword }) => matcher.matches(keyword));
 }
 
 // At most one inbox row per candidate, from the first rule that matches (NOTIFICATIONS.md).
@@ -160,7 +185,7 @@ function fanOut(
   const candidates = new Set([...members, ...mentionedIds, ...followers.keys()]);
   candidates.delete(scope.agent.id);
 
-  const words = new Set(message.text.toLowerCase().split(/[^\p{L}\p{N}_-]+/u).filter(Boolean));
+  const matcher = keywordMatcher(message.text);
   const notNotified: string[] = [];
   const insert = (agentId: string, reason: string) =>
     run(
@@ -198,7 +223,7 @@ function fanOut(
       continue;
     }
     if (!member) continue; // a thread follower who left the channel
-    if (hasKeyword(scope, agentId, words)) {
+    if (hasKeyword(scope, agentId, matcher)) {
       insert(agentId, "keyword");
       continue;
     }
@@ -342,6 +367,7 @@ function ownMessage(scope: Scope, ref: string) {
 export function editMessage(scope: Scope, args: { message: string; text: string }) {
   const text = checkText(args.text);
   const { conversation, message } = ownMessage(scope, args.message);
+  requireOpen(conversation);
   if (message.deleted_at) throw new ToolError(`${args.message} is deleted`);
   const derived = derive(text);
   run(
@@ -393,8 +419,17 @@ export function deleteMessage(scope: Scope, args: { message: string }) {
     run(scope.sql, "DELETE FROM inbox WHERE message_id = ?", message.id);
     run(scope.sql, "DELETE FROM pins WHERE message_id = ?", message.id);
     queueDelete(scope, message, "msg");
-    if (message.thread_root_id) queueAffectedThread(scope, message);
-    else if (message.reply_count > 0) queueDelete(scope, message, "thread");
+    if (message.thread_root_id) {
+      run(
+        scope.sql,
+        `UPDATE messages SET reply_count = reply_count - 1, thread_version = thread_version + 1,
+           last_reply_at = (SELECT max(created_at) FROM messages WHERE thread_root_id = ?1 AND deleted_at IS NULL)
+         WHERE id = ?1`,
+        message.thread_root_id,
+      );
+      queueAffectedThread(scope, message);
+    }
+    if (!message.thread_root_id && message.reply_count > 0) queueDelete(scope, message, "thread");
   }
   return { message: messageRef(conversation, message.seq), deleted: true };
 }
@@ -409,11 +444,14 @@ export function react(scope: Scope, args: { message: string; emoji: string; remo
   const emoji = args.emoji.trim().toLowerCase().replace(/^:|:$/g, "");
   if (!/^[a-z0-9_+-]{1,32}$/.test(emoji)) throw new ToolError(`'${args.emoji}' is not an emoji shortcode; use a name like 'rocket' or '+1'`);
   const { conversation, message } = liveMessage(scope, args.message);
+  requireOpen(conversation);
   if (args.remove) {
     if (run(scope.sql, "DELETE FROM reactions WHERE message_id = ? AND agent_id = ? AND emoji = ?", message.id, scope.agent.id, emoji)) {
       run(scope.sql, "UPDATE messages SET reaction_count = reaction_count - 1 WHERE id = ?", message.id);
     }
-  } else if (
+  }
+  if (
+    !args.remove &&
     run(
       scope.sql,
       "INSERT INTO reactions (message_id, agent_id, emoji, created_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING",
@@ -434,17 +472,19 @@ export function react(scope: Scope, args: { message: string; emoji: string; remo
 export function pin(scope: Scope, args: { message: string; remove?: boolean }) {
   const { conversation, message } = liveMessage(scope, args.message);
   requireMember(scope, conversation, "pin messages");
-  if (args.remove) run(scope.sql, "DELETE FROM pins WHERE message_id = ?", message.id);
-  else {
-    run(
-      scope.sql,
-      "INSERT INTO pins (message_id, pinned_by, pinned_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING",
-      message.id,
-      scope.agent.id,
-      scope.now,
-    );
+  requireOpen(conversation);
+  if (args.remove) {
+    run(scope.sql, "DELETE FROM pins WHERE message_id = ?", message.id);
+    return { message: messageRef(conversation, message.seq), pinned: false };
   }
-  return { message: messageRef(conversation, message.seq), pinned: !args.remove };
+  run(
+    scope.sql,
+    "INSERT INTO pins (message_id, pinned_by, pinned_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING",
+    message.id,
+    scope.agent.id,
+    scope.now,
+  );
+  return { message: messageRef(conversation, message.seq), pinned: true };
 }
 
 export function save(scope: Scope, args: { message: string; remove?: boolean }) {

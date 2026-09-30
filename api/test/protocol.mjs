@@ -158,7 +158,101 @@ for (const protocolVersion of [MODERN, LEGACY]) {
       await expectOk(newcomer.call("leave_channel", { agent: "protocol-newcomer", channel: "#general" }), "leave_channel");
       const again = await expectOk(newcomer.call("register_agent", { name: "protocol-newcomer" }), "register_agent (again)");
       assert.equal(again.created, false);
+      assert.equal(again.handle, first.handle);
       assert.ok(!again.brief.channels.includes("#general"), "registering again rejoined #general");
+    });
+
+    test("leaving a private channel removes its followed threads and pins from the brief", async () => {
+      const ownerAgent = { agent: "protocol-owner" };
+      const peerAgent = { agent: "protocol-peer" };
+      const channel = `private-brief-${run}`.slice(0, 80);
+      const peerProfile = await expectOk(peer.call("register_agent", { name: "protocol-peer" }), "register_agent (peer)");
+      await expectOk(owner.call("create_channel", { ...ownerAgent, name: channel, private: true, purpose: "Private brief check" }), "create_channel");
+      await expectOk(owner.call("invite_to_channel", { ...ownerAgent, channel: `#${channel}`, agents: [peerProfile.handle] }), "invite_to_channel");
+      const root = await expectOk(owner.call("send_message", { ...ownerAgent, to: `#${channel}`, text: "Private thread root" }), "send_message (root)");
+      await expectOk(peer.call("follow_thread", { ...peerAgent, thread: `${root.message}/t` }), "follow_thread");
+      await expectOk(peer.call("pin", { ...peerAgent, message: root.message }), "pin");
+      await expectOk(owner.call("send_message", { ...ownerAgent, to: `#${channel}`, text: "Private thread reply", reply_to: root.message }), "send_message (reply)");
+      const before = await expectOk(peer.call("register_agent", { name: "protocol-peer" }), "register_agent (before leave)");
+      assert.ok(before.brief.threads.some((thread) => thread.thread === `${root.message}/t`));
+      assert.ok(before.brief.pins.some((message) => message.id === root.message));
+      await expectOk(peer.call("leave_channel", { ...peerAgent, channel: `#${channel}` }), "leave_channel");
+      const after = await expectOk(peer.call("register_agent", { name: "protocol-peer" }), "register_agent (after leave)");
+      assert.ok(!after.brief.threads.some((thread) => thread.thread === `${root.message}/t`));
+      assert.ok(!after.brief.pins.some((message) => message.id === root.message));
+      await expectOk(owner.call("invite_to_channel", { ...ownerAgent, channel: `#${channel}`, agents: [peerProfile.handle] }), "invite_to_channel (again)");
+      const rejoined = await expectOk(peer.call("register_agent", { name: "protocol-peer" }), "register_agent (rejoined)");
+      assert.ok(!rejoined.brief.threads.some((thread) => thread.thread === `${root.message}/t`));
+    });
+
+    test("reply deletion is idempotent and archived channels reject edits, reactions and pins", async () => {
+      const ownerAgent = { agent: "protocol-owner" };
+      const channel = `mutations-${run}`.slice(0, 80);
+      await expectOk(owner.call("create_channel", { ...ownerAgent, name: channel, purpose: "Message mutation check" }), "create_channel");
+      const root = await expectOk(owner.call("send_message", { ...ownerAgent, to: `#${channel}`, text: "Mutation root" }), "send_message (root)");
+      const reply = await expectOk(owner.call("send_message", { ...ownerAgent, to: `#${channel}`, text: "Mutation reply", reply_to: root.message }), "send_message (reply)");
+      const before = await expectOk(owner.call("read_messages", { ...ownerAgent, conversation: root.message }), "read_messages (before delete)");
+      assert.equal(before.messages[0].reply_count, 1);
+      await expectOk(owner.call("delete_message", { ...ownerAgent, message: reply.message }), "delete_message");
+      await expectOk(owner.call("delete_message", { ...ownerAgent, message: reply.message }), "delete_message (again)");
+      const after = await expectOk(owner.call("read_messages", { ...ownerAgent, conversation: root.message }), "read_messages (after delete)");
+      assert.equal(after.messages[0].reply_count ?? 0, 0);
+      await expectOk(owner.call("react", { ...ownerAgent, message: root.message, emoji: "eyes" }), "react");
+      await expectOk(owner.call("pin", { ...ownerAgent, message: root.message }), "pin");
+      await expectOk(owner.call("update_channel", { ...ownerAgent, channel: `#${channel}`, archived: true }), "update_channel (archive)");
+      for (const [tool, argumentsForTool] of [
+        ["edit_message", { text: "Edited root" }],
+        ["react", { emoji: "rocket" }],
+        ["react", { emoji: "eyes", remove: true }],
+        ["pin", {}],
+        ["pin", { remove: true }],
+      ]) {
+        const refusal = await owner.call(tool, { ...ownerAgent, message: root.message, ...argumentsForTool });
+        assert.equal(refusal.ok, false);
+        assert.match(refusal.error, /archived/);
+      }
+      const archived = await expectOk(owner.call("read_messages", { ...ownerAgent, conversation: root.message, detail: "full" }), "read_messages (archived)");
+      assert.equal(archived.messages[0].text, "Mutation root");
+      assert.equal(archived.messages[0].pinned, true);
+      assert.ok(archived.messages[0].reactions.length > 0);
+    });
+
+    test("keyword notifications match phrases and punctuation without substring or deduplication matches", async () => {
+      const keywordClient = mcpClient(`keywords${run}`.slice(0, 40), protocolVersion);
+      const keywordAgent = { agent: "notification-check" };
+      const ownerAgent = { agent: "protocol-owner" };
+      const channel = `keywords-${run}`.slice(0, 80);
+      await expectOk(keywordClient.call("register_agent", { name: keywordAgent.agent, description: "Keyword notification check" }), "register_agent (keywords)");
+      await expectOk(owner.call("create_channel", { ...ownerAgent, name: channel, purpose: "Keyword check" }), "create_channel");
+      await expectOk(keywordClient.call("join_channel", { ...keywordAgent, channel: `#${channel}` }), "join_channel");
+      await expectOk(keywordClient.call("set_notification_prefs", { ...keywordAgent, keywords: ["api key", "api api", "v1.2"] }), "set_notification_prefs");
+      const expectedMessageIds = [];
+      for (const [text, shouldNotify] of [["rapi keyboard", false], ["api token key", false], ["api token api", false], ["API\n KEY", true], ["api api key", true], ["Upgrade V1.2", true]]) {
+        const sent = await expectOk(owner.call("send_message", { ...ownerAgent, to: `#${channel}`, text }), "send_message (keyword)");
+        if (shouldNotify) expectedMessageIds.push(sent.message);
+      }
+      const inbox = await expectOk(keywordClient.call("check_inbox", keywordAgent), "check_inbox (keywords)");
+      assert.deepEqual(inbox.items.filter((item) => item.reason === "keyword").map((item) => item.message.id), expectedMessageIds);
+    });
+
+    test("search cursors return successive pages from the same final order", async () => {
+      const ownerAgent = { agent: "protocol-owner" };
+      const channel = `search-pages-${run}`.slice(0, 80);
+      await expectOk(owner.call("create_channel", { ...ownerAgent, name: channel, purpose: "Search page check" }), "create_channel");
+      const sentMessageIds = [];
+      for (let index = 0; index < 3; index++) {
+        const sent = await expectOk(owner.call("send_message", { ...ownerAgent, to: `#${channel}`, text: `Search page ${index}` }), "send_message (search page)");
+        sentMessageIds.push(sent.message);
+      }
+      const first = await expectOk(owner.call("search_messages", { ...ownerAgent, query: `in:#${channel}`, limit: 1 }), "search_messages (first page)");
+      assert.ok(first.next_cursor);
+      await expectOk(owner.call("send_message", { ...ownerAgent, to: `#${channel}`, text: "Later message" }), "send_message (after search)");
+      const second = await expectOk(owner.call("search_messages", { ...ownerAgent, cursor: first.next_cursor, limit: 1 }), "search_messages (second page)");
+      const third = await expectOk(owner.call("search_messages", { ...ownerAgent, cursor: second.next_cursor, limit: 1 }), "search_messages (third page)");
+      const returnedMessageIds = [...first.results, ...second.results, ...third.results].map((message) => message.id);
+      assert.equal(returnedMessageIds.length, 3);
+      assert.deepEqual(new Set(returnedMessageIds), new Set(sentMessageIds));
+      assert.equal(third.next_cursor, null);
     });
 
     test("send_message and edit_message return mentions of handles no agent has as unknown_mentions", async () => {

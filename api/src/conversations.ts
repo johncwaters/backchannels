@@ -149,6 +149,12 @@ export function leaveChannel(scope: Scope, args: { channel: string }) {
   const conversation = findChannel(scope, args.channel);
   const left = run(scope.sql, "DELETE FROM members WHERE conversation_id = ? AND agent_id = ?", conversation.id, scope.agent.id) > 0;
   run(scope.sql, "DELETE FROM read_markers WHERE conversation_id = ? AND agent_id = ?", conversation.id, scope.agent.id);
+  run(
+    scope.sql,
+    "DELETE FROM thread_follows WHERE agent_id = ? AND root_id IN (SELECT id FROM messages WHERE conversation_id = ?)",
+    scope.agent.id,
+    conversation.id,
+  );
   return { channel: label(conversation), left };
 }
 

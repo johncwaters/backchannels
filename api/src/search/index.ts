@@ -1,11 +1,11 @@
-import { ToolError, all, label, messageRef, one, viewMessage, type ConversationRow, type MessageRow, type Scope } from "../store";
+import { ToolError, all, label, messageRef, one, run, viewMessage, type ConversationRow, type MessageRow, type Scope } from "../store";
 import { SEARCH, SEMANTIC, withOverrides, type Tuning, type TuningOverrides } from "./config";
 import { missingTerms, termPattern, weakMatchNote } from "./coverage";
 import { buildFilters, type Filters } from "./filters";
 import { ftsMatch, parseQuery, withoutStopWords, type FreeTerm, type ParsedQuery, type SortOrder } from "./query";
 import { fuse, lexicalCandidates, messageIdsForVectorHits, privateConversationIds, recheckVisible, rerank, type Ranked } from "./rank";
 import { crossEncoderScores, searchVectors, withTimeout } from "./semantic";
-import { bumpUsefulness } from "./signals";
+import { bumpUsefulness, type ShownPage } from "./signals";
 
 type Detail = "concise" | "full";
 
@@ -234,16 +234,55 @@ function decodeCursor(cursor: string): { searchId: number; offset: number } {
   return { searchId: Number(match[1]), offset: Number(match[2]) };
 }
 
-function page(scope: Scope, searchId: number, ordered: number[], offset: number, limit: number, parsed: ParsedQuery, detail: Detail) {
+const SEARCH_CURSOR_PREFIX = "search_cursor:";
+
+function page(
+  scope: Scope,
+  ordered: number[],
+  offset: number,
+  limit: number,
+  parsed: ParsedQuery,
+  detail: Detail,
+  session: { id?: number; query: string; sort: SortOrder },
+  top: number[] = [],
+) {
   const pageIds = ordered.slice(offset, offset + limit);
-  const rows = loadRows(scope, pageIds);
-  const visible = pageIds.map((id) => rows.get(id)).filter((row): row is ResultRow => !!row && !row.deleted_at);
-  const snippetById = snippets(scope, visible.map((row) => row.id), parsed.include);
+  const rows = loadRows(scope, [...pageIds, ...top]);
+  const privateIds = new Set(privateConversationIds(scope));
+  const visibleRows = (ids: number[]) => ids.map((id) => rows.get(id)).filter((row): row is ResultRow =>
+    !!row && row.deleted_at === null && (row.kind === "public" || privateIds.has(row.conversation_id)),
+  );
+  const visible = visibleRows(pageIds);
+  const visibleTop = visibleRows(top);
+  const shown = [...new Map([...visibleTop, ...visible].map((row) => [row.id, row])).values()];
+  const shownIds = shown.map((row) => row.id);
+  const snippetById = snippets(scope, shownIds, parsed.include);
+  const pageRankById = new Map(pageIds.map((id, index) => [id, offset + index + 1]));
+  const topRankById = new Map(top.map((id, index) => [id, index + 1]));
+  const shownPage: ShownPage = {
+    ...(session.id === undefined ? {} : { search_id: session.id }),
+    results: visible.map((row) => ({ id: row.id, rank: pageRankById.get(row.id)! })),
+    top: visibleTop.map((row) => ({ id: row.id, rank: topRankById.get(row.id)! })),
+  };
+  const logId = one<{ id: number }>(
+    scope.sql,
+    "INSERT INTO search_log (agent_id, query, sort, results, created_at) VALUES (?, ?, ?, ?, ?) RETURNING id",
+    scope.agent.id,
+    session.query,
+    session.sort,
+    JSON.stringify(shownPage),
+    scope.now,
+  )!.id;
+  const searchId = session.id ?? logId;
+  if (session.id === undefined && offset + limit < ordered.length) {
+    run(scope.sql, "INSERT INTO meta (key, value) VALUES (?, ?)", `${SEARCH_CURSOR_PREFIX}${searchId}`, JSON.stringify(ordered));
+  }
   const shownPerConversation = new Map<number, number>();
-  for (const row of visible) shownPerConversation.set(row.conversation_id, (shownPerConversation.get(row.conversation_id) ?? 0) + 1);
+  for (const row of shown) shownPerConversation.set(row.conversation_id, (shownPerConversation.get(row.conversation_id) ?? 0) + 1);
   for (const [conversationId, count] of shownPerConversation) bumpUsefulness(scope, conversationId, "shown", count);
   const nextOffset = offset + limit;
   return {
+    ...(visibleTop.length ? { top: visibleTop.map((row) => formatResult(scope, row, snippetById.get(row.id), parsed.include, detail)) } : {}),
     results: visible.map((row) => formatResult(scope, row, snippetById.get(row.id), parsed.include, detail)),
     next_cursor: nextOffset < ordered.length ? encodeCursor(searchId, nextOffset) : null,
   };
@@ -259,19 +298,27 @@ function searchTuning(scope: Scope): Tuning {
 export async function searchMessages(scope: Scope, args: SearchArgs) {
   const limit = Math.min(Math.max(args.limit ?? SEARCH.defaultLimit, 1), SEARCH.maxLimit);
   const detail = args.detail ?? "concise";
+  run(
+    scope.sql,
+    "DELETE FROM meta WHERE key GLOB ? AND NOT EXISTS (SELECT 1 FROM search_log WHERE id = CAST(substr(meta.key, ?) AS INTEGER) AND created_at >= ?)",
+    `${SEARCH_CURSOR_PREFIX}*`,
+    SEARCH_CURSOR_PREFIX.length + 1,
+    scope.now - SEARCH.cursorTtlMs,
+  );
 
   if (args.cursor) {
     const { searchId, offset } = decodeCursor(args.cursor);
-    const log = one<{ query: string; results: string; created_at: number }>(
+    const log = one<{ query: string; sort: SortOrder; created_at: number }>(
       scope.sql,
-      "SELECT query, results, created_at FROM search_log WHERE id = ? AND agent_id = ?",
+      "SELECT query, sort, created_at FROM search_log WHERE id = ? AND agent_id = ?",
       searchId,
       scope.agent.id,
     );
-    if (!log || scope.now - log.created_at > SEARCH.cursorTtlMs) {
+    const snapshot = one<{ value: string }>(scope.sql, "SELECT value FROM meta WHERE key = ?", `${SEARCH_CURSOR_PREFIX}${searchId}`);
+    if (!log || !snapshot || scope.now - log.created_at > SEARCH.cursorTtlMs) {
       throw new ToolError("this cursor expired (cursors last 10 minutes); run the search again");
     }
-    return page(scope, searchId, JSON.parse(log.results), offset, limit, parseQuery(log.query), detail);
+    return page(scope, JSON.parse(snapshot.value), offset, limit, parseQuery(log.query), detail, { id: searchId, query: log.query, sort: log.sort });
   }
 
   const query = args.query?.trim() ?? "";
@@ -283,33 +330,14 @@ export async function searchMessages(scope: Scope, args: SearchArgs) {
   const searcher: Searcher = { privateIds: privateConversationIds(scope), selfIds: [scope.agent.id] };
   const tuning = searchTuning(scope);
   const ordered = await orderedIds(scope, parsed, sort, searcher, tuning);
-  const searchId = one<{ id: number }>(
-    scope.sql,
-    "INSERT INTO search_log (agent_id, query, sort, results, created_at) VALUES (?, ?, ?, ?, ?) RETURNING id",
-    scope.agent.id,
-    query,
-    sort,
-    JSON.stringify(ordered),
-    scope.now,
-  )!.id;
-
-  const firstPage = page(scope, searchId, ordered, 0, limit, parsed, detail);
+  const top = sort === "recent" ? await topForRecent(scope, parsed, ordered, searcher, tuning) : undefined;
+  const firstPage = page(scope, ordered, 0, limit, parsed, detail, { query, sort }, top);
   if (sort === "relevant") {
     const missingPerResult = firstPage.results.map((result) => (result.missing_terms as string[] | undefined) ?? []);
     const note = weakMatchNote(withoutStopWords(parsed.include), missingPerResult);
     if (note) return { note, ...firstPage };
   }
-  const top = sort === "recent" ? await topForRecent(scope, parsed, ordered, searcher, tuning) : undefined;
-  if (!top) return firstPage;
-  const topRows = loadRows(scope, top);
-  const topSnippets = snippets(scope, top, parsed.include);
-  return {
-    top: top.flatMap((id) => {
-      const row = topRows.get(id);
-      return row ? [formatResult(scope, row, topSnippets.get(id), parsed.include, detail)] : [];
-    }),
-    ...firstPage,
-  };
+  return firstPage;
 }
 
 export interface ViewerSearch {

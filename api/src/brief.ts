@@ -51,13 +51,21 @@ export function buildBrief(scope: Scope) {
 
   const threads = all<ThreadRow>(
     scope.sql,
-    `SELECT r.seq AS root_seq, c.slug, c.kind, substr(r.text, 1, ?2) AS start, r.last_reply_at,
-       (SELECT count(*) FROM messages m
-        WHERE m.thread_root_id = f.root_id AND m.deleted_at IS NULL AND m.author_id != ?1
-          AND m.seq > COALESCE((SELECT t.last_read_seq FROM thread_reads t WHERE t.agent_id = ?1 AND t.root_id = f.root_id), 0)) AS unread
-     FROM thread_follows f JOIN messages r ON r.id = f.root_id JOIN conversations c ON c.id = r.conversation_id
-     WHERE f.agent_id = ?1 AND f.state IN ('auto', 'on') AND r.deleted_at IS NULL AND r.reply_count > 0
-     ORDER BY unread > 0 DESC, r.last_reply_at DESC LIMIT ?3`,
+    `WITH followed AS MATERIALIZED (
+       SELECT r.id AS root_id, r.seq AS root_seq, c.slug, c.kind, substr(r.text, 1, ?2) AS start, r.last_reply_at,
+         COALESCE(t.last_read_seq, 0) AS last_read_seq,
+         EXISTS (SELECT 1 FROM messages m WHERE m.thread_root_id = r.id AND m.deleted_at IS NULL
+           AND m.author_id != ?1 AND m.seq > COALESCE(t.last_read_seq, 0)) AS has_unread
+       FROM thread_follows f JOIN messages r ON r.id = f.root_id JOIN conversations c ON c.id = r.conversation_id
+       LEFT JOIN members membership ON membership.conversation_id = c.id AND membership.agent_id = ?1
+       LEFT JOIN thread_reads t ON t.root_id = r.id AND t.agent_id = ?1
+       WHERE f.agent_id = ?1 AND f.state IN ('auto', 'on') AND r.deleted_at IS NULL AND r.reply_count > 0
+         AND (c.kind = 'public' OR membership.agent_id IS NOT NULL)
+       ORDER BY has_unread DESC, r.last_reply_at DESC LIMIT ?3
+     )
+     SELECT followed.*, (SELECT count(*) FROM messages m WHERE m.thread_root_id = followed.root_id
+       AND m.deleted_at IS NULL AND m.author_id != ?1 AND m.seq > followed.last_read_seq) AS unread
+     FROM followed ORDER BY has_unread DESC, last_reply_at DESC`,
     me,
     BRIEF_TEXT_CHARS,
     BRIEF_ITEMS,
@@ -72,7 +80,9 @@ export function buildBrief(scope: Scope) {
     scope.sql,
     `SELECT m.seq, c.slug, c.kind, m.created_at, m.text FROM pins p
      JOIN messages m ON m.id = p.message_id JOIN conversations c ON c.id = m.conversation_id
-     WHERE p.pinned_by = ? AND m.deleted_at IS NULL ORDER BY p.pinned_at DESC LIMIT ?`,
+     LEFT JOIN members membership ON membership.conversation_id = c.id AND membership.agent_id = ?1
+     WHERE p.pinned_by = ?1 AND m.deleted_at IS NULL AND (c.kind = 'public' OR membership.agent_id IS NOT NULL)
+     ORDER BY p.pinned_at DESC LIMIT ?2`,
     me,
     BRIEF_ITEMS,
   ).map((row) => ({ id: messageRef(conversationOf(row), row.seq), text: row.text.slice(0, BRIEF_TEXT_CHARS) }));

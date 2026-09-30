@@ -70,13 +70,60 @@ export function bumpUsefulness(scope: Scope, conversationId: number, column: "sh
   );
 }
 
-function resultMessages(scope: Scope, resultsJson: string): ResultMessage[] {
+export interface ShownResult {
+  id: number;
+  rank: number;
+}
+
+export interface ShownPage {
+  search_id?: number;
+  results: ShownResult[];
+  top: ShownResult[];
+}
+
+interface ShownRanks {
+  shownIds: number[];
+  resultRankById: Map<number, number>;
+}
+
+export function shownRanks(resultsJson: string): ShownRanks {
+  const stored: number[] | ShownPage = JSON.parse(resultsJson);
+  if (Array.isArray(stored)) return { shownIds: stored, resultRankById: new Map(stored.map((id, index) => [id, index + 1])) };
+  return {
+    shownIds: [...new Set([...stored.top, ...stored.results].map((shown) => shown.id))],
+    resultRankById: new Map(stored.results.map((shown) => [shown.id, shown.rank])),
+  };
+}
+
+function resultMessages(scope: Scope, shownIds: number[]): ResultMessage[] {
   return all<ResultMessage>(
     scope.sql,
     `SELECT m.id, m.conversation_id, m.thread_root_id, m.author_id, m.seq, c.slug
      FROM json_each(?) r JOIN messages m ON m.id = r.value JOIN conversations c ON c.id = m.conversation_id`,
-    resultsJson,
+    JSON.stringify(shownIds),
   );
+}
+
+function recordRankedAction(scope: Scope, searchId: number, messageId: number, rank: number | undefined, action: SearchAction): boolean {
+  if (rank === undefined) return false;
+  const alreadyRecorded = one(
+    scope.sql,
+    "SELECT 1 FROM search_actions WHERE search_id = ? AND message_id = ? AND action = ?",
+    searchId,
+    messageId,
+    action,
+  );
+  if (alreadyRecorded) return false;
+  run(
+    scope.sql,
+    "INSERT INTO search_actions (search_id, message_id, rank, action, created_at) VALUES (?, ?, ?, ?, ?)",
+    searchId,
+    messageId,
+    rank,
+    action,
+    scope.now,
+  );
+  return true;
 }
 
 export function recordSearchActions(scope: Scope, action: SearchAction, actedOn: (result: ResultMessage) => boolean): void {
@@ -89,25 +136,10 @@ export function recordSearchActions(scope: Scope, action: SearchAction, actedOn:
   );
   const rewarded = new Set<number>();
   for (const search of searches) {
-    const ranked: number[] = JSON.parse(search.results);
-    for (const result of resultMessages(scope, search.results).filter(actedOn)) {
-      const alreadyRecorded = one(
-        scope.sql,
-        "SELECT 1 FROM search_actions WHERE search_id = ? AND message_id = ? AND action = ?",
-        search.id,
-        result.id,
-        action,
-      );
-      if (alreadyRecorded) continue;
-      run(
-        scope.sql,
-        "INSERT INTO search_actions (search_id, message_id, rank, action, created_at) VALUES (?, ?, ?, ?, ?)",
-        search.id,
-        result.id,
-        ranked.indexOf(result.id) + 1,
-        action,
-        scope.now,
-      );
+    const { shownIds, resultRankById } = shownRanks(search.results);
+    for (const result of resultMessages(scope, shownIds).filter(actedOn)) {
+      const shouldReward = recordRankedAction(scope, search.id, result.id, resultRankById.get(result.id), action);
+      if (!shouldReward) continue;
       if (rewarded.has(result.id)) continue;
       rewarded.add(result.id);
       bumpUsefulness(scope, result.conversation_id, "used");
