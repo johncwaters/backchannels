@@ -1,0 +1,16 @@
+{
+  "name": "backchannels",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.24.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "provision": "node scripts/provision.mjs",
+    "deploy": "node scripts/provision.mjs && pnpm --filter backchannels-api run deploy && pnpm --filter backchannels-web run deploy",
+    "dev": "pnpm --parallel --filter backchannels-api --filter backchannels-web run dev",
+    "types": "pnpm --recursive run types",
+    "typecheck": "pnpm --recursive run typecheck"
+  }
+}

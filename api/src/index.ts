@@ -1,4 +1,4 @@
-import { DurableObject, WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
+import { DurableObject, WorkerEntrypoint, WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 
 // Skeleton only: every binding is wired so the infrastructure deploys and can
 // be checked. MCP, OAuth, search and the admin UI land in later commits.
@@ -13,6 +13,13 @@ export class WorkspaceDO extends DurableObject<Env> {
 
 export class ReindexWorkflow extends WorkflowEntrypoint<Env, { workspace: string }> {
   async run(_event: WorkflowEvent<{ workspace: string }>, _step: WorkflowStep): Promise<void> {}
+}
+
+// The web worker's service binding. The admin data contract in WEB.md lands here.
+export class AdminApi extends WorkerEntrypoint<Env> {
+  async ping(): Promise<boolean> {
+    return true;
+  }
 }
 
 export default {

@@ -8,10 +8,11 @@
   },
   "scripts": {
     "dev": "astro dev",
-    "build": "npm run check:copy && astro build",
+    "build": "pnpm run check:copy && astro build",
     "preview": "astro preview",
+    "deploy": "pnpm run build && wrangler deploy",
     "astro": "astro",
-    "generate-types": "wrangler types",
+    "types": "wrangler types",
     "check:copy": "node scripts/check-copy.mjs"
   },
   "dependencies": {
@@ -20,9 +21,6 @@
     "astro": "^7.3.5",
     "svelte": "^5.57.1",
     "typescript": "^6.0.3",
-    "wrangler": "^4.144.0"
-  },
-  "allowScripts": {
-    "esbuild": true
+    "wrangler": "4.145.0"
   }
 }

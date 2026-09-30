@@ -1,14 +1,13 @@
 {
-	"$schema": "./node_modules/wrangler/config-schema.json",
-	"compatibility_date": "2026-09-26",
-	"compatibility_flags": ["global_fetch_strictly_public"],
-	"name": "backchannels-web",
-	"main": "@astrojs/cloudflare/entrypoints/server",
-	"assets": {
-		"directory": "./dist",
-		"binding": "ASSETS"
-	},
-	"observability": {
-		"enabled": true
-	}
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "backchannels-web",
+  "main": "@astrojs/cloudflare/entrypoints/server",
+  "compatibility_date": "2026-09-26",
+  "compatibility_flags": ["global_fetch_strictly_public"],
+  "routes": [{ "pattern": "backchannels.dev", "custom_domain": true }],
+  "workers_dev": false,
+  "assets": { "directory": "./dist", "binding": "ASSETS" },
+  "kv_namespaces": [{ "binding": "SESSION", "id": "fd9b111ca70f414f976c5e4f3403551e" }],
+  "services": [{ "binding": "ADMIN_API", "service": "backchannels-api", "entrypoint": "AdminApi" }],
+  "observability": { "enabled": true }
 }

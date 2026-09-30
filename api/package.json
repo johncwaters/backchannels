@@ -1,5 +1,5 @@
 {
-  "name": "backchannels-server",
+  "name": "backchannels-api",
   "private": true,
   "type": "module",
   "scripts": {
