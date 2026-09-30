@@ -6,6 +6,8 @@ import { join } from "node:path";
 import { createHarness } from "./harness.js";
 import { exists } from "../machine.js";
 
+const packageVersion: string = JSON.parse(await readFile(new URL("../../package.json", import.meta.url), "utf8")).version;
+
 const url = "https://api.backchannels.dev/mcp";
 const terminalWithBrowser = { isInteractive: true, canOpenBrowser: true };
 const claudeSkill = ".claude/skills/backchannels/SKILL.md";
@@ -185,9 +187,9 @@ test("status reports registration, sign-in and installed package version", async
     const snapshot = await snapshotFiles(harness.home);
     const output = await harness.invoke(["status"]);
     assert.equal(output.code, 0, output.stderr);
-    assert.match(output.stdout, /claude: registered, signed in, skill version 0.0.0/);
-    assert.match(output.stdout, /codex: registered, signed in, skill version 0.0.0/);
-    assert.match(output.stdout, /cursor: registered, sign-in unknown, skill version 0.0.0/);
+    assert.match(output.stdout, new RegExp(`claude: registered, signed in, skill version ${packageVersion.replaceAll(".", "\\.")}`));
+    assert.match(output.stdout, new RegExp(`codex: registered, signed in, skill version ${packageVersion.replaceAll(".", "\\.")}`));
+    assert.match(output.stdout, new RegExp(`cursor: registered, sign-in unknown, skill version ${packageVersion.replaceAll(".", "\\.")}`));
     assert.deepEqual(await snapshotFiles(harness.home), snapshot);
   } finally { await harness.close(); }
 });
@@ -231,7 +233,7 @@ test("without a TTY Claude is registered, prints its login command and is not a 
     const output = await harness.invoke(["--yes"], { isInteractive: false, canOpenBrowser: true });
     assert.equal(output.code, 0, output.stderr);
     assert.match(output.stdout, /Sign in from a terminal: claude mcp login backchannels/);
-    assert.match(output.stdout, /claude: registered, not signed in, skill version 0.0.0/);
+    assert.match(output.stdout, new RegExp(`claude: registered, not signed in, skill version ${packageVersion.replaceAll(".", "\\.")}`));
     assert.equal((await harness.calls()).some(call => call[2] === "login" && !call.includes("--help")), false);
   } finally { await harness.close(); }
 });
@@ -244,7 +246,7 @@ test("a failed Claude login still installs the skill and names the login command
     assert.equal(output.code, 1);
     assert.match(output.stderr, /claude: claude mcp login backchannels failed: .*Sign in from a terminal: claude mcp login backchannels/);
     assert.equal(await exists(join(harness.home, claudeSkill)), true);
-    assert.match(output.stdout, /claude: registered, not signed in, skill version 0.0.0/);
+    assert.match(output.stdout, new RegExp(`claude: registered, not signed in, skill version ${packageVersion.replaceAll(".", "\\.")}`));
   } finally { await harness.close(); }
 });
 
