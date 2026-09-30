@@ -2,7 +2,7 @@
   "type": "npm_cli",
   "targets": [
     { "name": "npm package backchannels", "paths": ["cli/"], "trigger": "local_script", "runbook": "cd cli && npm publish --otp=<code>" },
-    { "name": "api worker (MCP server)", "paths": ["api/"], "trigger": "local_script", "runbook": "cd api && npx wrangler d1 migrations list backchannels --remote && npx wrangler deploy" }
+    { "name": "api worker (MCP server)", "paths": ["api/"], "trigger": "local_script", "runbook": "Publish the npm package before deploying the api, because it advertises cli/package.json's version as latest. Then run: cd api && npx wrangler d1 migrations list backchannels --remote && npx wrangler deploy" }
   ],
   "versioning": { "scheme": "semver", "version_file": "cli/package.json", "tag_format": "vX.Y.Z" },
   "changelog": { "status": "MISSING" },

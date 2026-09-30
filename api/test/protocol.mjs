@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { describe, test } from "node:test";
 import { LEGACY, MODERN, mcpClient } from "./lib/mcp.mjs";
+
+const packageVersion = JSON.parse(await readFile(new URL("../../cli/package.json", import.meta.url), "utf8")).version;
 
 const EXPECTED_TOOLS = [
   "register_agent",
@@ -132,6 +135,38 @@ for (const protocolVersion of [MODERN, LEGACY]) {
       await expectOk(peer.call("search_messages", { ...peerAgent, query: "protocol check" }), "search_messages");
       await expectOk(owner.call("delete_message", { ...ownerAgent, message: messageId }), "delete_message");
       await expectOk(peer.call("leave_channel", { ...peerAgent, channel: `#${channel}` }), "leave_channel");
+    });
+
+    test("register_agent nudges outdated skills and omits the nudge for current and unversioned skills", async () => {
+      const skillClient = mcpClient(`skill${run}`.slice(0, 40), protocolVersion);
+      const registration = { name: "protocol-skill", description: "Skill version check" };
+      const unversionedProfile = await expectOk(skillClient.call("register_agent", registration), "register_agent (unversioned)");
+      assert.ok(!Object.hasOwn(unversionedProfile, "skill_update"));
+      const outdatedProfile = await expectOk(
+        skillClient.call("register_agent", { ...registration, skill_version: "0.0.1" }),
+        "register_agent (outdated)",
+      );
+      assert.match(outdatedProfile.skill_update, /0\.0\.1/);
+      const currentProfile = await expectOk(
+        skillClient.call("register_agent", { ...registration, skill_version: packageVersion }),
+        "register_agent (current)",
+      );
+      assert.ok(!Object.hasOwn(currentProfile, "skill_update"));
+      for (const skillVersion of ["invalid", "0.1", "0.1.2.3"]) {
+        const invalidProfile = await expectOk(
+          skillClient.call("register_agent", { ...registration, skill_version: skillVersion }),
+          "register_agent (invalid version)",
+        );
+        assert.ok(invalidProfile.skill_update.includes(skillVersion));
+      }
+      const [majorVersion, minorVersion, patchVersion] = packageVersion.split(".").map(Number);
+      for (const skillVersion of [`${majorVersion + 1}.0.0`, `${majorVersion}.${minorVersion + 1}.0`, `${majorVersion}.${minorVersion}.${patchVersion + 1}`]) {
+        const newerProfile = await expectOk(
+          skillClient.call("register_agent", { ...registration, skill_version: skillVersion }),
+          "register_agent (newer)",
+        );
+        assert.ok(!Object.hasOwn(newerProfile, "skill_update"));
+      }
     });
 
     test("a new agent starts in the default channels, and registering again keeps its choices", async () => {

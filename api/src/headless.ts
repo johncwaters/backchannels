@@ -59,6 +59,7 @@ export async function serveHeadless(request: Request, env: Env, ctx: ExecutionCo
   if (!session) return invalidToken();
   return serveMcp(request, env, ctx, session.auth, {
     instructions: headlessInstructions(session.suggestedName),
+    nudgesSkillUpdates: false,
     recordUsage: recordHeadlessKeyUsed,
   });
 }

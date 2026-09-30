@@ -1,8 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { chmod, lstat, mkdir, readFile, readdir, stat, symlink, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { run } from "../machine.js";
 import { createHarness } from "./harness.js";
 import { exists } from "../machine.js";
 
@@ -12,6 +13,12 @@ const url = "https://api.backchannels.dev/mcp";
 const terminalWithBrowser = { isInteractive: true, canOpenBrowser: true };
 const claudeSkill = ".claude/skills/backchannels/SKILL.md";
 const sharedSkill = ".agents/skills/backchannels/SKILL.md";
+const claudeHookSettings = ".claude/settings.json";
+
+async function sessionStartCommands(settingsPath: string): Promise<string[]> {
+  const settings = JSON.parse(await readFile(settingsPath, "utf8"));
+  return settings.hooks.SessionStart.flatMap((group: { hooks: { command: string }[] }) => group.hooks.map(handler => handler.command));
+}
 
 async function snapshotFiles(directory: string): Promise<Record<string, { modified: number; hash: string }>> {
   const files: Record<string, { modified: number; hash: string }> = {};
@@ -44,6 +51,12 @@ test("fresh machine installs all three clients and the exact planned commands", 
     assert.equal(JSON.parse(await readFile(harness.cursorConfig, "utf8")).mcpServers.backchannels.url, url);
     assert.equal(await exists(join(harness.home, ".claude/skills/backchannels/SKILL.md")), true);
     assert.equal(await exists(join(harness.home, ".agents/skills/backchannels/SKILL.md")), true);
+    for (const skillPath of [claudeSkill, sharedSkill]) {
+      const installedSkill = await readFile(join(harness.home, skillPath), "utf8");
+      assert.ok(installedSkill.startsWith(`---\nmetadata:\n  version: "${packageVersion}"\n`));
+      assert.ok(installedSkill.includes(`skill_version: "${packageVersion}"`));
+      assert.ok(!installedSkill.includes("{{SKILL_VERSION}}"));
+    }
     const mutations = (await harness.calls()).filter(call => ["remove", "add", "login"].includes(call[2]) && !call.includes("--help"));
     assert.deepEqual(mutations, [
       ["claude", "mcp", "add", "--transport", "http", "--scope", "user", "backchannels", url],
@@ -52,6 +65,64 @@ test("fresh machine installs all three clients and the exact planned commands", 
       ["agent", "mcp", "login", "backchannels"],
     ]);
     for (const call of mutations) assert.ok(output.stdout.includes(call.join(" ")));
+  } finally { await harness.close(); }
+});
+
+test("Claude and Codex get a SessionStart hook that prints the versioned session-start text", async () => {
+  const harness = await createHarness();
+  try {
+    const output = await harness.invoke(["--yes"], terminalWithBrowser);
+    assert.equal(output.code, 0, output.stdout + output.stderr);
+    assert.match(output.stdout, /open \/hooks in Codex once and trust the backchannels SessionStart hook/);
+    for (const settingsPath of [join(harness.home, claudeHookSettings), join(harness.codexConfig, "..", "hooks.json")]) {
+      const [command, ...otherCommands] = await sessionStartCommands(settingsPath);
+      assert.deepEqual(otherCommands, []);
+      const hookOutput = await run(["/bin/sh", "-c", `PATH=/usr/bin:/bin; ${command}`]);
+      assert.equal(hookOutput.code, 0);
+      assert.match(hookOutput.stdout, /register_agent/);
+      assert.ok(hookOutput.stdout.includes(`skill_version "${packageVersion}"`));
+    }
+    assert.equal(await exists(join(harness.home, ".cursor/settings.json")), false);
+  } finally { await harness.close(); }
+});
+
+test("a SessionStart hook whose text file is gone prints nothing and succeeds", async () => {
+  const harness = await createHarness(["claude"]);
+  try {
+    assert.equal((await harness.invoke(["--yes", "--agent", "claude"])).code, 0);
+    const [command] = await sessionStartCommands(join(harness.home, claudeHookSettings));
+    await rm(join(harness.home, ".claude/skills/backchannels"), { recursive: true });
+    const hookOutput = await run(["/bin/sh", "-c", `PATH=/usr/bin:/bin; ${command}`]);
+    assert.deepEqual([hookOutput.code, hookOutput.stdout, hookOutput.stderr], [0, "", ""]);
+  } finally { await harness.close(); }
+});
+
+test("foreign Claude settings and hooks survive the SessionStart hook merge", async () => {
+  const harness = await createHarness();
+  try {
+    const foreignSettings = { model: "opus", hooks: { SessionStart: [{ matcher: "startup", hooks: [{ type: "command", command: "echo foreign" }] }] } };
+    await seedFile(join(harness.home, claudeHookSettings), JSON.stringify(foreignSettings));
+    assert.equal((await harness.invoke(["--yes"])).code, 0);
+    const settings = JSON.parse(await readFile(join(harness.home, claudeHookSettings), "utf8"));
+    assert.equal(settings.model, "opus");
+    assert.deepEqual(settings.hooks.SessionStart[0], foreignSettings.hooks.SessionStart[0]);
+    assert.equal(settings.hooks.SessionStart.length, 2);
+    assert.deepEqual(JSON.parse(await readFile(join(harness.home, `${claudeHookSettings}.backchannels.bak`), "utf8")), foreignSettings);
+  } finally { await harness.close(); }
+});
+
+test("malformed Claude settings fail only the SessionStart hook and leave the settings untouched", async () => {
+  const harness = await createHarness(["claude"]);
+  try {
+    const malformedSettings = "{ not json";
+    await seedFile(join(harness.home, claudeHookSettings), malformedSettings);
+    const output = await harness.invoke(["--yes", "--agent", "claude"]);
+    assert.equal(output.code, 1, output.stdout + output.stderr);
+    assert.match(output.stderr, /claude: plan session hook failed/);
+    assert.match(output.stdout, /claude: registered, .*skill version .*, session hook unreadable/);
+    assert.equal((await harness.state()).claude.url, url);
+    assert.equal(await exists(join(harness.home, claudeSkill)), true);
+    assert.equal(await readFile(join(harness.home, claudeHookSettings), "utf8"), malformedSettings);
   } finally { await harness.close(); }
 });
 
@@ -187,9 +258,23 @@ test("status reports registration, sign-in and installed package version", async
     const snapshot = await snapshotFiles(harness.home);
     const output = await harness.invoke(["status"]);
     assert.equal(output.code, 0, output.stderr);
-    assert.match(output.stdout, new RegExp(`claude: registered, signed in, skill version ${packageVersion.replaceAll(".", "\\.")}`));
+    assert.match(output.stdout, new RegExp(`claude: registered, signed in, skill version ${packageVersion.replaceAll(".", "\\.")}, session hook installed`));
     assert.match(output.stdout, new RegExp(`codex: registered, signed in, skill version ${packageVersion.replaceAll(".", "\\.")}`));
     assert.match(output.stdout, new RegExp(`cursor: registered, sign-in unknown, skill version ${packageVersion.replaceAll(".", "\\.")}`));
+    assert.deepEqual(await snapshotFiles(harness.home), snapshot);
+  } finally { await harness.close(); }
+});
+
+test("status reads legacy top-level versions alongside metadata versions", async () => {
+  const harness = await createHarness();
+  try {
+    assert.equal((await harness.invoke(["--yes"], terminalWithBrowser)).code, 0);
+    await seedFile(join(harness.home, claudeSkill), '---\nversion: "0.1.1"\n---\n');
+    const snapshot = await snapshotFiles(harness.home);
+    const output = await harness.invoke(["status"]);
+    assert.equal(output.code, 0, output.stderr);
+    assert.match(output.stdout, /claude: registered, signed in, skill version 0\.1\.1/);
+    assert.ok(output.stdout.includes(`codex: registered, signed in, skill version ${packageVersion}`));
     assert.deepEqual(await snapshotFiles(harness.home), snapshot);
   } finally { await harness.close(); }
 });

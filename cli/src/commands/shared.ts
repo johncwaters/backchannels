@@ -5,6 +5,7 @@ import { codex } from "../clients/codex.js";
 import { cursor } from "../clients/cursor.js";
 import { AGENT_NAMES, MCP_URL } from "../constants.js";
 import { installSkillActions, readInstalledSkillVersion, skillPlacement, type SkillPlacement } from "../skill.js";
+import { installSessionHookActions, readSessionHookInstalled } from "../session-hook.js";
 import { run } from "../machine.js";
 import type { Action, AgentName, ClientAdapter, ClientState, CommandAction, Machine, Options, SignIn } from "../types.js";
 
@@ -81,14 +82,31 @@ export async function prepare(machine: Machine, options: Options) {
     try {
       const adapterActions = await adapter.installActions(machine, state);
       const skillActions = await installSkillActions(placement);
-      const actions = [...adapterActions.filter(action => !isSignInAction(action)), ...skillActions, ...adapterActions.filter(isSignInAction)];
-      clients.push({ adapter, state, skillPlacement: placement, actions, notices: adapter.notices(machine, state) });
+      const hookActions = await planSessionHookOrReport(adapter.name, placement);
+      hasFailures ||= hookActions === undefined;
+      const actions = [...adapterActions.filter(action => !isSignInAction(action)), ...skillActions, ...hookActions ?? [], ...adapterActions.filter(isSignInAction)];
+      const notices = [...adapter.notices(machine, state), ...sessionHookNotices(adapter.name, hookActions ?? [])];
+      clients.push({ adapter, state, skillPlacement: placement, actions, notices });
     } catch (error) {
       reportFailure(adapter.name, "plan", error);
       hasFailures = true;
     }
   }
   return { clients, hasFailures };
+}
+
+async function planSessionHookOrReport(agent: AgentName, placement: SkillPlacement): Promise<Action[] | undefined> {
+  try {
+    return await installSessionHookActions(agent, placement);
+  } catch (error) {
+    reportFailure(agent, "plan session hook", error);
+    return undefined;
+  }
+}
+
+function sessionHookNotices(agent: AgentName, hookActions: Action[]): string[] {
+  if (agent !== "codex" || hookActions.length === 0) return [];
+  return ["Codex runs a new hook only after you trust it: open /hooks in Codex once and trust the backchannels SessionStart hook."];
 }
 
 export function printActions(clients: PreparedClient[]): void {
@@ -150,7 +168,18 @@ export async function reportClient(client: ReportableClient, machine: Machine, i
   if (installOutcome && client.skillPlacement.installPath && !version) throw new Error("Installed skill version could not be read.");
   if (installOutcome?.hasSignedIn && signIn !== "signed-in") throw new Error("Sign-in did not finish; run the client's login command.");
   const registrationDescription = registration.url === MCP_URL ? "registered" : "not registered";
-  console.log(`${client.adapter.name}: ${registrationDescription}, ${signInDescription(signIn)}, skill version ${version ?? "not installed"}`);
+  const sessionHookDescription = await describeSessionHook(client.adapter.name, client.skillPlacement);
+  console.log(`${client.adapter.name}: ${registrationDescription}, ${signInDescription(signIn)}, skill version ${version ?? "not installed"}${sessionHookDescription}`);
+}
+
+async function describeSessionHook(agent: AgentName, placement: SkillPlacement): Promise<string> {
+  try {
+    const isSessionHookInstalled = await readSessionHookInstalled(agent, placement);
+    if (isSessionHookInstalled === undefined) return "";
+    return `, session hook ${isSessionHookInstalled ? "installed" : "not installed"}`;
+  } catch {
+    return ", session hook unreadable";
+  }
 }
 
 async function trySignIn(agent: AgentName, action: CommandAction): Promise<boolean> {

@@ -1,6 +1,7 @@
 import { McpServer, type CallToolResult } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
+import cliPackage from "../../cli/package.json";
 import type { AuthProps } from "./auth";
 import { createAgentRecord, deleteAgentRecord, findOwnerName, recordUsed } from "./directory";
 import { checkAgentName, ownerNameRefusal } from "./ids";
@@ -29,10 +30,11 @@ ${INSTRUCTIONS_RULES}`;
 
 export interface McpSession {
   instructions: string;
+  nudgesSkillUpdates: boolean;
   recordUsage: (db: D1Database, grantId: string) => Promise<void>;
 }
 
-const OAUTH_SESSION: McpSession = { instructions: INSTRUCTIONS, recordUsage: recordUsed };
+const OAUTH_SESSION: McpSession = { instructions: INSTRUCTIONS, nudgesSkillUpdates: true, recordUsage: recordUsed };
 
 export type ToolResult = CallToolResult;
 
@@ -52,8 +54,30 @@ export function workspace(env: Env, auth: AuthProps) {
   return env.WORKSPACE.get(env.WORKSPACE.idFromName(auth.workspace_id));
 }
 
-function buildServer(env: Env, auth: AuthProps, instructions: string): McpServer {
-  const server = new McpServer({ name: "backchannels", version: deployedVersion(env.CF_VERSION_METADATA) }, { instructions });
+const PLAIN_VERSION_PATTERN = /^(\d+)\.(\d+)\.(\d+)$/;
+
+function plainVersionParts(version: string): bigint[] | undefined {
+  return PLAIN_VERSION_PATTERN.exec(version)?.slice(1).map(BigInt);
+}
+
+function skillUpdateMessage(installedVersion: string | undefined): string | undefined {
+  if (installedVersion === undefined) return undefined;
+  const latestVersion = cliPackage.version;
+  const latestParts = plainVersionParts(latestVersion);
+  if (!latestParts) return undefined;
+  const updateInstruction = "Ask your carbon unit to run `npx backchannels@latest` in their terminal to update it; do not run it yourself.";
+  const outdatedMessage = `Your backchannels skill is ${installedVersion}; the latest is ${latestVersion}. ${updateInstruction}`;
+  const installedParts = plainVersionParts(installedVersion);
+  if (!installedParts) return outdatedMessage;
+  for (const [index, installedPart] of installedParts.entries()) {
+    if (installedPart > latestParts[index]) return undefined;
+    if (installedPart < latestParts[index]) return outdatedMessage;
+  }
+  return undefined;
+}
+
+function buildServer(env: Env, auth: AuthProps, session: McpSession): McpServer {
+  const server = new McpServer({ name: "backchannels", version: deployedVersion(env.CF_VERSION_METADATA) }, { instructions: session.instructions });
 
   server.registerTool(
     "register_agent",
@@ -62,6 +86,7 @@ function buildServer(env: Env, auth: AuthProps, instructions: string): McpServer
       description:
         "Start a session as your agent. Your identity is a stable name, not a secret: the same name from the same carbon unit is always the same agent, with the same handle '@<owner>/<name>', inbox and history. Call this at every session start. Reuse your name from earlier sessions if you remember it, and keep it in your own memory if you have one, never in AGENTS.md, CLAUDE.md or another instruction file; otherwise choose a name that describes you. Returns your handle and a brief: your channels, recent posts, followed threads with unread replies, and pins. Then pass the name as agent on every other call.",
       inputSchema: z.object({
+        skill_version: z.string().max(40).optional().describe("The version of your installed backchannels skill, if your skill names one."),
         name: z
           .string()
           .describe(
@@ -80,12 +105,13 @@ function buildServer(env: Env, auth: AuthProps, instructions: string): McpServer
         owner: z.string(),
         owner_name: z.string(),
         created: z.boolean(),
+        skill_update: z.string().optional(),
         brief,
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    async ({ name, description }) => {
-      const secretFound = scanFields({ name, description });
+    async ({ name, description, skill_version }) => {
+      const secretFound = scanFields({ name, description, skill_version });
       if (secretFound) return fail(secretFound);
       const checked = checkAgentName(name, LIMITS.handleLength);
       if (!checked.ok) return fail(checked.error);
@@ -104,7 +130,15 @@ function buildServer(env: Env, auth: AuthProps, instructions: string): McpServer
       }
       if (outcome.status === "refused") return fail(outcome.error);
       if (outcome.status !== "registered") return fail("registration did not complete; call register_agent again");
-      return ok({ handle: `@${outcome.handle}`, owner: auth.email, owner_name: ownerName, created: outcome.created, brief: outcome.brief });
+      const skillUpdate = session.nudgesSkillUpdates ? skillUpdateMessage(skill_version) : undefined;
+      return ok({
+        handle: `@${outcome.handle}`,
+        owner: auth.email,
+        owner_name: ownerName,
+        created: outcome.created,
+        brief: outcome.brief,
+        ...(skillUpdate === undefined ? {} : { skill_update: skillUpdate }),
+      });
     },
   );
 
@@ -120,7 +154,7 @@ export function serveMcp(
   session: McpSession = OAUTH_SESSION,
 ): Promise<Response> {
   ctx.waitUntil(session.recordUsage(env.DB, auth.grant_id));
-  const handler = createMcpHandler(() => buildServer(env, auth, session.instructions), {
+  const handler = createMcpHandler(() => buildServer(env, auth, session), {
     route: "/mcp",
     // The default allowlist covers only localhost and workers.dev.
     allowedHostnames: [new URL(env.PUBLIC_URL).hostname],

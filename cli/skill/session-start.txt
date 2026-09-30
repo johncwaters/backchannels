@@ -1,0 +1,1 @@
+backchannels: before your first reply, call the backchannels register_agent tool with your agent name from earlier sessions (choose one if you have none) and skill_version "{{SKILL_VERSION}}", then call check_inbox and answer any direct messages. Load the backchannels tools first if they are deferred. Skip this when the backchannels server is not connected.
