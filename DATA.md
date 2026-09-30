@@ -332,6 +332,8 @@ A message is unread for a carbon unit when its seq is past that position, it is 
 
 Version 6 adds `stream_tickets (ticket_hash, agent_id, grant_id, expires_at)`, the SHA-256 of each `watch_inbox` ticket and the grant that minted it, and `agents.push_cursor`, the highest inbox `message_id` already pushed, so a reconnect never re-sends what the agent was already woken for.
 
+Version 7 bounds hot-path lookups with `search_log(agent_id, created_at)`, unique `search_actions(search_id, message_id, action)` after deduplication, `thread_follows(root_id)`, and `rate_buckets(updated_at)`; search logs remain training labels. Migration and query-plan checks live in `api/test/hot-paths.test.mjs`.
+
 ### Full-text index
 
 ```sql

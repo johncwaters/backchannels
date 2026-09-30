@@ -73,7 +73,7 @@ function rememberViewer(context: AdminContext): void {
   run(context.sql, "INSERT OR IGNORE INTO viewers (owner_sub, first_seen_at) VALUES (?, ?)", context.sub, context.now);
 }
 
-function listedConversations(context: AdminContext, condition: string, ...bindings: (string | number)[]): ListedRow[] {
+function listedConversations(context: AdminContext, condition: string, conversationCondition: string, ...bindings: (string | number)[]): ListedRow[] {
   rememberViewer(context);
   return all<ListedRow>(
     context.sql,
@@ -89,7 +89,7 @@ function listedConversations(context: AdminContext, condition: string, ...bindin
          (SELECT count(*) FROM pins p JOIN messages pm ON pm.id = p.message_id WHERE pm.conversation_id = c.id AND pm.deleted_at IS NULL) AS pin_count,
          c.id IN (SELECT conversation_id FROM own_conversations) AS is_mine,
          (SELECT vr.last_read_seq FROM viewer_reads vr WHERE vr.owner_sub = ?2 AND vr.conversation_id = c.id) AS read_marker
-       FROM conversations c WHERE c.archived_at IS NULL
+       FROM conversations c WHERE c.archived_at IS NULL AND ${conversationCondition}
      ),
      marked AS (
        SELECT listed.*, coalesce(read_marker, ${SEQ_BEFORE_FIRST_VISIT("listed.id")}, 0) AS last_read_seq_effective FROM listed
@@ -247,6 +247,7 @@ export function adminList(
      AND (?4 = '' OR (?4 = 'public') = (kind = 'public'))
      AND (?5 = '' OR instr(lower(display_name || ' ' || display_topic), ?5) > 0)
      ORDER BY ${SORT_ORDER[sort]}, id LIMIT ?6 OFFSET ?7`,
+    "1",
     options.scope === "mine" ? 1 : 0,
     options.kind ?? "",
     options.filter?.trim().toLowerCase() ?? "",
@@ -277,7 +278,7 @@ const isPositiveInteger = (value: unknown): value is number => Number.isSafeInte
 
 function findReadable(context: AdminContext, conversation: unknown): ListedRow | undefined {
   if (typeof conversation !== "string") return undefined;
-  return listedConversations(context, "slug = ?3", conversation)[0];
+  return listedConversations(context, "1", "c.slug = ?3", conversation)[0];
 }
 
 type StreamPage = { rows: AuthoredMessageRow[]; hasOlder: boolean; hasNewer: boolean };
@@ -405,26 +406,33 @@ export function adminMarkRead(context: AdminContext, options: { conversation: st
       upToSeq,
       context.now,
     );
-  } else {
-    const root = one<{ id: number }>(
+    const unread = one<{ count: number }>(
       context.sql,
-      "SELECT id FROM messages WHERE conversation_id = ? AND seq = ? AND thread_root_id IS NULL",
+      `SELECT count(*) AS count FROM messages m WHERE m.conversation_id = ?1 AND m.seq > ?2
+         AND ${UNREAD_MESSAGE("?3")} AND (m.thread_root_id IS NULL OR m.also_in_channel = 1)`,
       row.id,
-      options.thread,
-    );
-    if (!root) return notFound;
-    run(
-      context.sql,
-      `INSERT INTO viewer_thread_reads (owner_sub, root_id, last_read_seq, updated_at) VALUES (?1, ?2, ?3, ?4)
-       ON CONFLICT (owner_sub, root_id) DO UPDATE SET last_read_seq = max(last_read_seq, excluded.last_read_seq), updated_at = excluded.updated_at`,
+      Math.max(row.read_marker ?? upToSeq, upToSeq),
       context.sub,
-      root.id,
-      upToSeq,
-      context.now,
-    );
+    )!.count;
+    return { ok: true, value: { unread } };
   }
-  const refreshed = findReadable(context, options.conversation);
-  return { ok: true, value: { unread: refreshed?.unread ?? 0 } };
+  const root = one<{ id: number }>(
+    context.sql,
+    "SELECT id FROM messages WHERE conversation_id = ? AND seq = ? AND thread_root_id IS NULL",
+    row.id,
+    options.thread,
+  );
+  if (!root) return notFound;
+  run(
+    context.sql,
+    `INSERT INTO viewer_thread_reads (owner_sub, root_id, last_read_seq, updated_at) VALUES (?1, ?2, ?3, ?4)
+     ON CONFLICT (owner_sub, root_id) DO UPDATE SET last_read_seq = max(last_read_seq, excluded.last_read_seq), updated_at = excluded.updated_at`,
+    context.sub,
+    root.id,
+    upToSeq,
+    context.now,
+  );
+  return { ok: true, value: { unread: row.unread } };
 }
 
 export function adminPins(context: AdminContext, options: { conversation: string }): AdminResult<{ conversation: Conversation; messages: Message[] }> {

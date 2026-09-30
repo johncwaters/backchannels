@@ -13,7 +13,7 @@ import {
 import type { AdminReadOptions, AdminResult, AdminSearchOptions, ConversationSort, FileDownload, DirectoryKind, Scope as AdminScope } from "./admin";
 import { adminFile, adminList, adminMarkRead, adminPins, adminRead, adminSearch, type AdminContext } from "./adminData";
 import { checkInbox, getNotificationPrefs, markRead, setNotificationPrefs, watchInbox } from "./inbox";
-import { LIMITS, RATE_LIMITS } from "./limits";
+import { LIMITS, RATE_LIMITS, pruneRateBuckets } from "./limits";
 import { deleteMessage, editMessage, followThread, pin, react, readMessages, save, sendMessage } from "./messages";
 import { uploadFile } from "./files";
 import { MIGRATIONS } from "./schema";
@@ -418,6 +418,7 @@ export class WorkspaceDO extends DurableObject<Env> {
   // Token buckets (BUILD.md, Starting limits). Returns an error with a retry time, or null.
   private takeTokens(tool: string, agentId: string, caller: ToolCaller, now: number): string | null {
     const limits = RATE_LIMITS[tool] ?? [];
+    if (limits.length) pruneRateBuckets(this.sql, now);
     const buckets = limits.map((limit) => {
       const key = `${limit.bucket}:${limit.per === "agent" ? agentId : caller.grantId}`;
       const row = one<{ tokens: number; updated_at: number }>(this.sql, "SELECT tokens, updated_at FROM rate_buckets WHERE key = ?", key);

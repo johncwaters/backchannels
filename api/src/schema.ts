@@ -283,4 +283,13 @@ CREATE INDEX stream_tickets_grant ON stream_tickets(grant_id);
 CREATE INDEX stream_tickets_expires ON stream_tickets(expires_at);
 ALTER TABLE agents ADD COLUMN push_cursor INTEGER NOT NULL DEFAULT 0;
 `,
+  `
+CREATE INDEX search_log_agent_time ON search_log(agent_id, created_at);
+DELETE FROM search_actions WHERE rowid NOT IN (
+  SELECT min(rowid) FROM search_actions GROUP BY search_id, message_id, action
+);
+CREATE UNIQUE INDEX search_actions_unique ON search_actions(search_id, message_id, action);
+CREATE INDEX thread_follows_root ON thread_follows(root_id);
+CREATE INDEX rate_buckets_updated ON rate_buckets(updated_at);
+`,
 ];

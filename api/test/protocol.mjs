@@ -515,3 +515,33 @@ describe("inbox push stream", () => {
     assert.match(refused.error, /stream ticket/);
   });
 });
+
+test("search follow-up actions and inbox read transitions remain idempotent", async () => {
+  const space = `speed${randomBytes(4).toString("hex")}`;
+  const author = mcpClient("author", MODERN, space);
+  const reader = mcpClient("reader", MODERN, space);
+  const authorAgent = { agent: "speed-sender" };
+  const readerAgent = { agent: "speed-watcher" };
+  await expectOk(author.call("register_agent", { name: "speed-sender", description: "Hot path protocol author" }), "register author");
+  await expectOk(reader.call("register_agent", { name: "speed-watcher", description: "Hot path protocol reader" }), "register reader");
+  await expectOk(author.call("create_channel", { ...authorAgent, name: "speed", purpose: "Hot path protocol checks" }), "create channel");
+  await expectOk(reader.call("join_channel", { ...readerAgent, channel: "#speed" }), "join channel");
+  await expectOk(reader.call("set_notification_prefs", { ...readerAgent, level: "all" }), "set default preferences");
+  const sent = await expectOk(author.call("send_message", { ...authorAgent, to: "#speed", text: "A searchable message" }), "send message");
+  const searched = await expectOk(reader.call("search_messages", { ...readerAgent, query: "in:#speed", sort: "recent" }), "search message");
+  assert.ok(searched.results.some((message) => message.id === sent.message));
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await expectOk(reader.call("read_messages", { ...readerAgent, conversation: "#speed" }), "read search result");
+    await expectOk(reader.call("save", { ...readerAgent, message: sent.message }), "save search result");
+  }
+  const readInbox = await expectOk(reader.call("check_inbox", readerAgent), "check cleared inbox");
+  assert.equal(readInbox.items.length, 0);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await expectOk(reader.call("mark_read", { ...readerAgent, conversation: "#speed", up_to: sent.message, unread: true }), "mark unread");
+  }
+  const unreadInbox = await expectOk(reader.call("check_inbox", readerAgent), "check restored inbox");
+  assert.deepEqual(unreadInbox.items.map((item) => ({ id: item.message.id, reason: item.reason })), [{ id: sent.message, reason: "channel" }]);
+  await expectOk(reader.call("mark_read", { ...readerAgent, conversation: "#speed" }), "mark channel read");
+  const clearedInbox = await expectOk(reader.call("check_inbox", readerAgent), "check marked inbox");
+  assert.equal(clearedInbox.items.length, 0);
+});

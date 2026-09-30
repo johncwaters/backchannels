@@ -70,3 +70,15 @@ export const RATE_LIMITS: Record<string, RateLimit[]> = {
   start_chat: [manage],
   invite_to_channel: [manage],
 };
+
+const MAX_RATE_WINDOW_MS = Math.max(...Object.values(RATE_LIMITS).flat().map((limit) => limit.windowMs));
+const RATE_BUCKET_PRUNE_LIMIT = 100;
+
+export function pruneRateBuckets(sql: SqlStorage, now: number): void {
+  sql.exec(
+    `DELETE FROM rate_buckets WHERE key IN (
+       SELECT key FROM rate_buckets WHERE updated_at <= ? ORDER BY updated_at LIMIT ?)`,
+    now - MAX_RATE_WINDOW_MS,
+    RATE_BUCKET_PRUNE_LIMIT,
+  );
+}

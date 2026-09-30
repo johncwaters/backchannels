@@ -156,8 +156,8 @@ export function keywordMatcher(text: string): KeywordMatcher {
   };
 }
 
-function hasKeyword(scope: Scope, agentId: string, matcher: KeywordMatcher): boolean {
-  return all<{ keyword: string }>(scope.sql, "SELECT keyword FROM keywords WHERE agent_id = ?", agentId).some(({ keyword }) => matcher.matches(keyword));
+function hasKeyword(keywords: string[], matcher: KeywordMatcher): boolean {
+  return keywords.some((keyword) => matcher.matches(keyword));
 }
 
 // At most one inbox row per candidate, from the first rule that matches (NOTIFICATIONS.md).
@@ -187,21 +187,35 @@ function fanOut(
 
   const matcher = keywordMatcher(message.text);
   const notNotified: string[] = [];
-  const insert = (agentId: string, reason: string) =>
-    run(
-      scope.sql,
-      "INSERT INTO inbox (agent_id, message_id, reason, created_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING",
-      agentId,
-      message.id,
-      reason,
-      scope.now,
-    );
+  const recipients: { agentId: string; reason: string }[] = [];
+  const insert = (agentId: string, reason: string) => recipients.push({ agentId, reason });
+  const candidateAgents = all<{
+    id: string;
+    handle: string;
+    last_active_at: number;
+    level: string;
+    muted: number;
+    keywords: string;
+  }>(
+    scope.sql,
+    `SELECT a.id, a.handle, a.last_active_at,
+       coalesce(channel_prefs.level, CASE WHEN ?2 = 1 THEN default_prefs.level END, ?3) AS level,
+       coalesce(channel_prefs.muted, 0) AS muted,
+       (SELECT json_group_array(keyword) FROM keywords WHERE agent_id = a.id) AS keywords
+     FROM json_each(?1) candidate JOIN agents a ON a.id = candidate.value
+     LEFT JOIN prefs channel_prefs ON channel_prefs.agent_id = a.id AND channel_prefs.conversation_id = ?4
+     LEFT JOIN prefs default_prefs ON default_prefs.rowid = (
+       SELECT rowid FROM prefs WHERE agent_id = a.id AND conversation_id IS NULL LIMIT 1)
+     WHERE a.revoked_at IS NULL`,
+    JSON.stringify([...candidates]),
+    isChannel(conversation) ? 1 : 0,
+    isChannel(conversation) ? "mentions" : "all",
+    conversation.id,
+  );
 
-  for (const agentId of candidates) {
-    const agent = one<AgentRow>(scope.sql, "SELECT * FROM agents WHERE id = ? AND revoked_at IS NULL", agentId);
-    if (!agent) continue;
+  for (const agent of candidateAgents) {
+    const agentId = agent.id;
     const member = members.has(agentId);
-    // Mentions of agents outside a private conversation reach no one.
     if (!member && conversation.kind !== "public") {
       if (mentionedIds.has(agentId)) notNotified.push(`@${agent.handle}`);
       continue;
@@ -210,20 +224,19 @@ function fanOut(
       insert(agentId, "mention");
       continue;
     }
-    const prefs = effectivePrefs(scope, agentId, conversation);
-    if (prefs.muted) continue;
+    if (agent.muted) continue;
     if (!isChannel(conversation)) {
       insert(agentId, "dm");
       continue;
     }
-    if (prefs.level === "nothing") continue;
+    if (agent.level === "nothing") continue;
     const follow = followers.get(agentId);
     if (message.rootId && (follow === "auto" || follow === "on")) {
       insert(agentId, "thread");
       continue;
     }
     if (!member) continue; // a thread follower who left the channel
-    if (hasKeyword(scope, agentId, matcher)) {
+    if (hasKeyword(JSON.parse(agent.keywords), matcher)) {
       insert(agentId, "keyword");
       continue;
     }
@@ -231,7 +244,18 @@ function fanOut(
       insert(agentId, "channel_mention");
       continue;
     }
-    if (prefs.level === "all" && (!message.rootId || message.alsoInChannel)) insert(agentId, "channel");
+    if (agent.level === "all" && (!message.rootId || message.alsoInChannel)) insert(agentId, "channel");
+  }
+  if (recipients.length) {
+    run(
+      scope.sql,
+      `INSERT INTO inbox (agent_id, message_id, reason, created_at)
+       SELECT json_extract(value, '$.agentId'), ?2, json_extract(value, '$.reason'), ?3
+       FROM json_each(?1) WHERE 1 ON CONFLICT DO NOTHING`,
+      JSON.stringify(recipients),
+      message.id,
+      scope.now,
+    );
   }
   return notNotified;
 }
@@ -548,8 +572,8 @@ export function markConversationRead(scope: Scope, conversationId: number, seq: 
   );
   run(
     scope.sql,
-    `UPDATE inbox SET read_at = ? WHERE agent_id = ? AND read_at IS NULL AND message_id IN (
-       SELECT id FROM messages WHERE conversation_id = ? AND seq <= ? AND (thread_root_id IS NULL OR also_in_channel = 1))`,
+    `UPDATE inbox INDEXED BY inbox_unread SET read_at = ? WHERE agent_id = ? AND read_at IS NULL AND EXISTS (
+       SELECT 1 FROM messages WHERE id = inbox.message_id AND conversation_id = ? AND seq <= ? AND (thread_root_id IS NULL OR also_in_channel = 1))`,
     scope.now,
     scope.agent.id,
     conversationId,
@@ -568,8 +592,8 @@ export function markThreadRead(scope: Scope, rootId: number, seq: number): void 
   );
   run(
     scope.sql,
-    `UPDATE inbox SET read_at = ? WHERE agent_id = ? AND read_at IS NULL AND message_id IN (
-       SELECT id FROM messages WHERE thread_root_id = ? AND seq <= ?)`,
+    `UPDATE inbox INDEXED BY inbox_unread SET read_at = ? WHERE agent_id = ? AND read_at IS NULL AND EXISTS (
+       SELECT 1 FROM messages WHERE id = inbox.message_id AND thread_root_id = ? AND seq <= ?)`,
     scope.now,
     scope.agent.id,
     rootId,

@@ -106,24 +106,17 @@ function resultMessages(scope: Scope, shownIds: number[]): ResultMessage[] {
 
 function recordRankedAction(scope: Scope, searchId: number, messageId: number, rank: number | undefined, action: SearchAction): boolean {
   if (rank === undefined) return false;
-  const alreadyRecorded = one(
+  const recorded = one<{ search_id: number }>(
     scope.sql,
-    "SELECT 1 FROM search_actions WHERE search_id = ? AND message_id = ? AND action = ?",
-    searchId,
-    messageId,
-    action,
-  );
-  if (alreadyRecorded) return false;
-  run(
-    scope.sql,
-    "INSERT INTO search_actions (search_id, message_id, rank, action, created_at) VALUES (?, ?, ?, ?, ?)",
+    `INSERT OR IGNORE INTO search_actions (search_id, message_id, rank, action, created_at)
+     VALUES (?, ?, ?, ?, ?) RETURNING search_id`,
     searchId,
     messageId,
     rank,
     action,
     scope.now,
   );
-  return true;
+  return Boolean(recorded);
 }
 
 export function recordSearchActions(scope: Scope, action: SearchAction, actedOn: (result: ResultMessage) => boolean): void {
