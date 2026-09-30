@@ -82,18 +82,23 @@ function autoFollow(scope: Scope, agentId: string, rootId: number): void {
   run(scope.sql, "INSERT INTO thread_follows (agent_id, root_id, state) VALUES (?, ?, 'auto') ON CONFLICT DO NOTHING", agentId, rootId);
 }
 
-function level(scope: Scope, agentId: string, conversation: ConversationRow): { level: string; muted: boolean } {
+export function effectivePrefs(
+  scope: Scope,
+  agentId: string,
+  conversation: ConversationRow,
+): { level: string; muted: boolean; inherited: boolean } {
   const own = one<{ level: string | null; muted: number }>(
     scope.sql,
     "SELECT level, muted FROM prefs WHERE agent_id = ? AND conversation_id = ?",
     agentId,
     conversation.id,
   );
-  const fallback = isChannel(conversation)
-    ? (one<{ level: string | null }>(scope.sql, "SELECT level FROM prefs WHERE agent_id = ? AND conversation_id IS NULL", agentId)
-        ?.level ?? "mentions")
-    : "all";
-  return { level: own?.level ?? fallback, muted: !!own?.muted };
+  const inheritedLevel = isChannel(conversation) ? defaultLevel(scope, agentId) : "all";
+  return { level: own?.level ?? inheritedLevel, muted: !!own?.muted, inherited: !own?.level };
+}
+
+export function defaultLevel(scope: Scope, agentId: string): string {
+  return one<{ level: string | null }>(scope.sql, "SELECT level FROM prefs WHERE agent_id = ? AND conversation_id IS NULL", agentId)?.level ?? "mentions";
 }
 
 function hasKeyword(scope: Scope, agentId: string, words: Set<string>): boolean {
@@ -152,7 +157,7 @@ function fanOut(
       insert(agentId, "mention");
       continue;
     }
-    const prefs = level(scope, agentId, conversation);
+    const prefs = effectivePrefs(scope, agentId, conversation);
     if (prefs.muted) continue;
     if (!isChannel(conversation)) {
       insert(agentId, "dm");
@@ -357,7 +362,7 @@ export function save(scope: Scope, args: { message: string; remove?: boolean }) 
   return { message: messageRef(conversation, message.seq), saved: !args.remove };
 }
 
-function threadRoot(scope: Scope, ref: string): { conversation: ConversationRow; root: MessageRow } {
+export function threadRoot(scope: Scope, ref: string): { conversation: ConversationRow; root: MessageRow } {
   const { conversation, message } = findMessage(scope, ref);
   const root = message.thread_root_id ? one<MessageRow>(scope.sql, "SELECT * FROM messages WHERE id = ?", message.thread_root_id)! : message;
   return { conversation, root };
@@ -378,7 +383,7 @@ export function followThread(scope: Scope, args: { thread: string; remove?: bool
 }
 
 // Markers only move forward. Reading also clears the matching inbox rows.
-function markConversationRead(scope: Scope, conversationId: number, seq: number): void {
+export function markConversationRead(scope: Scope, conversationId: number, seq: number): void {
   if (!isMember(scope, conversationId)) return;
   run(
     scope.sql,
@@ -399,7 +404,7 @@ function markConversationRead(scope: Scope, conversationId: number, seq: number)
   );
 }
 
-function markThreadRead(scope: Scope, rootId: number, seq: number): void {
+export function markThreadRead(scope: Scope, rootId: number, seq: number): void {
   run(
     scope.sql,
     `INSERT INTO thread_reads (agent_id, root_id, last_read_seq) VALUES (?, ?, ?)
@@ -419,7 +424,7 @@ function markThreadRead(scope: Scope, rootId: number, seq: number): void {
   );
 }
 
-function seqOf(ref: string | undefined): number | undefined {
+export function seqOf(ref: string | undefined): number | undefined {
   if (ref === undefined || ref === "") return undefined;
   if (/^\d+$/.test(ref.trim())) return Number(ref);
   return parseMessageRef(ref).seq;

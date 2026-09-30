@@ -237,6 +237,73 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     }),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
+  {
+    name: "check_inbox",
+    title: "Check inbox",
+    description: `What is waiting for you: unread mentions, private chat messages, followed thread replies and keyword hits, oldest first, plus channels with unread messages. Call it when a session starts or resumes. It marks nothing read. ${DATA_NOTE}`,
+    flatInput: {
+      limit: z.number().int().min(1).max(50).optional().describe("At most this many items; default 20."),
+      cursor: z.string().optional().describe("next_cursor from the previous page."),
+    },
+    output: z.object({
+      items: z.array(z.object({ reason: z.string(), conversation: z.string(), message })),
+      counts: z.record(z.string(), z.number()),
+      unread_channels: z.array(z.object({ channel: z.string(), unread: z.number() })),
+      next_cursor: z.string().nullable(),
+    }),
+    annotations: readOnly,
+  },
+  {
+    name: "mark_read",
+    title: "Mark read",
+    description: "Mark a conversation or thread read up to a message, without reading it. With unread: true, show messages from up_to onward as unread again.",
+    flatInput: {
+      conversation: z.string().describe("'#deploys', 'dm:k7f2', or a thread ID such as 'deploys/4821/t'."),
+      up_to: z.string().optional().describe("A message ID; default the latest message."),
+      unread: z.boolean().optional().describe("true marks up_to and later as unread."),
+    },
+    output: z.object({
+      conversation: z.string(),
+      read_up_to: z.string().nullable().optional(),
+      unread_from: z.string().optional(),
+    }),
+    annotations: idempotent,
+  },
+  {
+    name: "get_notification_prefs",
+    title: "Get notification preferences",
+    description: "Without conversation: your default level and keywords. With conversation: its effective level, whether it is inherited, and whether it is muted.",
+    flatInput: { conversation: z.string().optional().describe("'#deploys' or 'dm:k7f2'.") },
+    output: z.object({
+      level: z.string(),
+      keywords: z.array(z.string()).optional(),
+      conversation: z.string().optional(),
+      inherited: z.boolean().optional(),
+      muted: z.boolean().optional(),
+    }),
+    annotations: readOnly,
+  },
+  {
+    name: "set_notification_prefs",
+    title: "Set notification preferences",
+    description:
+      "Choose what reaches your inbox. Levels: 'all' (every new message), 'mentions' (followed threads, keywords, @channel, @here), 'nothing'. Direct @mentions and private chats always count unless muted. Without conversation, sets your default level and your keywords.",
+    flatInput: {
+      conversation: z.string().optional().describe("'#deploys' or 'dm:k7f2'; omit to set your defaults."),
+      level: z.enum(["all", "mentions", "nothing"]).optional().describe("Notification level."),
+      muted: z.boolean().optional().describe("With conversation: true drops everything except direct @mentions."),
+      keywords: z.array(z.string()).max(20).optional().describe("Without conversation: words that count as a mention. Replaces your list."),
+    },
+    output: z.object({
+      level: z.string(),
+      keywords: z.array(z.string()).optional(),
+      conversation: z.string().optional(),
+      inherited: z.boolean().optional(),
+      muted: z.boolean().optional(),
+    }),
+    annotations: idempotent,
+    fieldsScannedForSecrets: ["keywords"],
+  },
 ];
 
 function pickFields(args: Record<string, unknown>, fields: string[] = []): Record<string, unknown> {

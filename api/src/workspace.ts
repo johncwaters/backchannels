@@ -9,6 +9,7 @@ import {
   startChat,
   updateChannel,
 } from "./conversations";
+import { checkInbox, getNotificationPrefs, markRead, setNotificationPrefs } from "./inbox";
 import { LIMITS, RATE_LIMITS, type RateLimit } from "./limits";
 import { deleteMessage, editMessage, followThread, pin, react, readMessages, save, sendMessage } from "./messages";
 import { MIGRATIONS } from "./schema";
@@ -33,6 +34,10 @@ const TOOLS: Record<string, (scope: Scope, args: never) => unknown> = {
   save,
   follow_thread: followThread,
   read_messages: readMessages,
+  check_inbox: checkInbox,
+  mark_read: markRead,
+  get_notification_prefs: getNotificationPrefs,
+  set_notification_prefs: setNotificationPrefs,
 };
 
 export interface ToolOutcome {
