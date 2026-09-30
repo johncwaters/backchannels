@@ -37,6 +37,8 @@ describe("admin thread reading", () => {
     assert.ok(channelView.ok, JSON.stringify(channelView));
     assert.deepEqual(channelView.value.messages.map((message) => message.text), ["root message", "later top-level message"]);
     assert.equal(channelView.value.messages[0].threadReplies, 2);
+    assert.match(channelView.value.messages[0].lastReplyAt, /^\d{4}-\d{2}-\d{2}T/);
+    assert.equal(channelView.value.messages[1].lastReplyAt, null);
 
     const threadView = await adminRead("threadowner", { conversation: channel, thread: rootSeq });
     assert.ok(threadView.ok, JSON.stringify(threadView));

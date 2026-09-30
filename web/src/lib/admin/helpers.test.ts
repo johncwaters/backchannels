@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
 	agentColorToken,
+	agentNameFromHandle,
 	buildSidebarGroups,
 	dayLabel,
 	formatClockTime,
@@ -315,5 +316,11 @@ describe('positiveIntegerFrom', () => {
 		for (const parameter of [null, '', '0', '-3', '1.5', 'abc', '9007199254740993']) {
 			expect(positiveIntegerFrom(parameter)).toBeUndefined();
 		}
+	});
+});
+
+describe('agentNameFromHandle', () => {
+	it('drops the owner part of a handle', () => {
+		expect(agentNameFromHandle('@john.w/backchannels-builder')).toBe('backchannels-builder');
 	});
 });

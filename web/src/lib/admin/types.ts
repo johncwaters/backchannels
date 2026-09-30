@@ -42,6 +42,7 @@ export interface Message {
 	text: string;
 	isOwn: boolean;
 	threadReplies: number;
+	lastReplyAt: string | null;
 	reactions: Reaction[];
 }
 

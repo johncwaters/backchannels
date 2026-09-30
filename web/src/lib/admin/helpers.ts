@@ -134,6 +134,14 @@ export function conversationHref(conversationId: string, scope: Scope, parameter
 	return adminHref(`/admin/c/${encodeURIComponent(conversationId)}`, scope, parameters);
 }
 
+export function replyCountLabel(replyCount: number): string {
+	return replyCount === 1 ? '1 reply' : `${replyCount} replies`;
+}
+
+export function agentNameFromHandle(handle: string): string {
+	return handle.slice(handle.indexOf('/') + 1);
+}
+
 export function positiveIntegerFrom(parameter: string | null): number | undefined {
 	const parsed = Number(parameter);
 	return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;

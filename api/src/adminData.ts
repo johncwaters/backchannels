@@ -26,7 +26,7 @@ type ListedRow = ConversationRow & {
   people: number;
   is_mine: number;
 };
-type AuthoredMessageRow = MessageRow & { handle: string | null; owner_email: string | null; owner_sub: string | null; live_replies: number };
+type AuthoredMessageRow = MessageRow & { handle: string | null; owner_email: string | null; owner_sub: string | null; live_replies: number; last_live_reply_at: number | null };
 
 const SCOPES: readonly Scope[] = ["mine", "everyone"];
 const KINDS: readonly DirectoryKind[] = ["public", "private"];
@@ -41,7 +41,9 @@ const ownConversations = (subParameter: string) => `own_conversations AS (
   SELECT DISTINCT mb.conversation_id FROM members mb JOIN agents own ON own.id = mb.agent_id
   WHERE own.owner_sub = ${subParameter} AND own.revoked_at IS NULL)`;
 const LIVE_REPLIES = `(SELECT count(*) FROM messages reply WHERE reply.thread_root_id = m.id AND reply.deleted_at IS NULL)`;
-const MESSAGE_SELECT = `SELECT m.*, a.handle, a.owner_email, a.owner_sub, ${LIVE_REPLIES} AS live_replies FROM messages m LEFT JOIN agents a ON a.id = m.author_id`;
+const LAST_LIVE_REPLY_AT = `(SELECT max(reply.created_at) FROM messages reply WHERE reply.thread_root_id = m.id AND reply.deleted_at IS NULL)`;
+const MESSAGE_SELECT = `SELECT m.*, a.handle, a.owner_email, a.owner_sub, ${LIVE_REPLIES} AS live_replies, ${LAST_LIVE_REPLY_AT} AS last_live_reply_at
+  FROM messages m LEFT JOIN agents a ON a.id = m.author_id`;
 
 function listedConversations(context: AdminContext, condition: string, ...bindings: (string | number)[]): ListedRow[] {
   return all<ListedRow>(
@@ -128,6 +130,7 @@ function viewMessage(row: AuthoredMessageRow, sub: string, reactions: Reaction[]
     text: row.deleted_at ? "" : row.text,
     isOwn: row.owner_sub === sub,
     threadReplies: row.live_replies,
+    lastReplyAt: row.last_live_reply_at === null ? null : new Date(row.last_live_reply_at).toISOString(),
     reactions,
   };
 }
@@ -305,7 +308,7 @@ export function adminSearch(
   >(
     context.sql,
     `WITH ${ownConversations("?3")}
-     SELECT m.*, a.handle, a.owner_email, a.owner_sub, ${LIVE_REPLIES} AS live_replies, c.slug AS conversation_slug, c.kind AS conversation_kind,
+     SELECT m.*, a.handle, a.owner_email, a.owner_sub, ${LIVE_REPLIES} AS live_replies, ${LAST_LIVE_REPLY_AT} AS last_live_reply_at, c.slug AS conversation_slug, c.kind AS conversation_kind,
        highlight(messages_fts, 0, ?6, ?7) AS highlighted
      FROM messages_fts JOIN messages m ON m.id = messages_fts.rowid
        JOIN conversations c ON c.id = m.conversation_id

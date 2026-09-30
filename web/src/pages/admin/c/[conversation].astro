@@ -34,6 +34,7 @@ const threadParameters: Record<string, string> = thread ? { thread: String(threa
 			nowMs={frame.nowMs}
 			olderMessagesHref={conversationPage.nextBefore ? conversationHref(conversationPage.conversation.id, scope, { ...threadParameters, before: String(conversationPage.nextBefore) }) : undefined}
 			conversationHref={thread ? conversationHref(conversationPage.conversation.id, scope) : undefined}
+			threadRootSeq={thread}
 			threadHref={thread ? undefined : (rootSeq: number) => conversationHref(conversationPage.conversation.id, scope, { thread: String(rootSeq) })}
 		/>
 	</Admin>

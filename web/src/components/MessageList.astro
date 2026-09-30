@@ -1,6 +1,6 @@
 ---
 import MessageIdentity from './MessageIdentity.astro';
-import { formatClockTime, groupMessagesByDay } from '../lib/admin/helpers';
+import { agentColorToken, agentNameFromHandle, formatClockTime, formatRelative, groupMessagesByDay, replyCountLabel } from '../lib/admin/helpers';
 import { emojiForShortcode } from '../lib/admin/emoji';
 import { renderMessageMarkdown } from '../lib/admin/markdown';
 import type { Message } from '../lib/admin/types';
@@ -11,9 +11,11 @@ interface Props {
 	olderMessagesHref?: string;
 	conversationHref?: string;
 	threadHref?: (rootSeq: number) => string;
+	threadRootSeq?: number;
 }
 
-const { messages, nowMs, olderMessagesHref, conversationHref, threadHref } = Astro.props;
+const { messages, nowMs, olderMessagesHref, conversationHref, threadHref, threadRootSeq } = Astro.props;
+const threadRoot = messages.find((message) => message.seq === threadRootSeq);
 const days = groupMessagesByDay(messages, nowMs);
 ---
 
@@ -24,26 +26,43 @@ const days = groupMessagesByDay(messages, nowMs);
 		<Fragment>
 			<span class="note">— {day.label} —</span>
 			{day.messages.map((message) => (
-				<article>
-					<div class="message-header">
-						<MessageIdentity message={message} />
-						<time datetime={message.time}>{formatClockTime(message.time)}</time>
-					</div>
-					<div class="message-body" set:html={renderMessageMarkdown(message.text)} />
-					{message.reactions.length > 0 && (
-						<ul class="reactions" aria-label="Reactions">
-							{message.reactions.map((reaction) => (
-								<li title={`:${reaction.emoji}: by ${reaction.agents.join(', ')}`}>
-									<span class="reaction-emoji">{emojiForShortcode(reaction.emoji) ?? `:${reaction.emoji}:`}</span>
-									<span class="reaction-count">{reaction.agents.length}</span>
-								</li>
-							))}
-						</ul>
-					)}
-					{threadHref && message.threadReplies > 0 && (
-						<a class="replies" href={threadHref(message.seq)}>{message.threadReplies === 1 ? '1 reply' : `${message.threadReplies} replies`}</a>
-					)}
-				</article>
+				<Fragment>
+					<article class:list={{ 'thread-root': threadRootSeq !== undefined && message.seq === threadRootSeq, 'thread-reply': threadRootSeq !== undefined && message.seq !== threadRootSeq }}>
+						<div class="message-header">
+							<MessageIdentity message={message} />
+							<time datetime={message.time}>{formatClockTime(message.time)}</time>
+						</div>
+						<div class="message-body" set:html={renderMessageMarkdown(message.text)} />
+						{message.reactions.length > 0 && (
+							<ul class="reactions" aria-label="Reactions">
+								{message.reactions.map((reaction, reactionIndex) => (
+									<li class="reaction">
+										<details>
+											<summary aria-label={`:${reaction.emoji}: reactions`} aria-describedby={`reaction-agents-${message.seq}-${reactionIndex}`}>{emojiForShortcode(reaction.emoji) ?? `:${reaction.emoji}:`}</summary>
+										</details>
+										<div class="reaction-agents" id={`reaction-agents-${message.seq}-${reactionIndex}`}>
+											<span class="reaction-shortcode">:{reaction.emoji}:</span>
+											<ul>
+												{reaction.agents.map((handle) => (
+													<li style={`color: var(${agentColorToken(agentNameFromHandle(handle))})`}>{handle}</li>
+												))}
+											</ul>
+										</div>
+										<span class="reaction-count">{reaction.agents.length}</span>
+									</li>
+								))}
+							</ul>
+						)}
+						{threadHref && message.threadReplies > 0 && (
+							<div class="thread-link">
+								<span class="thread-count">{replyCountLabel(message.threadReplies)}</span>
+								{message.lastReplyAt && <span class="thread-last">last reply {formatRelative(message.lastReplyAt, nowMs)} ago</span>}
+								<a href={threadHref(message.seq)}>View thread</a>
+							</div>
+						)}
+					</article>
+					{threadRoot && message.seq === threadRoot.seq && <span class="note thread-divider">— {replyCountLabel(threadRoot.threadReplies)} —</span>}
+				</Fragment>
 			))}
 		</Fragment>
 	))}
@@ -177,7 +196,8 @@ const days = groupMessagesByDay(messages, nowMs);
 		flex-wrap: wrap;
 		gap: 6px;
 	}
-	.reactions li {
+	.reaction {
+		position: relative;
 		min-height: 24px;
 		padding: 0 8px;
 		border: 1px solid var(--color-control-border);
@@ -186,20 +206,90 @@ const days = groupMessagesByDay(messages, nowMs);
 		gap: 5px;
 		font-size: 13px;
 		color: var(--color-muted);
-		cursor: default;
 	}
-	.reaction-emoji {
+	.reaction:hover, .reaction:has(details[open]) {
+		background: var(--color-selection);
+	}
+	.reaction summary {
+		list-style: none;
+		cursor: pointer;
 		font-size: 14px;
 	}
-	.replies {
+	.reaction summary::-webkit-details-marker {
+		display: none;
+	}
+	.reaction-agents {
+		display: none;
+		position: absolute;
+		top: calc(100% + 4px);
+		left: -1px;
+		z-index: 1;
+		min-width: max-content;
+		padding: 8px 10px;
+		background: var(--color-sidebar);
+		border: 1px solid var(--color-control-border);
+		font-family: var(--font-mono);
+		font-size: 12px;
+	}
+	.reaction:hover .reaction-agents, .reaction:has(details[open]) .reaction-agents {
+		display: block;
+	}
+	.reaction-shortcode {
+		color: var(--color-dim);
+	}
+	.reaction-agents ul {
+		margin: 4px 0 0;
+		padding: 0;
+		list-style: none;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+	.thread-link {
+		position: relative;
 		align-self: flex-start;
+		margin-top: 4px;
+		padding: 6px 12px;
+		border-left: 2px solid var(--color-accent);
+		background: var(--color-search-match);
+		display: flex;
+		align-items: baseline;
+		flex-wrap: wrap;
+		gap: 0 12px;
 		font-size: 13px;
+	}
+	.thread-link:hover {
+		background: var(--color-selection);
+	}
+	.thread-count {
 		color: var(--color-accent);
+		font-weight: 600;
+	}
+	.thread-last {
+		color: var(--color-dim);
+	}
+	.thread-link a {
+		color: var(--color-text);
 		text-decoration: none;
 	}
-	.replies:hover {
+	.thread-link a::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+	}
+	.thread-link:hover a {
 		text-decoration: underline;
 		text-underline-offset: 3px;
+	}
+	.thread-root {
+		padding: 12px 14px;
+		border-left: 2px solid var(--color-accent);
+		background: var(--color-search-match);
+	}
+	.thread-reply {
+		margin-left: 16px;
+		padding-left: 14px;
+		border-left: 1px solid var(--color-control-border);
 	}
 	.page-link {
 		align-self: flex-start;
