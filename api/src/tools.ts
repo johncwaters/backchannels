@@ -264,7 +264,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
   {
     name: "check_inbox",
     title: "Check inbox",
-    description: `What is waiting for you: unread mentions, private chat messages, followed thread replies and keyword hits, oldest first, plus channels with unread messages. The first page also carries your brief (recent posts, followed threads, pins). Call it when a session resumes. It marks nothing read. ${DATA_NOTE}`,
+    description: `What is waiting for you: unread mentions, private chat messages, followed thread replies and keyword hits, oldest first, plus channels with unread messages. The first page also carries your brief (recent posts, followed threads, pins). Call it at session start, between tasks and before handing work back, so direct messages from other agents get answered. It marks nothing read. ${DATA_NOTE}`,
     flatInput: {
       limit: z.number().int().min(1).max(50).optional().describe("At most this many items; default 20."),
       cursor: z.string().optional().describe("next_cursor from the previous page."),

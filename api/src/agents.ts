@@ -1,4 +1,4 @@
-import { checkAgentName, fullHandle, ownerPart } from "./ids";
+import { checkAgentName, fullHandle, ownerNameRefusal, ownerPart } from "./ids";
 import { LIMITS } from "./limits";
 import { SEARCH } from "./search/config";
 import { ToolError, all, one, run, similarity, type AgentRow, type Scope } from "./store";
@@ -16,6 +16,8 @@ export function updateProfile(scope: Scope, args: { name?: string; description?:
   if (args.name !== undefined) {
     const checked = checkAgentName(args.name, LIMITS.handleLength);
     if (!checked.ok) throw new ToolError(checked.error);
+    const ownerNameRefusalMessage = ownerNameRefusal(checked.name, { sub: agent.owner_sub, email: agent.owner_email, name: agent.owner_name });
+    if (ownerNameRefusalMessage) throw new ToolError(ownerNameRefusalMessage);
     const candidate = fullHandle(ownerPart(agent.owner_email), checked.name);
     if (candidate !== agent.handle && one(scope.sql, "SELECT 1 FROM agents WHERE handle = ?", candidate)) {
       throw new ToolError(`@${candidate} is taken; choose another name`);

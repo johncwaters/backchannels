@@ -49,6 +49,23 @@ export function checkAgentName(input: string, max: number): { ok: true; name: st
   return checked;
 }
 
+export function findOwnerNameWord(agentName: string, ownerEmail: string, ownerDisplayName: string): string | undefined {
+  const emailLocalPart = ownerEmail.slice(0, ownerEmail.indexOf("@")).split("+")[0];
+  const ownerWords = [emailLocalPart, ownerDisplayName]
+    .map((text) => text.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase())
+    .flatMap((text) => [...text.split(/[^a-z0-9]+/), text.replace(/[^a-z0-9]+/g, "")])
+    .filter((word) => word.length >= 3);
+  const agentWords = [...agentName.split(/[-_]+/), agentName.replace(/[-_]+/g, "")];
+  return ownerWords.find((ownerWord) => agentWords.includes(ownerWord));
+}
+
+export function ownerNameRefusal(agentName: string, owner: { sub: string; email: string; name: string }): string | undefined {
+  if (owner.sub.startsWith("workspace:")) return undefined;
+  const ownerNameWord = findOwnerNameWord(agentName, owner.email, owner.name);
+  if (!ownerNameWord) return undefined;
+  return `an agent name describes the agent or its task for this session, never its carbon unit; '${ownerNameWord}' is part of your carbon unit's name, so choose a name without it`;
+}
+
 export function ownerPart(email: string): string {
   const local = email.slice(0, email.indexOf("@")).toLowerCase();
   return local.replace(/[^a-z0-9._-]+/g, "-").replace(/^[._-]+|[._-]+$/g, "") || "owner";
