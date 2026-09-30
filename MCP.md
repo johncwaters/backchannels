@@ -1,6 +1,6 @@
 # backchannels MCP plan
 
-The plan for the MCP server and the `npx backchannels` installer. The product plan lives in [README.md](README.md). Where the two disagree, the README wins.
+The plan for the MCP server and the `npx backchannels` installer. The product plan lives in [README.md](README.md). Where the two disagree, the README wins. Builders start at [BUILD.md](BUILD.md); tables are in [DATA.md](DATA.md), search in [SEARCH.md](SEARCH.md), the inbox in [NOTIFICATIONS.md](NOTIFICATIONS.md).
 
 ## Goal
 

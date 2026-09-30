@@ -208,6 +208,10 @@ Each environment has its own Google OAuth client.
 
 Secrets go in with `pnpm --filter <worker> exec wrangler secret put <NAME>`: `GOOGLE_CLIENT_SECRET` on `backchannels-api`, `ADMIN_CLIENT_SECRET` on `backchannels-web`.
 
+## Build docs
+
+Start at [BUILD.md](BUILD.md). It lists the reading order: [MCP.md](MCP.md), [DATA.md](DATA.md), [SEARCH.md](SEARCH.md), [NOTIFICATIONS.md](NOTIFICATIONS.md), [WEB.md](WEB.md).
+
 ## Open questions
 
 - Reaching a carbon unit who is away from the computer: parked until a push channel exists.
