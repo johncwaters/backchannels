@@ -21,8 +21,29 @@ function finishProgress(): void {
 	if (bar?.dataset.state === 'running') bar.dataset.state = 'done';
 }
 
-function loadingKind(from: URL, to: URL): 'page' | 'position' {
-	return from.pathname === to.pathname ? 'position' : 'page';
+const viewParameters = ['thread'];
+
+function isSameView(from: URL, to: URL): boolean {
+	return from.pathname === to.pathname && viewParameters.every((name) => from.searchParams.get(name) === to.searchParams.get(name));
+}
+
+function searchHeadingFor(form: HTMLFormElement): string | null {
+	if (new URL(form.action, location.href).pathname !== '/admin/search') return null;
+	const data = new FormData(form);
+	const query = [data.get('in'), data.get('q')].filter((part) => typeof part === 'string' && part.trim()).join(' ').trim();
+	return query ? `“${query}”` : null;
+}
+
+function targetHeading(sourceElement: Element | undefined, from: URL, to: URL): string | null {
+	const titled = sourceElement?.closest<HTMLElement>('[data-nav-title]')?.dataset.navTitle;
+	if (titled) return titled;
+	const form = sourceElement?.closest('form');
+	if (form) {
+		const searchHeading = searchHeadingFor(form);
+		if (searchHeading) return searchHeading;
+	}
+	if (isSameView(from, to)) return document.querySelector('[data-view-heading]')?.textContent ?? null;
+	return null;
 }
 
 function busyTargetFor(sourceElement: Element | undefined): Element | null {
@@ -30,11 +51,10 @@ function busyTargetFor(sourceElement: Element | undefined): Element | null {
 	return sourceElement.closest('form') ?? sourceElement.closest('a');
 }
 
-function showTargetImmediately(link: HTMLAnchorElement | null): void {
-	const heading = document.querySelector<HTMLElement>('[data-view-heading]');
-	const title = link?.dataset.navTitle;
-	if (heading && title) heading.textContent = title;
-	document.documentElement.dataset.loadingTitle = title ? 'known' : 'unknown';
+function showTargetImmediately(heading: string | null, link: HTMLAnchorElement | null): void {
+	const headingElement = document.querySelector<HTMLElement>('[data-view-heading]');
+	if (headingElement && heading) headingElement.textContent = heading;
+	document.documentElement.dataset.loadingTitle = heading ? 'known' : 'unknown';
 	const sidebar = link?.closest('[data-live="sidebar"]');
 	if (!link || !sidebar) return;
 	for (const current of sidebar.querySelectorAll('[aria-current="page"]')) current.removeAttribute('aria-current');
@@ -55,11 +75,19 @@ document.addEventListener('astro:before-preparation', (event) => {
 	startProgress();
 	busyElement = busyTargetFor(sourceElement);
 	busyElement?.setAttribute(busyAttribute, 'true');
-	const kind = loadingKind(from, to);
-	document.documentElement.dataset.loading = kind;
-	if (kind === 'page') showTargetImmediately(sourceElement?.closest('a') ?? null);
+	document.documentElement.dataset.loading = 'page';
+	showTargetImmediately(targetHeading(sourceElement, from, to), sourceElement?.closest('a') ?? null);
 });
 
 document.addEventListener('astro:after-swap', clearLoading);
 document.addEventListener('astro:page-load', clearLoading);
 window.addEventListener('pageshow', clearLoading);
+
+document.addEventListener('submit', (event) => {
+	const form = event.target as HTMLFormElement;
+	if (!form.hasAttribute('data-astro-reload') || event.defaultPrevented) return;
+	startProgress();
+	form.setAttribute(busyAttribute, 'true');
+	document.documentElement.dataset.loading = 'page';
+	showTargetImmediately(form.dataset.navTitle ?? null, null);
+});

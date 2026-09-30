@@ -41,7 +41,7 @@ const views = conversation && !thread
 	: [];
 const isChannel = conversation ? conversation.kind === 'public' || conversation.kind === 'private' : false;
 const threadBackLink = conversation && thread
-	? { href: messageHref(conversation.id, scope, { seq: thread, threadRootSeq: null, alsoInChannel: false }), label: `Back to ${conversation.name}` }
+	? { href: messageHref(conversation.id, scope, { seq: thread, threadRootSeq: null, alsoInChannel: false }), label: `Back to ${conversation.name}`, navTitle: conversation.name }
 	: undefined;
 ---
 
@@ -72,6 +72,7 @@ const threadBackLink = conversation && thread
 			newerMessagesHref={nextAfter ? hrefHere({ after: String(nextAfter) }) : undefined}
 			latestMessagesHref={nextAfter ? hrefHere() : undefined}
 			backLink={threadBackLink}
+			conversationName={conversation.name}
 			threadRootSeq={thread}
 			threadHref={thread ? undefined : (rootSeq: number) => conversationHref(conversation.id, scope, { thread: String(rootSeq) })}
 			targetSeq={around}

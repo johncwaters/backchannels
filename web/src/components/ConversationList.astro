@@ -66,6 +66,7 @@ const browseClass = cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'mx-2
 				class={browseClass}
 				href={adminHref(`/admin/browse/${group.kind}`, scope)}
 				aria-current={directoryKind === group.kind ? 'page' : undefined}
+				data-nav-title={group.kind === 'public' ? 'All public channels' : 'Your private chats'}
 			>Browse all</a>
 		</section>
 	))}

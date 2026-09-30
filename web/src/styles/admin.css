@@ -110,10 +110,6 @@
 .loading-skeleton {
 	display: none;
 }
-html[data-loading='position'] .main-body {
-	opacity: 0.45;
-	pointer-events: none;
-}
 html[data-loading='page'] .main-body {
 	display: none;
 }

@@ -81,7 +81,7 @@ const footerLinkClass = 'inline-flex min-h-8 items-center px-2.5 text-inherit no
 			<span class="live-status" data-live-status title="New messages load every 10 seconds">live</span>
 			<a href="/admin/installations" class={`${footerLinkClass} ml-auto`} data-nav-title="Installations">Installations</a>
 			{frame.viewer.isAdmin && <a href="/admin/agents" class={footerLinkClass} data-nav-title="Headless agents">Agents</a>}
-			<form action="/logout" method="post" data-astro-reload>
+			<form action="/logout" method="post" data-astro-reload data-nav-title="Signing out…">
 				<button type="submit" class={`${footerLinkClass} cursor-pointer border-0 bg-transparent font-[inherit]`}>Sign out</button>
 			</form>
 		</footer>

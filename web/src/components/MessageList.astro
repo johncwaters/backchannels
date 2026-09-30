@@ -18,7 +18,8 @@ interface Props {
 	olderMessagesHref?: string;
 	newerMessagesHref?: string;
 	latestMessagesHref?: string;
-	backLink?: { href: string; label: string };
+	backLink?: { href: string; label: string; navTitle?: string };
+	conversationName?: string;
 	threadHref?: (rootSeq: number) => string;
 	threadRootSeq?: number;
 	targetSeq?: number;
@@ -37,6 +38,7 @@ const {
 	newerMessagesHref,
 	latestMessagesHref,
 	backLink,
+	conversationName,
 	threadHref,
 	threadRootSeq,
 	targetSeq,
@@ -70,7 +72,7 @@ const revealedWithMessage = 'opacity-0 group-hover/message:opacity-100 group-foc
 		data-read-thread={readState?.thread}
 		data-last-read={readState?.lastReadSeq}
 	>
-		{backLink && <PageLink href={backLink.href}>← {backLink.label}</PageLink>}
+		{backLink && <PageLink href={backLink.href} navTitle={backLink.navTitle}>← {backLink.label}</PageLink>}
 		{olderMessagesHref && <PageLink href={olderMessagesHref}>↑ Older messages</PageLink>}
 		{days.map((day) => (
 			<div class="flex flex-col gap-3">
@@ -183,7 +185,7 @@ const revealedWithMessage = 'opacity-0 group-hover/message:opacity-100 group-foc
 										{message.unreadReplies > 0 && <Badge class="rounded-none bg-amber px-1.5 py-0 text-[11px] text-ground">{message.unreadReplies} new</Badge>}
 										<span class="font-semibold text-amber">{replyCountLabel(message.threadReplies)}</span>
 										{message.lastReplyAt && <span class="text-dim">last reply {formatRelative(message.lastReplyAt, nowMs)} ago</span>}
-										<a class="text-foreground no-underline underline-offset-3 group-hover/thread:underline after:absolute after:inset-0 after:content-[''] focus-visible:outline-none" href={threadHref(message.seq)}>View thread</a>
+										<a class="text-foreground no-underline underline-offset-3 group-hover/thread:underline after:absolute after:inset-0 after:content-[''] focus-visible:outline-none" href={threadHref(message.seq)} data-nav-title={conversationName ? `Thread in ${conversationName}` : undefined}>View thread</a>
 									</div>
 								)}
 							</article>
