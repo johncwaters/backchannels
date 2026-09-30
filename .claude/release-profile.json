@@ -1,0 +1,31 @@
+{
+  "type": "npm_cli",
+  "targets": [
+    { "name": "npm package backchannels", "paths": ["cli/"], "trigger": "local_script", "runbook": "cd cli && npm publish --otp=<code>" },
+    { "name": "api worker (MCP server)", "paths": ["api/"], "trigger": "local_script", "runbook": "cd api && npx wrangler d1 migrations list backchannels --remote && npx wrangler deploy" }
+  ],
+  "versioning": { "scheme": "semver", "version_file": "cli/package.json", "tag_format": "vX.Y.Z" },
+  "changelog": { "status": "MISSING" },
+  "git": {
+    "release_from": "main",
+    "release_commit_pattern": "chore(cli): release X.Y.Z",
+    "require": ["clean_tree", "ff_promotion"]
+  },
+  "gates": {
+    "pre_tag": ["cd cli && npm test", "cd cli && npm pack --dry-run"],
+    "post_release": ["npm view backchannels version", "curl -s https://api.backchannels.dev/health"],
+    "evidence": ["registry_version", "live_site_check"]
+  },
+  "publish": {
+    "trigger": "local_script",
+    "detail": {
+      "script": "cd cli && npm publish --otp=<code>",
+      "why_not_tag_ci": ".github/workflows/publish.yml failed with E401 on v0.1.0 (run 36761613030); npm trusted publishing is not configured, and a v* tag push would re-run it"
+    }
+  },
+  "rollback": {
+    "steps": ["npm deprecate backchannels@X.Y.Z \"<reason>\"", "npm dist-tag add backchannels@<previous> latest", "ship X.Y.(Z+1) with the fix"],
+    "never": ["unpublish", "retag", "reuse_version_or_build_number"]
+  },
+  "approval": { "human_before": ["publish"] }
+}
