@@ -284,7 +284,7 @@ function newKey(label: string, suggestedName: string, expiresInDays: number, rot
 		id: `key-${crypto.randomUUID().slice(0, 8)}`,
 		label,
 		suggestedName,
-		keyHint: `bck_…${secret.slice(-4)}`,
+		keyHint: secret.slice(-4),
 		sponsorEmail: VIEWER_EMAIL,
 		createdAt: new Date(now).toISOString(),
 		expiresAt: new Date(now + expiresInDays * DAY_MS).toISOString(),

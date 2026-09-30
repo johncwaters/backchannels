@@ -1,7 +1,8 @@
 ---
 import Admin from '../../layouts/Admin.astro';
+import InstallationsTable from '../../lib/components/admin/settings/InstallationsTable.svelte';
 import { failureResponse, loadAdminFrame } from '../../lib/admin/api';
-import { dayLabel, formatClockTime, scopeFrom } from '../../lib/admin/helpers';
+import { scopeFrom } from '../../lib/admin/helpers';
 
 export const prerender = false;
 
@@ -22,10 +23,9 @@ if (Astro.request.method === 'POST') {
 const listed = await adminApi.listInstallations();
 if (!listed.ok) return failureResponse(Astro, listed.error);
 const { installations } = listed.value;
-const confirmGrantId = Astro.url.searchParams.get('confirm');
+const confirmingGrantId = Astro.url.searchParams.get('confirm') ?? '';
 const isRevokedNotice = Astro.url.searchParams.get('revoked') === '1';
-const clientLabel = (clientName: string | null) => clientName ?? 'Unnamed client';
-const timeLabel = (isoTime: string) => `${dayLabel(isoTime, frame.nowMs)} ${formatClockTime(isoTime)}`;
+const installationCount = installations.length === 1 ? '1 client' : `${installations.length} clients`;
 ---
 
 <Admin
@@ -35,97 +35,24 @@ const timeLabel = (isoTime: string) => `${dayLabel(isoTime, frame.nowMs)} ${form
 	subheading="Every MCP client signed in with your Google account. Revoking one signs it out of backchannels; its agents keep their history."
 	scope={scope}
 >
-	<section class="installations" aria-label="Your installations">
-		{isRevokedNotice && <p class="status" role="status">Revoked. That client can no longer call backchannels.</p>}
-		{installations.length === 0 && <p class="empty">No MCP client is signed in with your account.</p>}
-		{installations.map((installation) => {
-			const isConfirming = confirmGrantId === installation.grantId;
-			return (
-				<div class="installation">
-					<div class="details">
-						<strong>{clientLabel(installation.clientName)}</strong>
-						<span>signed in {timeLabel(installation.createdAt)} · last used {timeLabel(installation.lastUsedAt)}</span>
-					</div>
-					{!isConfirming && <a class="control" href={`/admin/installations?confirm=${encodeURIComponent(installation.grantId)}`}>Revoke</a>}
-					{isConfirming && (
-						<form method="post" class="confirm">
-							<span>Sign {clientLabel(installation.clientName)} out of backchannels?</span>
-							<input type="hidden" name="grantId" value={installation.grantId} />
-							<button type="submit" class="control">Revoke</button>
-							<a class="cancel" href="/admin/installations">Cancel</a>
-						</form>
-					)}
+	<section class="min-h-0 grow overflow-auto px-7 pt-3.5 pb-5 max-[899px]:overflow-visible max-[899px]:px-4" aria-label="Your installations">
+		<div class="flex max-w-[880px] flex-col gap-3">
+			{isRevokedNotice && (
+				<p class="m-0 border-l-2 border-amber bg-search-match px-3 py-2 font-sans text-[14px] text-subheading" role="status">
+					Revoked. That client can no longer call backchannels.
+				</p>
+			)}
+			{installations.length === 0 ? (
+				<div class="border border-dashed border-border px-4 py-6 font-sans text-[14px] text-subheading">
+					<p class="m-0">No MCP client is signed in with your account.</p>
+					<p class="m-0 mt-1 text-dim">Install backchannels in a client and sign in. It shows here after the first sign-in. <a href="/" class="text-amber underline-offset-4 hover:underline">Install instructions</a></p>
 				</div>
-			);
-		})}
+			) : (
+				<>
+					<h2 class="m-0 text-[13px] font-normal text-dim">{installationCount}</h2>
+					<InstallationsTable client:idle installations={installations} nowMs={frame.nowMs} confirmingGrantId={confirmingGrantId} />
+				</>
+			)}
+		</div>
 	</section>
 </Admin>
-
-<style>
-	.installations {
-		flex-grow: 1;
-		overflow: auto;
-		padding: 14px 28px 20px;
-		display: flex;
-		flex-direction: column;
-		gap: 10px;
-		max-width: 880px;
-	}
-	.status, .empty {
-		margin: 0;
-		font-family: var(--font-prose);
-		font-size: 16px;
-		color: var(--color-subheading);
-	}
-	.installation {
-		padding: 12px 14px;
-		background: var(--color-search-match);
-		display: flex;
-		align-items: center;
-		flex-wrap: wrap;
-		gap: 8px 16px;
-	}
-	.details {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		flex-grow: 1;
-	}
-	.details span {
-		font-size: 13px;
-		color: var(--color-dim);
-	}
-	.confirm {
-		display: flex;
-		align-items: center;
-		flex-wrap: wrap;
-		gap: 8px 12px;
-		font-size: 13px;
-	}
-	.control {
-		min-height: 32px;
-		padding: 0 10px;
-		border: 1px solid var(--color-control-border);
-		background: transparent;
-		display: inline-flex;
-		align-items: center;
-		color: var(--color-text);
-		font: inherit;
-		font-size: 13px;
-		text-decoration: none;
-		cursor: pointer;
-	}
-	.control:hover {
-		background: var(--color-selection);
-	}
-	.cancel {
-		color: var(--color-muted);
-		font-size: 13px;
-	}
-	@media (max-width: 899px) {
-		.installations {
-			overflow: visible;
-			padding-inline: 16px;
-		}
-	}
-</style>
