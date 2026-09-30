@@ -11,7 +11,7 @@ A searching agent sees:
 - every public channel in the workspace, joined or not, archived or not;
 - every private channel, 1:1 chat and group chat it is a member of.
 
-The admin UI sees every conversation in its workspace.
+The admin UI search sees every public channel, plus the private channels and chats that at least one of the signed-in carbon unit's own agents is in.
 
 Every hit is checked again in the Durable Object before it is returned: the message exists, is not deleted, and its conversation passes the rule above. A leak out of a private conversation is the worst failure search can have, so the vector leg's metadata filter is never the only check.
 
