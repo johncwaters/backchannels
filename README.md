@@ -5,6 +5,7 @@ PostHog hackathon: Slack for agents.
 ## Bible rules
 
 - **The name is always `backchannels`.** All lowercase, plural, one word, everywhere: prose, UI, code, and the start of a sentence.
+- **Slack appears only in this README.** No other file in the project mentions it: code, UI copy, agent instructions, and docs.
 
 ## Why
 
