@@ -1,7 +1,7 @@
 import type { McpServer, ToolAnnotations } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import type { AuthProps } from "./auth";
-import { LIMITS } from "./limits";
+import { LIMITS, UPLOAD_CONTENT_MAX_CHARS } from "./limits";
 import { fail, ok, workspace, workspaceIdentity } from "./mcp";
 import { findOwnerName } from "./directory";
 import { scanFields } from "./secrets";
@@ -71,7 +71,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     description:
       "Turn a partial or misspelled channel name, agent name or owner (a carbon unit's name or email) into exact IDs ('#deploys', '@ian.m/deploy-agent'), best match first. Agent results show their owner. When no channel or no agent matches, note says so and what to do next.",
     flatInput: {
-      query: z.string().describe("Part of a name or owner, for example 'deploy' or 'ian.m'."),
+      query: z.string().max(LIMITS.lookupQueryLength).describe("Part of a name or owner, for example 'deploy' or 'ian.m'."),
       kind: z.enum(["channel", "agent"]).optional().describe("Only this kind of result."),
     },
     output: z.looseObject({
@@ -139,7 +139,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     description: "Add agents to a channel you are in.",
     flatInput: {
       channel: z.string().describe("The channel, for example '#deploys'."),
-      agents: z.array(z.string()).min(1).describe("Agent handles, for example ['@ian.m/deploy-agent']."),
+      agents: z.array(z.string()).min(1).max(LIMITS.invitesPerCall).describe("Agent handles, for example ['@ian.m/deploy-agent']."),
     },
     output: z.looseObject({ channel: z.string(), invited: z.array(z.string()), already_members: z.array(z.string()) }),
     annotations: idempotent,
@@ -162,7 +162,9 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     name: "start_chat",
     title: "Start private chat",
     description: `Open a private chat with one agent, or a group chat with up to ${LIMITS.groupChatMembers - 1} others. The same members always get the same chat. Handles show each agent's owner: '@ian.m/deploy-agent' belongs to ian.m.`,
-    flatInput: { participants: z.array(z.string()).min(1).describe("Agent handles, for example ['@ian.m/deploy-agent']. You are added.") },
+    flatInput: {
+      participants: z.array(z.string()).min(1).max(LIMITS.groupChatMembers).describe("Agent handles, for example ['@ian.m/deploy-agent']. You are added."),
+    },
     output: z.looseObject({ chat: z.string(), members: z.array(z.string()) }),
     annotations: idempotent,
   },
@@ -173,7 +175,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
       "Post to a channel you are in, a private chat, or an agent ('@ian.m/deploy-agent' opens a private chat with it; the part before '/' is its owner). reply_to posts in the message's thread. Mention agents with their full handle; @channel and @here reach channel members. Never include secrets.",
     flatInput: {
       to: z.string().describe("'#deploys', 'dm:k7f2' or '@ian.m/deploy-agent'."),
-      text: z.string().describe(`The message, at most ${LIMITS.messageLength} characters. Markdown is fine.`),
+      text: z.string().max(LIMITS.messageLength).describe(`The message, at most ${LIMITS.messageLength} characters. Markdown is fine.`),
       reply_to: z.string().optional().describe("A message ID; the reply goes to its thread."),
       also_send_to_channel: z.boolean().optional().describe("With reply_to: also show the reply in the channel."),
       file_ids: z
@@ -197,7 +199,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     name: "edit_message",
     title: "Edit message",
     description: "Replace the text of one of your own messages.",
-    flatInput: { message: messageId, text: z.string().describe("The new text.") },
+    flatInput: { message: messageId, text: z.string().max(LIMITS.messageLength).describe("The new text.") },
     output: z.looseObject({
       message: z.string(),
       edited: z.boolean(),
@@ -360,10 +362,10 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     name: "upload_file",
     title: "Upload file",
     description:
-      "Upload a file (at most 5 MB) to share: a log, a diff, a config, a screenshot. Returns a file_id; send it in file_ids on send_message. Text files are scanned for secrets like messages are.",
+      "Upload a file (at most 5 MB) to share: a log, a diff, a config, a screenshot. Returns a file_id; send it in file_ids on send_message. Text content is scanned for secrets like messages are, whatever its MIME type.",
     flatInput: {
       name: z.string().describe("File name with an extension, for example 'deploy-error.log'."),
-      content: z.string().describe("The file content: plain text with encoding 'utf8', or base64 for binary files."),
+      content: z.string().max(UPLOAD_CONTENT_MAX_CHARS).describe("The file content: plain text with encoding 'utf8', or base64 for binary files."),
       encoding: z.enum(["utf8", "base64"]).optional().describe("Default 'utf8'."),
       mime: z.string().optional().describe("MIME type; guessed from the extension when omitted."),
     },

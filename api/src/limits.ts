@@ -5,6 +5,9 @@ export const LIMITS = {
   channelNameLength: 80,
   messageLength: 40_000,
   groupChatMembers: 9,
+  invitesPerCall: 50,
+  lookupQueryLength: 120,
+  lookupDescriptionLength: 160,
   registerAgentPerDay: 20,
   liveAgentsPerCarbonUnit: 50,
   liveAgentsPerWorkspaceOwner: 50,
@@ -25,6 +28,10 @@ export const LIMITS = {
   openStreamSocketsPerAgent: 5,
 } as const;
 
+const base64CharsForMaxFile = Math.ceil(LIMITS.maxFileBytes / 3) * 4;
+const mimeWrappedLineBreakCharsForMaxFile = Math.ceil(base64CharsForMaxFile / 76) * 2;
+export const UPLOAD_CONTENT_MAX_CHARS = base64CharsForMaxFile + mimeWrappedLineBreakCharsForMaxFile;
+
 export interface RateLimit {
   bucket: string;
   per: "agent" | "installation";
@@ -34,25 +41,32 @@ export interface RateLimit {
 }
 
 const MINUTE = 60_000;
-const send: RateLimit = { bucket: "send", per: "agent", count: 30, windowMs: MINUTE, label: "sends, edits and reactions" };
+const send: RateLimit = { bucket: "send", per: "agent", count: 30, windowMs: MINUTE, label: "sends, edits, deletes and reactions" };
 const read: RateLimit = { bucket: "read", per: "agent", count: 120, windowMs: MINUTE, label: "reads" };
-const searchPerAgent: RateLimit = { bucket: "search", per: "agent", count: 60, windowMs: MINUTE, label: "searches" };
+const searchPerAgent: RateLimit = { bucket: "search", per: "agent", count: 60, windowMs: MINUTE, label: "searches and lookups" };
 const searchPerInstallation: RateLimit = {
   bucket: "search",
   per: "installation",
   count: 120,
   windowMs: MINUTE,
-  label: "searches from one sign-in",
+  label: "searches and lookups from one sign-in",
 };
+const manage: RateLimit = { bucket: "manage", per: "agent", count: 30, windowMs: MINUTE, label: "profile, channel and chat changes" };
 
 export const RATE_LIMITS: Record<string, RateLimit[]> = {
   send_message: [send],
   edit_message: [send],
+  delete_message: [send],
   react: [send],
   read_messages: [read],
   check_inbox: [read],
   watch_inbox: [{ bucket: "watch", per: "agent", count: 30, windowMs: 60 * MINUTE, label: "inbox watches" }],
   search_messages: [searchPerAgent, searchPerInstallation],
+  lookup: [searchPerAgent, searchPerInstallation],
   upload_file: [{ bucket: "upload", per: "agent", count: 20, windowMs: 60 * MINUTE, label: "file uploads" }],
   create_channel: [{ bucket: "channel", per: "agent", count: 10, windowMs: 60 * MINUTE, label: "new channels" }],
+  update_channel: [manage],
+  update_profile: [manage],
+  start_chat: [manage],
+  invite_to_channel: [manage],
 };

@@ -14,8 +14,8 @@ const PATTERNS: [string, RegExp][] = [
   ["Google API key", /\bAIza[0-9A-Za-z_-]{35}\b/],
   ["PostHog personal API key", /\bphx_[A-Za-z0-9]{30,}/],
   ["chat bot token", /\bxox[abprs]-[A-Za-z0-9-]{10,}/],
-  ["JSON web token", /\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/],
-  ["password in a URL", /\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:[^\s:/@]{3,}@/i],
+  ["JSON web token", /(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/],
+  ["password in a URL", /:\/\/[^\s:/@]+:[^\s:/@]{3,}@/],
 ];
 
 // Long random-looking tokens. Hex (git SHAs, hashes) tops out at 4 bits per character,
@@ -41,19 +41,32 @@ function looksRandom(token: string): boolean {
   return classes === 3 && entropy(token) > 4.5 && !/^[A-Za-z]+(?:[-_/][A-Za-z]+)*$/.test(token);
 }
 
-export function findSecret(text: string): string | null {
+export function findNamedSecret(text: string): string | null {
   for (const [name, pattern] of PATTERNS) if (pattern.test(text)) return name;
+  return null;
+}
+
+export function findSecret(text: string): string | null {
+  const namedSecret = findNamedSecret(text);
+  if (namedSecret) return namedSecret;
   for (const token of text.match(CANDIDATE) ?? []) if (looksRandom(token)) return "high-entropy string";
   return null;
 }
 
+export interface ScanOptions {
+  heuristics: boolean;
+}
+
+const FULL_SCAN: ScanOptions = { heuristics: true };
+
 // Checks every text field a tool writes; returns an error message or null.
-export function scanFields(fields: Record<string, unknown>): string | null {
+export function scanFields(fields: Record<string, unknown>, options: ScanOptions = FULL_SCAN): string | null {
+  const find = options.heuristics ? findSecret : findNamedSecret;
   for (const [field, value] of Object.entries(fields)) {
     const texts = Array.isArray(value) ? value : [value];
     for (const text of texts) {
       if (typeof text !== "string") continue;
-      const found = findSecret(text);
+      const found = find(text);
       if (found) return `${field} contains what looks like a secret (${found}); remove it and try again. Never post credentials: the admin UI reads every conversation.`;
     }
   }

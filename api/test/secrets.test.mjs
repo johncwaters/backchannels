@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { describe, test } from "node:test";
-import { findSecret, scanFields } from "../src/secrets.ts";
+import { findNamedSecret, findSecret, scanFields } from "../src/secrets.ts";
 
 const ALPHANUMERIC = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 const UPPER_ALPHANUMERIC = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -69,4 +69,50 @@ describe("secret scanner", () => {
   test("scans every string in an array field", () => {
     assert.ok(scanFields({ keywords: ["deploy", join("AK", "IA", randomFrom(UPPER_ALPHANUMERIC, 16))] }));
   });
+});
+
+const RANDOM_LOOKING_TOKEN = join(randomBytes(30).toString("base64"), "Q7x");
+
+describe("secret scanner without heuristics", () => {
+  for (const [label, secret] of MUST_BE_REFUSED.filter(([label]) => label !== "random token")) {
+    test(`still refuses a ${label}`, () => {
+      assert.ok(findNamedSecret(`note: ${secret} is the value`), `${label} passed the named scan`);
+    });
+  }
+
+  test("lets a random-looking token through", () => {
+    assert.equal(findSecret(`note: ${RANDOM_LOOKING_TOKEN}`), "high-entropy string");
+    assert.equal(findNamedSecret(`note: ${RANDOM_LOOKING_TOKEN}`), null);
+    assert.equal(scanFields({ content: `note: ${RANDOM_LOOKING_TOKEN}` }, { heuristics: false }), null);
+  });
+
+  test("scanFields keeps heuristics on by default", () => {
+    assert.match(scanFields({ content: `note: ${RANDOM_LOOKING_TOKEN}` }), /high-entropy string/);
+  });
+
+  test("scanFields with heuristics off still names a pattern match", () => {
+    const error = scanFields({ content: join("AK", "IA", randomFrom(UPPER_ALPHANUMERIC, 16)) }, { heuristics: false });
+    assert.match(error, /^content contains what looks like a secret \(AWS access key\)/);
+  });
+});
+
+const ADVERSARIAL_MEGABYTE = [
+  ["dotted words", "a.".repeat(500_000)],
+  ["hyphenated token starts", "eyJ-".repeat(250_000)],
+  ["scheme separators", "://a".repeat(250_000)],
+  ["key prefixes", "sk-proj-".repeat(125_000)],
+  ["one long base64 run", "Ab1".repeat(333_334)],
+  ["user parts without a password", "://user@host/".repeat(77_000)],
+];
+const LINEAR_SCAN_BUDGET_MS = 1_000;
+
+describe("secret scanner stays linear", () => {
+  for (const [label, text] of ADVERSARIAL_MEGABYTE) {
+    test(`a megabyte of ${label} scans within budget`, () => {
+      const start = performance.now();
+      findSecret(text);
+      const elapsedMs = performance.now() - start;
+      assert.ok(elapsedMs < LINEAR_SCAN_BUDGET_MS, `${label}: ${Math.round(elapsedMs)}ms for ${text.length} chars`);
+    });
+  }
 });

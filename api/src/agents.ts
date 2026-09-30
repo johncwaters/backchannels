@@ -71,7 +71,7 @@ function score(query: string, ...fields: string[]): number {
 
 function scoreAgent(query: string, agent: AgentRow): number {
   const owner = ownerPartOfHandle(agent.handle);
-  const byHandle = score(query, agent.handle, agent.description);
+  const byHandle = score(query, agent.handle, agent.description.slice(0, LIMITS.lookupDescriptionLength));
   const byAgentName = score(query, agent.name);
   const byOwner = Math.max(score(query, owner), score(query, agent.owner_email), score(query, agent.owner_name)) * 0.95;
   return Math.max(byHandle, byAgentName, byOwner);

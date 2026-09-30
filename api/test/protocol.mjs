@@ -5,36 +5,12 @@ import { request as httpRequest } from "node:http";
 import { setTimeout as delay } from "node:timers/promises";
 import { describe, test } from "node:test";
 import { EVAL_URL, LEGACY, MODERN, evalRequest, headlessClient, mcpClient } from "./lib/mcp.mjs";
+import { TOOL_NAMES as EXPECTED_TOOLS } from "./lib/toolNames.mjs";
 
 const packageVersion = JSON.parse(await readFile(new URL("../../cli/package.json", import.meta.url), "utf8")).version;
 
-const EXPECTED_TOOLS = [
-  "register_agent",
-  "update_profile",
-  "lookup",
-  "list_channels",
-  "create_channel",
-  "join_channel",
-  "leave_channel",
-  "invite_to_channel",
-  "update_channel",
-  "start_chat",
-  "send_message",
-  "edit_message",
-  "delete_message",
-  "react",
-  "pin",
-  "save",
-  "follow_thread",
-  "read_messages",
-  "check_inbox",
-  "watch_inbox",
-  "mark_read",
-  "get_notification_prefs",
-  "set_notification_prefs",
-  "search_messages",
-  "upload_file",
-];
+const MESSAGE_LENGTH = 40_000;
+const LOOKUPS_PER_MINUTE = 60;
 const DEFAULT_CHANNELS = ["announcements", "introductions", "general", "help", "backchannels-feedback"];
 const MAX_TOOL_DEFINITION_BYTES = 6 * 1024;
 const MAX_TOOL_LIST_BYTES = 32 * 1024;
@@ -204,6 +180,32 @@ for (const protocolVersion of [MODERN, LEGACY]) {
 
       const cleanEdit = await expectOk(owner.call("edit_message", { ...ownerAgent, message: sent.message, text: "no mentions" }), "edit_message (clean)");
       assert.equal(cleanEdit.unknown_mentions, undefined);
+    });
+
+    test("oversized text and mislabelled secret files are refused", async () => {
+      const ownerAgent = { agent: "protocol-owner" };
+      const channel = `caps-${run}`.slice(0, 80);
+      await expectOk(owner.call("register_agent", { name: "protocol-owner", description: "Protocol check owner" }), "register_agent");
+      await expectOk(owner.call("create_channel", { ...ownerAgent, name: channel, purpose: "size cap check" }), "create_channel");
+
+      const tooLong = await owner.call("send_message", { ...ownerAgent, to: `#${channel}`, text: "x".repeat(MESSAGE_LENGTH + 1) });
+      assert.equal(tooLong.ok, false, "send_message accepted text over the limit");
+
+      const fakeKey = ["AK", "IA", "Q7MZ2R8NPX4WVT3K"].join("");
+      const content = Buffer.from(`AWS_ACCESS_KEY_ID=${fakeKey}\n`).toString("base64");
+      const mislabelled = await owner.call("upload_file", { ...ownerAgent, name: ".env", content, encoding: "base64", mime: "application/octet-stream" });
+      assert.equal(mislabelled.ok, false, "upload_file stored a secret behind a binary mime");
+      assert.match(mislabelled.error, /secret/);
+    });
+
+    test("lookup is rate limited per agent", async () => {
+      const limited = mcpClient(`limited${run}`.slice(0, 40), protocolVersion);
+      const limitedAgent = { agent: "protocol-limited" };
+      await expectOk(limited.call("register_agent", { ...limitedAgent, name: "protocol-limited", description: "Rate limit check" }), "register_agent");
+      for (let i = 0; i < LOOKUPS_PER_MINUTE; i++) await expectOk(limited.call("lookup", { ...limitedAgent, query: "protocol" }), `lookup ${i + 1}`);
+      const refused = await limited.call("lookup", { ...limitedAgent, query: "protocol" });
+      assert.equal(refused.ok, false, "the lookup past the limit went through");
+      assert.match(refused.error, /rate limit/);
     });
   });
 }

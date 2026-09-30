@@ -47,12 +47,6 @@ const MIME_BY_EXTENSION: Record<string, string> = {
   zip: "application/zip",
 };
 
-const TEXT_APPLICATION_TYPES = new Set(["application/json", "application/x-ndjson", "application/yaml", "application/xml"]);
-
-function isTextMime(mime: string): boolean {
-  return mime.startsWith("text/") || TEXT_APPLICATION_TYPES.has(mime);
-}
-
 function cleanFileName(input: string): string {
   const baseName = input.split(/[/\\]/).pop() ?? "";
   const name = baseName.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, LIMITS.fileNameLength);
@@ -74,13 +68,82 @@ function decode(content: string, encoding: "utf8" | "base64"): Uint8Array {
   }
 }
 
-function readableText(bytes: Uint8Array, mime: string): string | null {
-  if (!isTextMime(mime)) return null;
+interface UploadText {
+  fullScanTexts: string[];
+  namedPatternTexts: string[];
+  validUtf8: string | null;
+  isText: boolean;
+}
+
+const NUL_BYTE = 0;
+const SPACE_BYTE = 0x20;
+const UTF16_ENCODINGS = ["utf-16le", "utf-16be"] as const;
+type Utf16Encoding = (typeof UTF16_ENCODINGS)[number];
+const UTF16_NUL_LANE_MIN_RATIO = 0.4;
+const UTF16_OTHER_LANE_NUL_MAX_RATIO = 0.1;
+
+interface NulCounts {
+  total: number;
+  atEvenIndex: number;
+  atOddIndex: number;
+}
+
+function countNuls(bytes: Uint8Array): NulCounts {
+  let atEvenIndex = 0;
+  let atOddIndex = 0;
+  for (let i = 0; i < bytes.length; i++) {
+    if (bytes[i] !== NUL_BYTE) continue;
+    if (i % 2 === 0) {
+      atEvenIndex++;
+      continue;
+    }
+    atOddIndex++;
+  }
+  return { total: atEvenIndex + atOddIndex, atEvenIndex, atOddIndex };
+}
+
+function utf16Encoding(bytes: Uint8Array, nuls: NulCounts): Utf16Encoding | null {
+  if (bytes.length < 2) return null;
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) return "utf-16le";
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) return "utf-16be";
+  if (nuls.total === 0) return null;
+  const oddLaneLength = Math.floor(bytes.length / 2);
+  const evenLaneLength = Math.ceil(bytes.length / 2);
+  const isOddLaneNul = nuls.atOddIndex >= oddLaneLength * UTF16_NUL_LANE_MIN_RATIO;
+  if (isOddLaneNul && nuls.atEvenIndex < nuls.atOddIndex * UTF16_OTHER_LANE_NUL_MAX_RATIO) return "utf-16le";
+  const isEvenLaneNul = nuls.atEvenIndex >= evenLaneLength * UTF16_NUL_LANE_MIN_RATIO;
+  if (isEvenLaneNul && nuls.atOddIndex < nuls.atEvenIndex * UTF16_OTHER_LANE_NUL_MAX_RATIO) return "utf-16be";
+  return null;
+}
+
+function nulsAsSpaces(bytes: Uint8Array, nuls: NulCounts): Uint8Array {
+  if (nuls.total === 0) return bytes;
+  return bytes.map((byte) => (byte === NUL_BYTE ? SPACE_BYTE : byte));
+}
+
+function strictUtf8(bytes: Uint8Array): string | null {
   try {
     return new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes);
   } catch {
     return null;
   }
+}
+
+export function uploadText(bytes: Uint8Array): UploadText {
+  const nuls = countNuls(bytes);
+  const scannableBytes = nulsAsSpaces(bytes, nuls);
+  const strictText = strictUtf8(scannableBytes);
+  const utf8Text = strictText ?? new TextDecoder("utf-8").decode(scannableBytes);
+  const detectedUtf16 = utf16Encoding(bytes, nuls);
+  const isText = strictText !== null || detectedUtf16 !== null;
+  const fullScanTexts: string[] = [];
+  const namedPatternTexts: string[] = [];
+  (isText ? fullScanTexts : namedPatternTexts).push(utf8Text);
+  for (const encoding of UTF16_ENCODINGS) {
+    (encoding === detectedUtf16 ? fullScanTexts : namedPatternTexts).push(new TextDecoder(encoding).decode(bytes));
+  }
+  const validUtf8 = nuls.total === 0 ? strictText : null;
+  return { fullScanTexts, namedPatternTexts, validUtf8, isText };
 }
 
 export async function uploadFile(scope: Scope, args: { name: string; content: string; encoding?: "utf8" | "base64"; mime?: string }) {
@@ -92,16 +155,15 @@ export async function uploadFile(scope: Scope, args: { name: string; content: st
   if (bytes.length > LIMITS.maxFileBytes) {
     throw new ToolError(`the file has ${bytes.length} bytes; the limit is ${LIMITS.maxFileBytes} (5 MB). Share a smaller excerpt`);
   }
-  const text = readableText(bytes, mime);
-  if (text !== null) {
-    const secretFound = scanFields({ content: text });
-    if (secretFound) throw new ToolError(secretFound);
-  }
+  const text = uploadText(bytes);
+  const secretFound = scanFields({ content: text.fullScanTexts }) ?? scanFields({ content: text.namedPatternTexts }, { heuristics: false });
+  if (secretFound) throw new ToolError(secretFound);
 
   const id = fileId();
   const r2Key = `${scope.workspaceId}/${id}/${name}`;
   await scope.env.FILES.put(r2Key, bytes, { httpMetadata: { contentType: mime } });
-  const inlineText = text !== null && bytes.length <= LIMITS.inlineTextMaxBytes ? text : null;
+  const fitsInline = bytes.length <= LIMITS.inlineTextMaxBytes;
+  const inlineText = fitsInline ? text.validUtf8 : null;
   run(
     scope.sql,
     `INSERT INTO files (id, uploader_id, message_id, name, mime, size, r2_key, created_at, inline_text)
