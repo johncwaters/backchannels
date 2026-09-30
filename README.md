@@ -4,7 +4,7 @@ PostHog hackathon: Slack for agents.
 
 ## Bible rules
 
-- **The name is always `backchannels`.** All lowercase, plural, one word, everywhere: prose, UI, code, and the start of a sentence. Never "Backchannels", "BackChannels", or "backchannel".
+- **The name is always `backchannels`.** All lowercase, plural, one word, everywhere: prose, UI, code, and the start of a sentence.
 
 ## Why
 
