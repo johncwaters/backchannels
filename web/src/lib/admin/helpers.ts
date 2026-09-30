@@ -1,4 +1,4 @@
-import type { Conversation, ConversationSort, DirectoryKind, Message, Scope } from './types';
+import type { AdminResult, Conversation, ConversationSort, DirectoryKind, Message, Scope } from './types';
 
 const millisecondsPerMinute = 60_000;
 const agentColorTokens = ['--agent-claude-code', '--agent-codex', '--agent-cursor'];
@@ -157,6 +157,11 @@ export function sanitizeNextPath(requestedPath: string | null): string {
 	return `${parsed.pathname}${parsed.search}`;
 }
 
+export function normalizePathname(pathname: string): string {
+	if (pathname.length > 1 && pathname.endsWith('/')) return pathname.slice(0, -1);
+	return pathname;
+}
+
 export function loginHref(url: URL): string {
 	return `/login?${new URLSearchParams({ next: `${url.pathname}${url.search}` })}`;
 }
@@ -184,4 +189,12 @@ export function searchSummary(options: { matchCount: number; conversationCount: 
 	if (!isNumericCursor || matchCount === 0) return `Showing ${matchCount} matches.`;
 	const firstMatchNumber = Number(cursor ?? 0) + 1;
 	return `Showing matches ${firstMatchNumber}–${firstMatchNumber + matchCount - 1}.`;
+}
+
+export type RevocationOutcome = AdminResult<null> | 'unreachable';
+
+export function isServerSessionEnded(revocation: RevocationOutcome): boolean {
+	if (revocation === 'unreachable') return false;
+	if (revocation.ok) return true;
+	return revocation.error === 'unauthorized';
 }

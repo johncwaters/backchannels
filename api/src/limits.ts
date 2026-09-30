@@ -9,6 +9,7 @@ export const LIMITS = {
   liveAgentsPerCarbonUnit: 50,
   lastUsedWriteMs: 60_000,
   googleRecheckMs: 24 * 60 * 60 * 1000,
+  googleRecheckGraceMs: 3 * 24 * 60 * 60 * 1000,
   maxFileBytes: 5 * 1024 * 1024,
   inlineTextMaxBytes: 100 * 1024,
   fileNameLength: 200,

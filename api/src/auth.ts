@@ -11,7 +11,7 @@ import {
   type TokenExchangeCallbackOptions,
 } from "@cloudflare/workers-oauth-provider";
 import { recordChecked, recordInstallation, recordRevoked, recordSignIn } from "./directory";
-import { GoogleSignInError, allowedDomains, authorizeUrl, exchangeCode, recheck } from "./google";
+import { GoogleSignInError, allowedDomains, authorizeUrl, exchangeCode, recheck, recheckDecision } from "./google";
 import { randomToken } from "./ids";
 import { LIMITS } from "./limits";
 import { serveMcp } from "./mcp";
@@ -77,9 +77,7 @@ export async function adminClient(env: Env, redirectUri: string): Promise<AdminC
   return adminClients(env).ensureClient(redirectUri);
 }
 
-// Records the installation once its grant ID exists, and re-checks the Google account on
-// refresh at most once a day. Access tokens last an hour, so an offboarded carbon unit loses
-// access within a day, and an idle grant is checked before it can be used again.
+// Offboarding latency and the unreachable-Google grace window: MCP.md, Auth.
 async function tokenExchangeCallback({ grantType, grantId, clientId, props, env }: TokenExchangeCallbackOptions<Env>) {
   const grant = props as GrantProps;
   if (grantType === "authorization_code") {
@@ -102,16 +100,23 @@ async function tokenExchangeCallback({ grantType, grantId, clientId, props, env 
   }
   if (Date.now() - grant.google_checked_at < LIMITS.googleRecheckMs) return { accessTokenProps: accessProps(grant) };
   const result = await recheck(env, grant.google_refresh_token, grant.domain);
-  if (!result.ok && result.revoke) {
-    await recordRevoked(env.DB, grantId, result.revoke);
+  const decision = recheckDecision(grant.google_checked_at, Date.now(), result);
+  if (decision.action === "revoke") {
+    await recordRevoked(env.DB, grantId, decision.reason);
     throw new OAuthError("invalid_grant", { description: "The Google account is no longer in this workspace. Sign in again." });
   }
-  // Google is unavailable: keep the grant and check again on the next refresh.
-  if (!result.ok) return { accessTokenProps: accessProps(grant) };
+  if (decision.action === "keep") return { accessTokenProps: accessProps(grant) };
+  if (decision.action === "refuse") {
+    throw new OAuthError("temporarily_unavailable", {
+      statusCode: 503,
+      headers: { "Retry-After": "300" },
+      description: "Could not confirm your Google account is still active. Try again shortly.",
+    });
+  }
 
   const newProps: GrantProps = {
     ...grant,
-    google_refresh_token: result.refreshToken ?? grant.google_refresh_token,
+    google_refresh_token: decision.refreshToken ?? grant.google_refresh_token,
     google_checked_at: Date.now(),
   };
   await recordChecked(env.DB, grantId);

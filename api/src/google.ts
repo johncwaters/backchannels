@@ -1,5 +1,6 @@
 import { createRemoteJWKSet, decodeJwt, jwtVerify } from "jose";
 import { base64url } from "./ids";
+import { LIMITS } from "./limits";
 
 // Google is only the sign-in step inside our own OAuth server. The `hd` request
 // parameter is a hint, not a control: every check happens on the verified ID token.
@@ -125,6 +126,20 @@ export async function recheck(env: Env, refreshToken: string, domain: string): P
     if (typeof claims.hd !== "string" || claims.hd.toLowerCase() !== domain) return { ok: false, revoke: "hd_mismatch" };
   }
   return { ok: true, refreshToken: response.json.refresh_token };
+}
+
+export type RecheckDecision =
+  | { action: "renew"; refreshToken?: string }
+  | { action: "revoke"; reason: "invalid_grant" | "hd_mismatch" }
+  | { action: "keep" }
+  | { action: "refuse" };
+
+// A transient failure never revokes; past the grace window it only refuses, so an unreachable Google cannot extend access forever.
+export function recheckDecision(lastCheckedAt: number, now: number, result: RecheckResult): RecheckDecision {
+  if (result.ok) return { action: "renew", refreshToken: result.refreshToken };
+  if (result.revoke) return { action: "revoke", reason: result.revoke };
+  if (now - lastCheckedAt < LIMITS.googleRecheckGraceMs) return { action: "keep" };
+  return { action: "refuse" };
 }
 
 async function s256(verifier: string): Promise<string> {

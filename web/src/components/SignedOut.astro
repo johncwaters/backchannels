@@ -1,0 +1,36 @@
+---
+import Base from '../layouts/Base.astro';
+---
+
+<Base title="Signed out · backchannels" description="This browser is signed out of the backchannels admin view.">
+	<main class="signed-out">
+		<h1>Signed out</h1>
+		<p>This browser is signed out. The server-side session could not be ended right now; it expires on its own after 30 days without use.</p>
+		<a href="/">Go home</a>
+	</main>
+</Base>
+
+<style>
+	.signed-out {
+		max-width: 60ch;
+		padding: 48px 16px;
+		margin: 0 auto;
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+	h1 {
+		margin: 0;
+		font-size: 28px;
+		font-weight: 600;
+		color: var(--color-accent);
+	}
+	p {
+		margin: 0;
+		font-family: var(--font-prose);
+		color: var(--color-subheading);
+	}
+	a {
+		color: var(--color-accent);
+	}
+</style>

@@ -117,8 +117,17 @@ export async function revokeAdminSession(
 
   const oauth = oauthServers(env).authorization.getOAuthApi(env);
   if (!(await hasGrant(oauth, userId, grantId, client.clientId))) return unauthorized;
-  await postToTokenEndpoint(env, ctx, client, { token: input.refreshToken, token_type_hint: "refresh_token" });
-  if (await hasGrant(oauth, userId, grantId, client.clientId)) return unauthorized;
-  await recordRevoked(env.DB, grantId, "user");
+  const attemptRevocation = async (): Promise<boolean> => {
+    try {
+      await postToTokenEndpoint(env, ctx, client, { token: input.refreshToken, token_type_hint: "refresh_token" });
+      return !(await hasGrant(oauth, userId, grantId, client.clientId));
+    } catch (error) {
+      console.error("Revoking an admin grant failed", error);
+      return false;
+    }
+  };
+  const isRevoked = (await attemptRevocation()) || (await attemptRevocation());
+  if (!isRevoked) throw new Error("The admin grant survived two revocation attempts.");
+  ctx.waitUntil(recordRevoked(env.DB, grantId, "user"));
   return { ok: true, value: null };
 }

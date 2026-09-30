@@ -9,7 +9,9 @@ import {
 	groupMessagesByDay,
 	highlightSegments,
 	invalidSearchQueryCause,
+	isServerSessionEnded,
 	loginHref,
+	normalizePathname,
 	sanitizeNextPath,
 	searchSummary,
 	sortConversations,
@@ -193,6 +195,21 @@ describe('sanitizeNextPath', () => {
 	});
 });
 
+describe('normalizePathname', () => {
+	it('strips a single trailing slash', () => {
+		expect(normalizePathname('/login/')).toBe('/login');
+		expect(normalizePathname('/admin/callback/')).toBe('/admin/callback');
+	});
+
+	it('keeps the root path as a slash', () => {
+		expect(normalizePathname('/')).toBe('/');
+	});
+
+	it('leaves slashless paths unchanged', () => {
+		expect(normalizePathname('/admin/callback')).toBe('/admin/callback');
+	});
+});
+
 describe('pkce', () => {
 	it('makes a verifier long enough for the PKCE minimum of 43 characters', () => {
 		expect(randomBase64Url(32)).toMatch(/^[A-Za-z0-9_-]{43}$/);
@@ -237,5 +254,24 @@ describe('searchSummary', () => {
 
 	it('falls back to a plain count when the cursor is not numeric', () => {
 		expect(searchSummary({ matchCount: 10, conversationCount: 2, cursor: 'abc', hasNextCursor: false })).toBe('Showing 10 matches.');
+	});
+});
+
+describe('isServerSessionEnded', () => {
+	it('treats a confirmed revocation as ended', () => {
+		expect(isServerSessionEnded({ ok: true, value: null })).toBe(true);
+	});
+
+	it('treats a grant that is already gone as ended', () => {
+		expect(isServerSessionEnded({ ok: false, error: 'unauthorized' })).toBe(true);
+	});
+
+	it('treats an unreachable api as not ended', () => {
+		expect(isServerSessionEnded('unreachable')).toBe(false);
+	});
+
+	it('treats a rejected revocation request as not ended', () => {
+		expect(isServerSessionEnded({ ok: false, error: 'invalid' })).toBe(false);
+		expect(isServerSessionEnded({ ok: false, error: 'not_found' })).toBe(false);
 	});
 });

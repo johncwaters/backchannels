@@ -38,7 +38,7 @@ As of 2026-09-30, on Cloudflare account `beaccbfb0b5d6d6d1f67ddb6f7996b0c`:
 | web worker | `backchannels-web` at `backchannels.dev` | Landing page and admin UI with sign-in, on real data (WEB.md) |
 | Durable Object | `WorkspaceDO`, SQLite, migration tag `v1` | DATA.md schema with its `schema_version` runner |
 | D1 | `backchannels`, `6c46f963-1c02-4352-84ad-cfff29cff1a9` | Directory schema in `api/migrations/0001_directory.sql` |
-| KV | `backchannels-oauth`, `988eda5fb1884477998e43f4518a924c` | Empty |
+| KV | `backchannels-oauth`, `988eda5fb1884477998e43f4518a924c` | OAuth provider state: clients, grants and tokens |
 | Vectorize | `backchannels-messages`, 1024 dims, cosine | Only the `vis` metadata index exists |
 | Queues | `backchannels-index`, `backchannels-index-dlq` | Wired, consumer acks everything |
 | Workflow | `backchannels-reindex` (`ReindexWorkflow`) | Empty `run()` |

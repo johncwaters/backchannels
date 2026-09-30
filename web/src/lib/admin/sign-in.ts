@@ -1,6 +1,6 @@
 import type { APIContext } from 'astro';
 import { adminRedirectUri, adminRpc } from './api';
-import { sanitizeNextPath } from './helpers';
+import { isServerSessionEnded, sanitizeNextPath, type RevocationOutcome } from './helpers';
 import { codeChallengeFor, randomBase64Url } from './pkce';
 
 export async function startAdminSignIn(context: APIContext): Promise<string | null> {
@@ -34,12 +34,18 @@ export async function completeAdminSignIn(context: APIContext): Promise<string |
 	return pendingSignIn.nextPath;
 }
 
-export async function endAdminSession(context: APIContext): Promise<void> {
+export async function endAdminSession(context: APIContext): Promise<boolean> {
 	const adminSession = await context.session?.get('adminSession');
+	if (!adminSession) {
+		context.session?.destroy();
+		return true;
+	}
+	const revocation: RevocationOutcome = await adminRpc()
+		.revokeAdminSession({ refreshToken: adminSession.refreshToken, redirectUri: adminRedirectUri(context.url) })
+		.catch((error: unknown) => {
+			console.error('Revoking the admin session failed', error);
+			return 'unreachable' as const;
+		});
 	context.session?.destroy();
-	if (!adminSession) return;
-	await adminRpc().revokeAdminSession({
-		refreshToken: adminSession.refreshToken,
-		redirectUri: adminRedirectUri(context.url),
-	});
+	return isServerSessionEnded(revocation);
 }
