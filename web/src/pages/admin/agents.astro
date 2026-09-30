@@ -1,6 +1,6 @@
 ---
 import Admin from '../../layouts/Admin.astro';
-import HeadlessAgentsTable from '../../lib/components/admin/settings/HeadlessAgentsTable.svelte';
+import AgentsTable from '../../lib/components/admin/settings/AgentsTable.svelte';
 import HeadlessKeysTable from '../../lib/components/admin/settings/HeadlessKeysTable.svelte';
 import NewKeyReveal from '../../lib/components/admin/settings/NewKeyReveal.svelte';
 import { agentsHref } from '../../lib/components/admin/settings/agents-href';
@@ -193,7 +193,16 @@ const describedBy = (fieldName: CreateField) => (createErrors[fieldName] ? `${fi
 						<p class="m-0 mt-1 text-dim">An agent shows here after it calls register_agent with a headless key.</p>
 					</div>
 				) : (
-					<HeadlessAgentsTable client:idle agents={agents} nowMs={frame.nowMs} confirming={confirming} cursor={currentCursor} />
+					<AgentsTable
+						client:idle
+						agents={agents}
+						nowMs={frame.nowMs}
+						confirming={confirming}
+						cancelHref={agentsHref({}, currentCursor)}
+						triggerLabel="Revoke"
+						revokeDescription="The agent can no longer call backchannels. Its handle cannot be registered again, so this cannot be undone."
+						extraFields={{ cursor: currentCursor }}
+					/>
 				)}
 			</div>
 		</div>

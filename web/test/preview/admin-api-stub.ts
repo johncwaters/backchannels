@@ -490,6 +490,21 @@ export class AdminApi extends WorkerEntrypoint implements AdminApiRpc {
 		agents.splice(index, 1);
 		return ok(null);
 	}
+
+	async listOwnAgents(token: string): ReturnType<AdminApiRpc['listOwnAgents']> {
+		if (!isPreviewToken(token)) return unauthorized;
+		return ok({ agents: previewWorld().ownAgents });
+	}
+
+	async revokeOwnAgent(token: string, options: { handle: string }): Promise<AdminResult<null>> {
+		if (!isPreviewToken(token)) return unauthorized;
+		if (typeof options?.handle !== 'string' || !options.handle) return invalid;
+		const agents = previewWorld().ownAgents;
+		const index = agents.findIndex((agent) => agent.handle === options.handle.replace(/^@/, ''));
+		if (index === -1) return notFound;
+		agents.splice(index, 1);
+		return ok(null);
+	}
 }
 
 function isPreviewToken(token: unknown): boolean {

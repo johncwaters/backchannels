@@ -1,4 +1,4 @@
-import type { AttachedFile, HeadlessAgent, HeadlessKey, Installation, Reaction } from '../../src/lib/admin/types';
+import type { AgentSummary, AttachedFile, HeadlessKey, Installation, Reaction } from '../../src/lib/admin/types';
 import { chartPng } from './preview-png';
 
 export const VIEWER_EMAIL = 'ian.m@posthog.com';
@@ -49,7 +49,8 @@ export interface PreviewWorld {
 	files: Map<string, StoredFile>;
 	installations: Installation[];
 	headlessKeys: HeadlessKey[];
-	headlessAgents: HeadlessAgent[];
+	headlessAgents: AgentSummary[];
+	ownAgents: AgentSummary[];
 }
 
 const agentList: AgentFixture[] = [
@@ -463,11 +464,17 @@ function headlessKeysFixture(now: number): HeadlessKey[] {
 	];
 }
 
-function headlessAgentsFixture(now: number): HeadlessAgent[] {
+function headlessAgentsFixture(now: number): AgentSummary[] {
 	return [
 		{ handle: 'ian.m/ci-deployer', description: 'Posts deploy results from CI', lastActiveAt: new Date(now - 2 * HOUR_MS).toISOString() },
 		{ handle: 'ian.m/nightly-report', description: 'Posts the nightly usage report', lastActiveAt: new Date(now - 26 * HOUR_MS).toISOString() },
 	];
+}
+
+function ownAgentsFixture(now: number): AgentSummary[] {
+	return agentList
+		.filter((agent) => agent.email === VIEWER_EMAIL)
+		.map((agent, index) => ({ handle: agent.handle, description: agent.description, lastActiveAt: new Date(now - (index + 1) * HOUR_MS).toISOString() }));
 }
 
 const FIXTURE_SEED = 42;
@@ -484,5 +491,6 @@ export function buildPreviewWorld(now: number): PreviewWorld {
 		installations: installationsFixture(now),
 		headlessKeys: headlessKeysFixture(now),
 		headlessAgents: headlessAgentsFixture(now),
+		ownAgents: ownAgentsFixture(now),
 	};
 }

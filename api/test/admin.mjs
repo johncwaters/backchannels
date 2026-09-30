@@ -245,3 +245,70 @@ describe("admin read state per person", () => {
     assert.equal(otherPerson.value.conversation.unread, 0);
   });
 });
+
+function ownAgents(op, who, input = {}, space = SPACE) {
+  return evalRequest(`/eval/own-agents?space=${space}`, "POST", { op, who, input });
+}
+
+const bareHandle = (handle) => handle.replace(/^@/, "");
+
+async function listedHandles(who, space = SPACE) {
+  const listed = await ownAgents("list", who, {}, space);
+  assert.ok(listed.ok, JSON.stringify(listed));
+  return listed.value.agents.map((agent) => agent.handle);
+}
+
+describe("revoking your own agents", () => {
+  const run = Date.now().toString(36);
+  const ownerWho = `revokeowner${run}`;
+  const strangerWho = `revokestranger${run}`;
+  const owner = mcpClient(ownerWho, undefined, SPACE);
+  const stranger = mcpClient(strangerWho, undefined, SPACE);
+  let ownHandle;
+  let strangerHandle;
+
+  test("setup", async () => {
+    ownHandle = bareHandle((await expectOutput(owner.call("register_agent", { name: `own-${run}`, description: "Own revoke check" }))).handle);
+    strangerHandle = bareHandle(
+      (await expectOutput(stranger.call("register_agent", { name: `theirs-${run}`, description: "Own revoke check" }))).handle,
+    );
+    assert.ok((await listedHandles(ownerWho)).includes(ownHandle));
+    assert.ok(!(await listedHandles(ownerWho)).includes(strangerHandle));
+  });
+
+  test("another carbon unit's agent is not found and stays live", async () => {
+    assert.deepEqual(await ownAgents("revoke", ownerWho, { handle: `@${strangerHandle}` }), { ok: false, error: "not_found" });
+    assert.ok((await listedHandles(strangerWho)).includes(strangerHandle));
+  });
+
+  test("the same carbon unit name in another workspace cannot revoke the agent", async () => {
+    assert.deepEqual(await ownAgents("revoke", ownerWho, { handle: ownHandle }, "revokeoutside"), { ok: false, error: "not_found" });
+    assert.ok((await listedHandles(ownerWho)).includes(ownHandle));
+  });
+
+  test("a missing handle is invalid", async () => {
+    assert.deepEqual(await ownAgents("revoke", ownerWho, {}), { ok: false, error: "invalid" });
+  });
+
+  test("an own agent is revoked, leaves the list, stops working, and its handle cannot be registered again", async () => {
+    assert.deepEqual(await ownAgents("revoke", ownerWho, { handle: `@${ownHandle}` }), { ok: true, value: null });
+    assert.ok(!(await listedHandles(ownerWho)).includes(ownHandle));
+    const reregistered = await owner.call("register_agent", { name: `own-${run}`, description: "again" });
+    assert.equal(reregistered.ok, false);
+    assert.match(reregistered.error, /revoked/);
+    assert.equal((await owner.call("check_inbox", { agent: `own-${run}` })).ok, false);
+  });
+
+  test("revoking an own agent frees a live agent slot", async () => {
+    const cappedWho = `capowner${run}`;
+    const capped = mcpClient(cappedWho, undefined, SPACE);
+    const liveAgentsPerCarbonUnit = 50;
+    await evalRequest(`/eval/seed-live-agents?space=${SPACE}`, "POST", { who: cappedWho, count: liveAgentsPerCarbonUnit - 1 });
+    const last = await expectOutput(capped.call("register_agent", { name: `last-${run}`, description: "Fills the cap" }));
+    const refused = await capped.call("register_agent", { name: `over-${run}`, description: "Over the cap" });
+    assert.equal(refused.ok, false);
+    assert.match(refused.error, new RegExp(`${liveAgentsPerCarbonUnit} live agents`));
+    assert.deepEqual(await ownAgents("revoke", cappedWho, { handle: last.handle }), { ok: true, value: null });
+    await expectOutput(capped.call("register_agent", { name: `over-${run}`, description: "Fits after revoking" }));
+  });
+});

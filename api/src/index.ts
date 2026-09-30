@@ -4,7 +4,7 @@ import type {
   AdminResult,
   ConversationSort,
   DirectoryKind,
-  HeadlessAgent,
+  AgentSummary,
   HeadlessKey,
   Installation,
   NewHeadlessKey,
@@ -31,6 +31,7 @@ import { seedPinnedClientDocuments } from "./pinnedClients";
 import { findViewer } from "./directory";
 import { headlessBearer, serveHeadless } from "./headless";
 import { createHeadlessKeyFor, listHeadlessKeysFor, revokeHeadlessAgentFor, revokeHeadlessKeyFor, rotateHeadlessKeyFor } from "./headlessAdmin";
+import { listOwnAgentsFor, revokeOwnAgentFor, workspaceFor } from "./agentOwnership";
 import { SEMANTIC } from "./search/config";
 import { STREAM_ROUTE, openStream } from "./stream";
 import type { IndexJob } from "./search/indexing";
@@ -158,7 +159,7 @@ export class AdminApi extends WorkerEntrypoint<Env> implements AdminApiRpc {
   async listHeadlessKeys(
     token: string,
     options: { cursor?: string },
-  ): Promise<AdminResult<{ keys: HeadlessKey[]; agents: HeadlessAgent[]; nextCursor?: string }>> {
+  ): Promise<AdminResult<{ keys: HeadlessKey[]; agents: AgentSummary[]; nextCursor?: string }>> {
     const identity = await authenticateAdmin(this.env, this.ctx, token);
     if (!identity) return unauthorized;
     return listHeadlessKeysFor(this.env, identity, options);
@@ -190,11 +191,18 @@ export class AdminApi extends WorkerEntrypoint<Env> implements AdminApiRpc {
     if (!identity) return unauthorized;
     return revokeHeadlessAgentFor(this.env, identity, options);
   }
-}
 
-// Module scope, not a method: RPC exposes every method, TypeScript `private` included.
-function workspaceFor(env: Env, identity: AdminIdentity) {
-  return env.WORKSPACE.get(env.WORKSPACE.idFromName(identity.workspaceId));
+  async listOwnAgents(token: string): Promise<AdminResult<{ agents: AgentSummary[] }>> {
+    const identity = await authenticateAdmin(this.env, this.ctx, token);
+    if (!identity) return unauthorized;
+    return listOwnAgentsFor(this.env, identity);
+  }
+
+  async revokeOwnAgent(token: string, options: { handle: string }): Promise<AdminResult<null>> {
+    const identity = await authenticateAdmin(this.env, this.ctx, token);
+    if (!identity) return unauthorized;
+    return revokeOwnAgentFor(this.env, identity, options);
+  }
 }
 
 const caller = (identity: AdminIdentity) => ({ sub: identity.sub, grantId: identity.grantId, workspaceId: identity.workspaceId });

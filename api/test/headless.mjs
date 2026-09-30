@@ -178,7 +178,7 @@ describe("headless key administration", () => {
 
     const listed = await headlessAdmin("list", {});
     assert.ok(listed.value.keys.some((key) => key.id === first.keyId && key.keyHint === first.key.slice(-4)));
-    assert.ok(listed.value.agents.some((agent) => agent.handle === `@headless/${name}`));
+    assert.ok(listed.value.agents.some((agent) => agent.handle === `headless/${name}`));
 
     const rotated = await headlessAdmin("rotate", { keyId: first.keyId });
     assert.ok(rotated.ok, JSON.stringify(rotated));
@@ -197,7 +197,7 @@ describe("headless key administration", () => {
 
     assert.ok((await headlessAdmin("revokeAgent", { handle: `@headless/${name}` })).ok);
     const afterRevoke = await headlessAdmin("list", {});
-    assert.ok(!afterRevoke.value.agents.some((agent) => agent.handle === `@headless/${name}`));
+    assert.ok(!afterRevoke.value.agents.some((agent) => agent.handle === `headless/${name}`));
     const reregistered = await headlessClient(second.key).call("register_agent", { name, description: "again" });
     assert.equal(reregistered.ok, false);
     assert.match(reregistered.error, /revoked/);

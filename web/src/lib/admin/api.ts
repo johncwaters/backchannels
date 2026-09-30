@@ -20,6 +20,8 @@ export interface AdminApi {
 	rotateHeadlessKey(options: Parameters<AdminApiRpc['rotateHeadlessKey']>[1]): ReturnType<AdminApiRpc['rotateHeadlessKey']>;
 	revokeHeadlessKey(options: Parameters<AdminApiRpc['revokeHeadlessKey']>[1]): ReturnType<AdminApiRpc['revokeHeadlessKey']>;
 	revokeHeadlessAgent(options: Parameters<AdminApiRpc['revokeHeadlessAgent']>[1]): ReturnType<AdminApiRpc['revokeHeadlessAgent']>;
+	listOwnAgents(): ReturnType<AdminApiRpc['listOwnAgents']>;
+	revokeOwnAgent(options: Parameters<AdminApiRpc['revokeOwnAgent']>[1]): ReturnType<AdminApiRpc['revokeOwnAgent']>;
 }
 
 const refreshWindowMs = 60_000;
@@ -76,6 +78,8 @@ export async function adminApiFor(context: APIContext): Promise<AdminApi | Respo
 		rotateHeadlessKey: (options) => rpc.rotateHeadlessKey(accessToken, options),
 		revokeHeadlessKey: (options) => rpc.revokeHeadlessKey(accessToken, options),
 		revokeHeadlessAgent: (options) => rpc.revokeHeadlessAgent(accessToken, options),
+		listOwnAgents: () => rpc.listOwnAgents(accessToken),
+		revokeOwnAgent: (options) => rpc.revokeOwnAgent(accessToken, options),
 	};
 }
 

@@ -4,6 +4,7 @@ import { sha256Hex } from "../src/ids";
 import { createHeadlessKeyFor, listHeadlessKeysFor, revokeHeadlessAgentFor, revokeHeadlessKeyFor, rotateHeadlessKeyFor } from "../src/headlessAdmin";
 import worker from "../src/index";
 import { serveMcp } from "../src/mcp";
+import { listOwnAgentsFor, revokeOwnAgentFor } from "../src/agentOwnership";
 import type { TuningOverrides } from "../src/search/config";
 import { vectorId } from "../src/search/indexing";
 import { deleteVectors } from "../src/search/vectors";
@@ -120,6 +121,35 @@ async function runHeadlessAdmin(
   return Response.json(await operation(env, identity, body.input));
 }
 
+const OWN_AGENT_OPERATIONS = {
+  list: listOwnAgentsFor,
+  revoke: revokeOwnAgentFor,
+} as const;
+
+async function runOwnAgents(env: Env, space: EvalSpace, body: { op: keyof typeof OWN_AGENT_OPERATIONS; who: string; input: never }) {
+  const operation = OWN_AGENT_OPERATIONS[body.op];
+  if (!operation) return new Response("unknown op", { status: 400 });
+  await ensureCarbonUnit(env, space, body.who);
+  const sub = `${space.workspaceId}-${body.who}`;
+  return Response.json(await operation(env, { sub, workspaceId: space.workspaceId, grantId: `eval-${sub}` }, body.input));
+}
+
+async function seedLiveAgentRecords(env: Env, space: EvalSpace, body: { who: string; count: number }): Promise<Response> {
+  await ensureCarbonUnit(env, space, body.who);
+  const sub = `${space.workspaceId}-${body.who}`;
+  const createdBeforeDailyWindow = Date.now() - 2 * 24 * 60 * 60 * 1000;
+  const inserts = Array.from({ length: body.count }, () =>
+    env.DB.prepare("INSERT INTO agents (id, workspace_id, owner_sub, created_at) VALUES (?, ?, ?, ?)").bind(
+      `ag_seed${crypto.randomUUID().replaceAll("-", "").slice(0, 10)}`,
+      space.workspaceId,
+      sub,
+      createdBeforeDailyWindow,
+    ),
+  );
+  await env.DB.batch(inserts);
+  return Response.json({ seeded: body.count });
+}
+
 async function runAdminRead(env: Env, space: EvalSpace, body: { who: string; input: Parameters<WorkspaceStub["adminRead"]>[1] }) {
   await ensureCarbonUnit(env, space, body.who);
   const sub = `${space.workspaceId}-${body.who}`;
@@ -211,6 +241,12 @@ export default {
       if (url.pathname === "/eval/purge-vectors" && request.method === "POST") return purgeVectors(env, space);
       if (url.pathname === "/eval/headless-admin" && request.method === "POST") {
         return runHeadlessAdmin(env, space, (await request.json()) as Parameters<typeof runHeadlessAdmin>[2]);
+      }
+      if (url.pathname === "/eval/own-agents" && request.method === "POST") {
+        return runOwnAgents(env, space, (await request.json()) as Parameters<typeof runOwnAgents>[2]);
+      }
+      if (url.pathname === "/eval/seed-live-agents" && request.method === "POST") {
+        return seedLiveAgentRecords(env, space, (await request.json()) as Parameters<typeof seedLiveAgentRecords>[2]);
       }
       if (url.pathname === "/eval/admin-read" && request.method === "POST") {
         return runAdminRead(env, space, (await request.json()) as Parameters<typeof runAdminRead>[2]);

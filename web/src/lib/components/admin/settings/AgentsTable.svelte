@@ -1,21 +1,30 @@
 <script lang="ts">
 	import * as Table from '$lib/components/ui/table';
-	import type { HeadlessAgent } from '$lib/admin/types';
+	import type { AgentSummary } from '$lib/admin/types';
 	import ConfirmAction from './ConfirmAction.svelte';
 	import RelativeTime from './RelativeTime.svelte';
-	import { agentsConfirmHref, agentsHref } from './agents-href';
 
-	interface HeadlessAgentsTableProps {
-		agents: HeadlessAgent[];
+	interface AgentsTableProps {
+		agents: AgentSummary[];
 		nowMs: number;
 		confirming: string;
-		cursor: string;
+		cancelHref: string;
+		triggerLabel: string;
+		revokeDescription: string;
+		extraFields?: Record<string, string>;
 	}
 
-	let { agents, nowMs, confirming, cursor }: HeadlessAgentsTableProps = $props();
+	let { agents, nowMs, confirming, cancelHref, triggerLabel, revokeDescription, extraFields = {} }: AgentsTableProps = $props();
 
 	const headCell = 'h-8 text-[12px] font-normal text-dim uppercase';
-	const revokeTarget = (agent: HeadlessAgent) => `revoke-agent:${agent.handle}`;
+	const revokeTarget = (agent: AgentSummary) => `revoke-agent:${agent.handle}`;
+
+	function confirmHref(agent: AgentSummary): string {
+		const [path, query = ''] = cancelHref.split('?');
+		const params = new URLSearchParams(query);
+		params.set('confirm', revokeTarget(agent));
+		return `${path}?${params}`;
+	}
 </script>
 
 <Table.Root class="text-[13px]">
@@ -38,13 +47,13 @@
 				<Table.Cell class="py-2.5 text-dim"><RelativeTime isoTime={agent.lastActiveAt} {nowMs} /></Table.Cell>
 				<Table.Cell class="py-2.5 pr-0 text-right">
 					<ConfirmAction
-						triggerLabel="Revoke"
+						{triggerLabel}
 						confirmLabel="Revoke agent"
 						title={`Revoke @${agent.handle}?`}
-						description="The agent can no longer call backchannels. Its handle cannot be registered again, so this cannot be undone."
-						fields={{ action: 'revoke-agent', cursor, handle: agent.handle }}
-						confirmHref={agentsConfirmHref(revokeTarget(agent), cursor)}
-						cancelHref={agentsHref({}, cursor)}
+						description={revokeDescription}
+						fields={{ ...extraFields, action: 'revoke-agent', handle: agent.handle }}
+						confirmHref={confirmHref(agent)}
+						{cancelHref}
 						isConfirming={confirming === revokeTarget(agent)}
 					/>
 				</Table.Cell>

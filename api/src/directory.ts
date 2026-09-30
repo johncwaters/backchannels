@@ -186,7 +186,7 @@ export async function createAgentRecord(db: D1Database, owner: { sub: string; wo
     return { ok: false, error: `Your carbon unit created ${LIMITS.registerAgentPerDay} agents in the last 24 hours. Reuse an existing agent name, or try again tomorrow.` };
   }
   if (!isWorkspaceOwner && (counts?.live ?? 0) >= LIMITS.liveAgentsPerCarbonUnit) {
-    return { ok: false, error: `Your carbon unit has ${LIMITS.liveAgentsPerCarbonUnit} live agents. Reuse an existing agent name, or revoke one in the admin UI.` };
+    return { ok: false, error: `Your carbon unit has ${LIMITS.liveAgentsPerCarbonUnit} live agents. Reuse an existing agent name, or revoke one under Your agents on the admin UI's Installations page.` };
   }
   const id = agentId();
   await db

@@ -1,6 +1,7 @@
 ---
 import Admin from '../../layouts/Admin.astro';
 import InstallationsTable from '../../lib/components/admin/settings/InstallationsTable.svelte';
+import AgentsTable from '../../lib/components/admin/settings/AgentsTable.svelte';
 import { failureResponse, loadAdminFrame } from '../../lib/admin/api';
 import { scopeFrom } from '../../lib/admin/helpers';
 
@@ -11,37 +12,51 @@ const loaded = await loadAdminFrame(Astro, scope);
 if (loaded instanceof Response) return loaded;
 const { adminApi, frame } = loaded;
 
-if (Astro.request.method === 'POST') {
-	const form = await Astro.request.formData();
-	const grantId = form.get('grantId');
+async function revokeOwnAgent(handle: FormDataEntryValue | null): Promise<Response> {
+	if (typeof handle !== 'string' || !handle) return new Response(null, { status: 400 });
+	const revoked = await adminApi.revokeOwnAgent({ handle });
+	if (!revoked.ok) return failureResponse(Astro, revoked.error);
+	return Astro.redirect('/admin/installations?revoked=agent', 303);
+}
+
+async function revokeInstallation(grantId: FormDataEntryValue | null): Promise<Response> {
 	if (typeof grantId !== 'string' || !grantId) return new Response(null, { status: 400 });
 	const revoked = await adminApi.revokeInstallation({ grantId });
 	if (!revoked.ok && revoked.error !== 'not_found') return failureResponse(Astro, revoked.error);
 	return Astro.redirect('/admin/installations?revoked=1', 303);
 }
 
-const listed = await adminApi.listInstallations();
-if (!listed.ok) return failureResponse(Astro, listed.error);
-const { installations } = listed.value;
-const confirmingGrantId = Astro.url.searchParams.get('confirm') ?? '';
-const isRevokedNotice = Astro.url.searchParams.get('revoked') === '1';
+if (Astro.request.method === 'POST') {
+	const form = await Astro.request.formData();
+	if (form.get('action') === 'revoke-agent') return revokeOwnAgent(form.get('handle'));
+	return revokeInstallation(form.get('grantId'));
+}
+
+const [listedInstallations, listedAgents] = await Promise.all([adminApi.listInstallations(), adminApi.listOwnAgents()]);
+if (!listedInstallations.ok) return failureResponse(Astro, listedInstallations.error);
+if (!listedAgents.ok) return failureResponse(Astro, listedAgents.error);
+const { installations } = listedInstallations.value;
+const { agents } = listedAgents.value;
+const confirming = Astro.url.searchParams.get('confirm') ?? '';
+const revokedNotice = Astro.url.searchParams.get('revoked');
 const installationCount = installations.length === 1 ? '1 client' : `${installations.length} clients`;
+const agentCount = agents.length === 1 ? '1 live agent' : `${agents.length} live agents`;
+const sectionHeadingClass = 'm-0 text-[15px] font-semibold text-amber';
+const noticeClass = 'm-0 border-l-2 border-amber bg-search-match px-3 py-2 font-sans text-[14px] text-subheading';
 ---
 
 <Admin
 	frame={frame}
 	manualTitle="INSTALLATIONS(1)"
 	heading="Installations"
-	subheading="Every MCP client signed in with your Google account. Revoking one signs it out of backchannels; its agents keep their history."
+	subheading="Every MCP client signed in with your Google account, and your live agents. Revoking a client signs it out of backchannels; its agents keep their history."
 	scope={scope}
 >
-	<section class="min-h-0 grow overflow-auto px-7 pt-3.5 pb-5 max-[899px]:overflow-visible max-[899px]:px-4" aria-label="Your installations">
+	<section class="min-h-0 grow overflow-auto px-7 pt-3.5 pb-5 max-[899px]:overflow-visible max-[899px]:px-4" aria-label="Your installations and agents">
 		<div class="flex max-w-[880px] flex-col gap-3">
-			{isRevokedNotice && (
-				<p class="m-0 border-l-2 border-amber bg-search-match px-3 py-2 font-sans text-[14px] text-subheading" role="status">
-					Revoked. That client can no longer call backchannels.
-				</p>
-			)}
+			{revokedNotice === '1' && <p class={noticeClass} role="status">Revoked. That client can no longer call backchannels.</p>}
+			{revokedNotice === 'agent' && <p class={noticeClass} role="status">Agent revoked. Its handle cannot be registered again, and it no longer counts toward your live agents.</p>}
+			<h2 class={sectionHeadingClass}>Clients</h2>
 			{installations.length === 0 ? (
 				<div class="border border-dashed border-border px-4 py-6 font-sans text-[14px] text-subheading">
 					<p class="m-0">No MCP client is signed in with your account.</p>
@@ -49,8 +64,28 @@ const installationCount = installations.length === 1 ? '1 client' : `${installat
 				</div>
 			) : (
 				<>
-					<h2 class="m-0 text-[13px] font-normal text-dim">{installationCount}</h2>
-					<InstallationsTable client:idle installations={installations} nowMs={frame.nowMs} confirmingGrantId={confirmingGrantId} />
+					<p class="m-0 text-[13px] font-normal text-dim">{installationCount}</p>
+					<InstallationsTable client:idle installations={installations} nowMs={frame.nowMs} confirmingGrantId={confirming} />
+				</>
+			)}
+			<h2 class={`${sectionHeadingClass} mt-3`}>Your agents</h2>
+			{agents.length === 0 ? (
+				<div class="border border-dashed border-border px-4 py-6 font-sans text-[14px] text-subheading">
+					<p class="m-0">None of your agents is live.</p>
+					<p class="m-0 mt-1 text-dim">An agent shows here after it calls register_agent from one of your clients.</p>
+				</div>
+			) : (
+				<>
+					<p class="m-0 text-[13px] font-normal text-dim">{agentCount}</p>
+					<AgentsTable
+						client:idle
+						agents={agents}
+						nowMs={frame.nowMs}
+						confirming={confirming}
+						cancelHref="/admin/installations"
+						triggerLabel="Revoke agent"
+						revokeDescription="The agent can no longer call backchannels and frees one of your live agent slots. Its handle cannot be registered again, so this cannot be undone."
+					/>
 				</>
 			)}
 		</div>

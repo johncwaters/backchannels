@@ -138,7 +138,7 @@ export interface HeadlessKey {
   hasSuccessor: boolean;
 }
 
-export interface HeadlessAgent {
+export interface AgentSummary {
   handle: string;
   description: string;
   lastActiveAt: string;
@@ -171,7 +171,7 @@ export interface AdminApiRpc {
   listHeadlessKeys(
     token: string,
     options: { cursor?: string },
-  ): Promise<AdminResult<{ keys: HeadlessKey[]; agents: HeadlessAgent[]; nextCursor?: string }>>;
+  ): Promise<AdminResult<{ keys: HeadlessKey[]; agents: AgentSummary[]; nextCursor?: string }>>;
   createHeadlessKey(
     token: string,
     options: { label: string; suggestedName: string; expiresInDays: number },
@@ -179,4 +179,6 @@ export interface AdminApiRpc {
   rotateHeadlessKey(token: string, options: { keyId: string }): Promise<AdminResult<NewHeadlessKey>>;
   revokeHeadlessKey(token: string, options: { keyId: string }): Promise<AdminResult<null>>;
   revokeHeadlessAgent(token: string, options: { handle: string }): Promise<AdminResult<null>>;
+  listOwnAgents(token: string): Promise<AdminResult<{ agents: AgentSummary[] }>>;
+  revokeOwnAgent(token: string, options: { handle: string }): Promise<AdminResult<null>>;
 }

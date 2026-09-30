@@ -1,4 +1,4 @@
-import type { AdminResult, HeadlessAgent, HeadlessKey, NewHeadlessKey } from "./admin";
+import type { AdminResult, AgentSummary, HeadlessKey, NewHeadlessKey } from "./admin";
 import type { AdminIdentity } from "./adminSession";
 import {
   ensureWorkspaceOwner,
@@ -7,7 +7,6 @@ import {
   insertHeadlessKey,
   isWorkspaceAdmin,
   listHeadlessKeys,
-  revokeAgentRecord,
   revokeHeadlessKeyRow,
   rotateHeadlessKeyRows,
   type NewHeadlessKeyRow,
@@ -16,6 +15,7 @@ import { newHeadlessKey } from "./headless";
 import { base32, checkAgentName, sha256Hex, workspaceOwnerSub } from "./ids";
 import { expiresAtFor, expiryDaysFrom, isSponsorLive, overlapExpiry, successorExpiry } from "./keyRotation";
 import { LIMITS } from "./limits";
+import { agentSummariesFor, revokeAgentOwnedBy } from "./agentOwnership";
 
 const unauthorized = { ok: false, error: "unauthorized" } as const;
 const invalid = { ok: false, error: "invalid" } as const;
@@ -23,10 +23,6 @@ const notFound = { ok: false, error: "not_found" } as const;
 
 const headlessKeyId = () => `hk_${base32(10)}`;
 const iso = (at: number) => new Date(at).toISOString();
-
-function workspaceStub(env: Env, identity: AdminIdentity) {
-  return env.WORKSPACE.get(env.WORKSPACE.idFromName(identity.workspaceId));
-}
 
 async function isAdmin(env: Env, identity: AdminIdentity): Promise<boolean> {
   return isWorkspaceAdmin(env.DB, identity.sub, identity.workspaceId);
@@ -63,7 +59,7 @@ export async function listHeadlessKeysFor(
   env: Env,
   identity: AdminIdentity,
   options: { cursor?: string },
-): Promise<AdminResult<{ keys: HeadlessKey[]; agents: HeadlessAgent[]; nextCursor?: string }>> {
+): Promise<AdminResult<{ keys: HeadlessKey[]; agents: AgentSummary[]; nextCursor?: string }>> {
   if (!(await isAdmin(env, identity))) return unauthorized;
   const [cursorCreatedAt, cursorId] = (options?.cursor ?? "").split(":");
   const before = cursorId ? { createdAt: Number(cursorCreatedAt), id: cursorId } : undefined;
@@ -83,8 +79,7 @@ export async function listHeadlessKeysFor(
   }));
   const last = rows.at(-1);
   const nextCursor = rows.length === limit && last ? `${last.created_at}:${last.id}` : undefined;
-  const agentRows = await workspaceStub(env, identity).ownerAgents(workspaceOwnerSub(identity.workspaceId));
-  const agents = agentRows.map((agent) => ({ handle: `@${agent.handle}`, description: agent.description, lastActiveAt: iso(agent.last_active_at) }));
+  const agents = await agentSummariesFor(env, identity, workspaceOwnerSub(identity.workspaceId));
   return { ok: true, value: { keys, agents, nextCursor } };
 }
 
@@ -151,10 +146,5 @@ export async function revokeHeadlessKeyFor(env: Env, identity: AdminIdentity, in
 
 export async function revokeHeadlessAgentFor(env: Env, identity: AdminIdentity, input: { handle: string }): Promise<AdminResult<null>> {
   if (!(await isAdmin(env, identity))) return unauthorized;
-  if (typeof input?.handle !== "string" || !input.handle) return invalid;
-  const owner = workspaceOwnerSub(identity.workspaceId);
-  const agentId = await workspaceStub(env, identity).revokeOwnerAgent(owner, input.handle.replace(/^@/, ""), identity.grantId);
-  if (!agentId) return notFound;
-  await revokeAgentRecord(env.DB, agentId, owner);
-  return { ok: true, value: null };
+  return revokeAgentOwnedBy(env, identity, workspaceOwnerSub(identity.workspaceId), input?.handle);
 }

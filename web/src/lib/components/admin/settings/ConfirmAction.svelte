@@ -65,10 +65,11 @@
 				<AlertDialog.Description class="font-sans text-[14px] text-subheading">{description}</AlertDialog.Description>
 			</AlertDialog.Header>
 			<AlertDialog.Footer class="-mx-5 -mb-5 border-secondary bg-ground/60 px-5 py-3">
+				{#if isSubmitting}
+					<span role="status" class="mr-auto self-center font-sans text-[13px] text-subheading">Working…</span>
+				{/if}
 				<AlertDialog.Cancel class={compactButton}>Cancel</AlertDialog.Cancel>
-				<AlertDialog.Action variant={confirmVariant} class={compactButton} disabled={isSubmitting} onclick={submitConfirmed}>
-					{isSubmitting ? 'Working…' : confirmLabel}
-				</AlertDialog.Action>
+				<AlertDialog.Action variant={confirmVariant} class={compactButton} disabled={isSubmitting} onclick={submitConfirmed}>{confirmLabel}</AlertDialog.Action>
 			</AlertDialog.Footer>
 		</AlertDialog.Content>
 	</AlertDialog.Root>
