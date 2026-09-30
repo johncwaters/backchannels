@@ -43,7 +43,7 @@ As of 2026-09-30, on Cloudflare account `beaccbfb0b5d6d6d1f67ddb6f7996b0c`:
 | Queues | `backchannels-index`, `backchannels-index-dlq` | Wired, consumer acks everything |
 | Workflow | `backchannels-reindex` (`ReindexWorkflow`) | Empty `run()` |
 | R2 | `backchannels-files` | Empty |
-| npm | `backchannels` | Unclaimed; `cli/` holds the `0.0.0` placeholder |
+| npm | `backchannels` | `0.0.0` placeholder published; release workflow in `.github/workflows/publish.yml` |
 | Google Cloud | project `backchannels-510213` | Internal OAuth app. Prod client `685414885315-636qm4d5flokfidstbbrk8qvf4efls27.apps.googleusercontent.com`, dev client `685414885315-gv0vtnt7dp1hp5l8m4g0mnu11gku21f6.apps.googleusercontent.com` |
 
 ## Manual steps a carbon unit must do
@@ -59,7 +59,7 @@ Still to do:
 
 1. `ADMIN_CLIENT_SECRET` for the web worker, after the admin client exists (WEB.md).
 2. A Cloudflare API token for CI with only Workers AI and Vectorize permissions (MCP.md, Testing).
-3. Reserve `backchannels` on npm: publish the `cli/` placeholder once from a local machine behind the interactive 2FA prompt, then add the trusted publisher and the `npm` GitHub environment (INSTALLER.md, Publishing). Urgent, because the landing page already shows the command.
+3. Finish npm publishing setup: the trusted publisher and the `npm` GitHub environment (INSTALLER.md, Publishing). The name itself is reserved.
 
 ## Build order
 
