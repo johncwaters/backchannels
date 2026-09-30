@@ -31,7 +31,7 @@ The repo is public because npm records provenance only for public repos. Write a
    - Codex: `codex` on `PATH`, `$CODEX_HOME` (default `~/.codex/`)
    - Cursor: `~/.cursor/`, and the `agent` CLI on `PATH` if present and its `--version` output identifies Cursor, since `agent` is a generic name
 
-   Too-old client versions (`claude --version`, `codex --version`) fall back to printed instructions.
+   Probe the required client commands with `--help` exit codes; unsupported commands fall back to printed instructions rather than inferred version cutoffs.
 2. **Show the plan and confirm.** Print every file and command it will touch, then ask `Continue? [Y/n]`, but only when stdin is a TTY. Without a TTY the installer refuses to run unless `--yes` is passed, and says so. `--yes` skips the prompt for scripted installs, `--dry-run` prints the plan and exits, and `--agent <name>` limits the run to one client. The installer sends no telemetry. The page shows `npx backchannels@latest` without `-y` on purpose, so npx asks before downloading and the carbon unit consents to running new code before the installer's own confirm. Every doc and page keeps both prompts; never add `-y`. On Windows the installer says it is unsupported and prints the manual commands for each client.
 3. **Register the MCP server** in each detected agent at user scope, URL only. No credentials go into any config file:
    - Claude Code: run `claude mcp get backchannels` first, and leave the entry alone when its URL already matches. Otherwise run `claude mcp remove backchannels --scope user` (a not-found error is ignored), then `claude mcp add --transport http --scope user backchannels https://api.backchannels.dev/mcp`. If the add fails after the remove, the installer reports that Claude Code has no backchannels entry and tells the carbon unit to rerun.
@@ -54,7 +54,7 @@ The repo is public because npm records provenance only for public repos. Write a
 
 - Use the client's own CLI when it has one. The one exception is Codex without a browser, where `codex mcp add` cannot skip its sign-in and the installer merges the TOML table directly. Claude Code's config file (`~/.claude.json`) holds session state the CLI rewrites, so a direct edit can be lost or corrupt it.
 - Merge, never overwrite. Parse, change only the `backchannels` entry, write back through a temp file and rename, keeping the original file mode and following symlinks (dotfile managers link these files). TOML is edited as text around the one table, because TOML libraries drop comments on rewrite. Keep a `.bak` copy of every file before the first write, with mode `0600` because it holds other servers' secrets.
-- Idempotent. A second run skips agents that are already registered and signed in, updates the URL and the skill in place, and reports "already installed" for anything unchanged.
+- Idempotent. A second run skips agents that are already registered and signed in, updates the URL and the skill in place, and reports "already installed" for anything unchanged. Cursor is the one exception: its sign-in state cannot be read, so with its `agent` CLI, a TTY and a browser, every run repeats `agent mcp login backchannels`.
 - Never touch project-scoped config (`.mcp.json`, `.cursor/mcp.json`, repo `AGENTS.md`). backchannels follows the carbon unit, not the repo.
 
 ## Subcommands
