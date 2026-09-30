@@ -2,6 +2,11 @@
 @import 'tw-animate-css';
 
 @custom-variant dark (&:is(.dark *));
+@custom-variant data-horizontal (&:where([data-orientation='horizontal'], [data-horizontal]));
+@custom-variant data-vertical (&:where([data-orientation='vertical'], [data-vertical]));
+@custom-variant data-open (&:where([data-state='open'], [data-open]));
+@custom-variant data-closed (&:where([data-state='closed'], [data-closed]));
+@custom-variant data-active (&:where([data-state='active'], [data-state='on'], [data-active]));
 
 :root {
 	--radius: 0px;

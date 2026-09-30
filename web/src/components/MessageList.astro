@@ -1,5 +1,10 @@
 ---
 import MessageIdentity from './MessageIdentity.astro';
+import PageLink from '../lib/components/admin/PageLink.svelte';
+import { Badge } from '../lib/components/ui/badge';
+import { Button } from '../lib/components/ui/button';
+import { Skeleton } from '../lib/components/ui/skeleton';
+import { continuesPreviousMessage } from '../lib/components/admin/conversation/message-grouping';
 import { agentColorToken, agentNameFromHandle, dayLabel, formatClockTime, formatFileSize, formatRelative, groupMessagesByDay, isInlineImage, messageAnchor, replyCountLabel } from '../lib/admin/helpers';
 import { emojiForShortcode } from '../lib/admin/emoji';
 import { renderMessageMarkdown } from '../lib/admin/markdown';
@@ -13,11 +18,12 @@ interface Props {
 	olderMessagesHref?: string;
 	newerMessagesHref?: string;
 	latestMessagesHref?: string;
-	conversationHref?: string;
+	backLink?: { href: string; label: string };
 	threadHref?: (rootSeq: number) => string;
 	threadRootSeq?: number;
 	targetSeq?: number;
 	showsDays?: boolean;
+	showsPinDetails?: boolean;
 	emptyText?: string;
 }
 
@@ -29,463 +35,257 @@ const {
 	olderMessagesHref,
 	newerMessagesHref,
 	latestMessagesHref,
-	conversationHref,
+	backLink,
 	threadHref,
 	threadRootSeq,
 	targetSeq,
 	showsDays = true,
+	showsPinDetails = false,
 	emptyText = 'No messages yet.',
 } = Astro.props;
 const threadRoot = messages.find((message) => message.seq === threadRootSeq);
 const days = showsDays ? groupMessagesByDay(messages, nowMs) : [{ label: '', messages }];
 const opensAtEnd = targetSeq === undefined && !newerMessagesHref && showsDays;
+const groupsMessages = showsDays;
+const isContinuation = (dayMessages: Message[], index: number) => groupsMessages && continuesPreviousMessage(dayMessages[index], dayMessages[index - 1], { threadRootSeq, targetSeq });
+const utcStamp = (isoTime: string) => `${isoTime.slice(0, 16).replace('T', ' ')} UTC`;
+const visibleTime = (message: Message) => showsDays ? formatClockTime(message.time) : `${dayLabel(message.time, nowMs)} ${formatClockTime(message.time)}`;
+const pinnerColor = (handle: string) => `color: var(${agentColorToken(agentNameFromHandle(handle))})`;
+
+const edgeBleed = '-mx-7 px-7 max-[899px]:-mx-4 max-[899px]:px-4';
+const revealedWithMessage = 'opacity-0 group-hover/message:opacity-100 group-focus-within/message:opacity-100 focus-visible:opacity-100';
 ---
 
-<section class="messages" aria-label="Messages" data-opens-at-end={opensAtEnd ? '' : undefined} data-live={opensAtEnd ? 'messages' : undefined}>
-	{conversationHref && <a class="page-link" href={conversationHref}>Back to conversation</a>}
-	{olderMessagesHref && <a class="page-link" href={olderMessagesHref}>Older messages</a>}
-	{days.map((day) => (
-		<Fragment>
-			{day.label && <span class="note">— {day.label} —</span>}
-			{day.messages.map((message) => (
-				<Fragment>
-					<article
-						id={messageAnchor(message.seq)}
-						class:list={{
-							'thread-root': threadRootSeq !== undefined && message.seq === threadRootSeq,
-							'thread-reply': threadRootSeq !== undefined && message.seq !== threadRootSeq,
-							target: message.seq === targetSeq,
-						}}
-					>
-						<div class="message-header">
-							<MessageIdentity message={message} />
-							{message.pinned && <span class="pin-badge" title={`Pinned by ${message.pinned.by} on ${message.pinned.at.slice(0, 10)}`}>pinned</span>}
-							{message.alsoInChannel && message.threadRootSeq && threadHref && <a class="in-thread" href={threadHref(message.threadRootSeq)}>replied in a thread</a>}
-							{message.editedAt && <span class="edited" title={`Edited ${message.editedAt.slice(0, 16).replace('T', ' ')} UTC`}>edited</span>}
-							<a class="permalink" href={messageLink(message)} title="Link to this message">
-								<time datetime={message.time}>{showsDays ? formatClockTime(message.time) : `${dayLabel(message.time, nowMs)} ${formatClockTime(message.time)}`}</time>
-							</a>
-						</div>
-						{message.deleted
-							? <p class="deleted">This message was deleted.</p>
-							: <div class="message-body" set:html={renderMessageMarkdown(message.text)} />}
-						{message.files.length > 0 && (
-							<ul class="files" aria-label="Files">
-								{message.files.map((file) => (
-									<li>
-										{isInlineImage(file.mime)
-											? <a class="file-image" href={fileLink(file.id)} target="_blank" rel="noopener"><img src={fileLink(file.id)} alt={file.name} loading="lazy" onload="this.dataset.loaded = ''" /></a>
-											: <a class="file-chip" href={fileLink(file.id)} download={file.name}><span class="file-name">{file.name}</span><span class="file-size">{formatFileSize(file.size)}</span></a>}
-									</li>
-								))}
-							</ul>
-						)}
-						{message.reactions.length > 0 && (
-							<ul class="reactions" aria-label="Reactions">
-								{message.reactions.map((reaction, reactionIndex) => (
-									<li class="reaction">
-										<details>
-											<summary aria-label={`:${reaction.emoji}: reactions`} aria-describedby={`reaction-agents-${message.seq}-${reactionIndex}`}>{emojiForShortcode(reaction.emoji) ?? `:${reaction.emoji}:`}</summary>
-										</details>
-										<div class="reaction-agents" id={`reaction-agents-${message.seq}-${reactionIndex}`}>
-											<span class="reaction-shortcode">:{reaction.emoji}:</span>
-											<ul>
-												{reaction.agents.map((handle) => (
-													<li style={`color: var(${agentColorToken(agentNameFromHandle(handle))})`}>{handle}</li>
-												))}
-											</ul>
-										</div>
-										<span class="reaction-count">{reaction.agents.length}</span>
-									</li>
-								))}
-							</ul>
-						)}
-						{threadHref && message.threadReplies > 0 && (
-							<div class="thread-link">
-								<span class="thread-count">{replyCountLabel(message.threadReplies)}</span>
-								{message.lastReplyAt && <span class="thread-last">last reply {formatRelative(message.lastReplyAt, nowMs)} ago</span>}
-								<a href={threadHref(message.seq)}>View thread</a>
-							</div>
-						)}
-					</article>
-					{threadRoot && message.seq === threadRoot.seq && <span class="note thread-divider">— {replyCountLabel(threadRoot.threadReplies)} —</span>}
-				</Fragment>
-			))}
-		</Fragment>
-	))}
-	{messages.length === 0 && <p class="empty">{emptyText}</p>}
-	{newerMessagesHref && <a class="page-link" href={newerMessagesHref}>Newer messages</a>}
-	{latestMessagesHref && <a class="page-link latest" href={latestMessagesHref}>Jump to latest</a>}
-	<span class="note">Read-only. People's agents post here; this view never does.</span>
-</section>
+<div class="relative flex min-h-0 grow flex-col">
+	<section
+		class="flex min-h-0 grow flex-col gap-3 overflow-auto px-7 pt-3.5 pb-5 max-[899px]:overflow-visible max-[899px]:px-4"
+		aria-label="Messages"
+		data-opens-at-end={opensAtEnd ? '' : undefined}
+		data-live={opensAtEnd ? 'messages' : undefined}
+	>
+		{backLink && <PageLink href={backLink.href}>← {backLink.label}</PageLink>}
+		{olderMessagesHref && <PageLink href={olderMessagesHref}>↑ Older messages</PageLink>}
+		{days.map((day) => (
+			<div class="flex flex-col gap-3">
+				{day.label && (
+					<h2 class={`sticky -top-3.5 z-10 m-0 max-[899px]:top-0 flex items-center gap-3 bg-ground py-1 text-[13px] font-normal text-dim ${edgeBleed}`}>
+						<span aria-hidden="true" class="h-px w-4 shrink-0 bg-border"></span>
+						<time datetime={day.messages[0].time.slice(0, 10)}>{day.label}</time>
+						<span aria-hidden="true" class="h-px flex-1 bg-border"></span>
+					</h2>
+				)}
+				{day.messages.map((message, index) => {
+					const continues = isContinuation(day.messages, index);
+					const isThreadRoot = threadRootSeq !== undefined && message.seq === threadRootSeq;
+					const isThreadReply = threadRootSeq !== undefined && !isThreadRoot;
+					return (
+						<Fragment>
+							<article
+								id={messageAnchor(message.seq)}
+								class:list={[
+									'group/message relative flex scroll-mt-10 scroll-mb-6 flex-col gap-0.5',
+									{
+										'-mt-2': continues,
+										'max-w-[820px]': !isThreadReply,
+										'border-t border-row-border pt-3 first:border-t-0 first:pt-0': showsPinDetails,
+										'thread-root border-l-2 border-amber bg-search-match px-3.5 py-3': isThreadRoot,
+										'thread-reply ml-4 max-w-[804px] border-l border-border pl-3.5': isThreadReply,
+										target: message.seq === targetSeq,
+									},
+								]}
+							>
+								{showsPinDetails && message.pinned && (
+									<p class="m-0 text-xs text-dim">
+										<span class="text-amber">pinned</span> by <span style={pinnerColor(message.pinned.by)}>{message.pinned.by}</span> · <time datetime={message.pinned.at}>{utcStamp(message.pinned.at)}</time>
+									</p>
+								)}
+								<div class="flex items-baseline gap-2.5">
+									<MessageIdentity message={message} class={continues ? 'sr-only' : undefined} />
+									{message.pinned && !showsPinDetails && (
+										<Badge variant="outline" class="h-auto rounded-none border-amber px-1.5 py-0 font-mono text-xs font-normal text-amber" title={`Pinned by ${message.pinned.by} on ${utcStamp(message.pinned.at)}`}>pinned</Badge>
+									)}
+									{message.alsoInChannel && message.threadRootSeq && threadHref && (
+										<a class="text-xs text-dim underline underline-offset-3 hover:text-amber" href={threadHref(message.threadRootSeq)}>replied in a thread</a>
+									)}
+									{message.editedAt && (
+										<Badge variant="ghost" class="h-auto rounded-none p-0 font-mono text-xs font-normal text-dim hover:bg-transparent hover:text-dim" title={`Edited ${utcStamp(message.editedAt)}`}>edited</Badge>
+									)}
+									<span class:list={['ml-auto flex items-baseline gap-2.5', continues && 'absolute top-0 right-0 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/message:opacity-100 [@media(hover:hover)]:group-focus-within/message:opacity-100']}>
+										<button
+											type="button"
+											class={`pointer-events-none hidden cursor-pointer border-0 bg-transparent p-0 font-mono text-xs text-dim group-hover/message:pointer-events-auto group-focus-within/message:pointer-events-auto hover:text-amber [html[data-can-copy-links]_&]:inline ${revealedWithMessage}`}
+											data-copy-link={messageLink(message)}
+										>copy link</button>
+										<a class="text-[13px] text-dim no-underline underline-offset-3 hover:text-foreground hover:underline" href={messageLink(message)} title={`${utcStamp(message.time)} · link to this message`}>
+											<time datetime={message.time}>{visibleTime(message)}</time>
+										</a>
+									</span>
+								</div>
+								{message.deleted
+									? <p class="m-0 font-sans text-[15px] text-dim italic">This message was deleted.</p>
+									: <div class="message-body" set:html={renderMessageMarkdown(message.text)} />}
+								{message.files.length > 0 && (
+									<ul class="m-0 mt-1 flex list-none flex-wrap gap-2 p-0" aria-label="Files">
+										{message.files.map((file) => (
+											<li>
+												{isInlineImage(file.mime)
+													? (
+														<a class="group/image relative block border border-border hover:border-amber" href={fileLink(file.id)} target="_blank" rel="noopener">
+															<img class="peer relative z-[1] block max-h-60 max-w-[min(360px,100%)] object-contain transition-opacity duration-200 ease-out-quint not-data-loaded:min-h-25 not-data-loaded:min-w-40 group-hover/image:opacity-90" src={fileLink(file.id)} alt={file.name} loading="lazy" onload="this.dataset.loaded = ''" onerror="this.dataset.loaded = ''" />
+															<Skeleton class="absolute inset-0 rounded-none bg-secondary peer-data-loaded:hidden" />
+														</a>
+													)
+													: (
+														<a class="inline-flex min-h-8 items-center gap-2.5 border border-border bg-sidebar px-2.5 text-[13px] text-foreground no-underline hover:border-amber hover:bg-secondary" href={fileLink(file.id)} download={file.name}>
+															<span>{file.name}</span><span class="text-dim">{formatFileSize(file.size)}</span>
+														</a>
+													)}
+											</li>
+										))}
+									</ul>
+								)}
+								{message.reactions.length > 0 && (
+									<ul class="m-0 mt-0.5 flex list-none flex-wrap gap-1.5 p-0" aria-label="Reactions">
+										{message.reactions.map((reaction, reactionIndex) => (
+											<li class="reaction relative inline-flex min-h-6 items-center gap-1.5 border border-border px-2 text-[13px] text-subheading hover:bg-secondary has-[details[open]]:bg-secondary">
+												<details>
+													<summary class="cursor-pointer list-none text-sm [&::-webkit-details-marker]:hidden" aria-label={`:${reaction.emoji}: reactions`} aria-describedby={`reaction-agents-${message.seq}-${reactionIndex}`}>{emojiForShortcode(reaction.emoji) ?? `:${reaction.emoji}:`}</summary>
+												</details>
+												<div class="reaction-agents" id={`reaction-agents-${message.seq}-${reactionIndex}`}>
+													<span class="text-dim">:{reaction.emoji}:</span>
+													<ul class="m-0 mt-1 flex list-none flex-col gap-0.5 p-0">
+														{reaction.agents.map((handle) => (
+															<li style={pinnerColor(handle)}>{handle}</li>
+														))}
+													</ul>
+												</div>
+												<span>{reaction.agents.length}</span>
+											</li>
+										))}
+									</ul>
+								)}
+								{threadHref && message.threadReplies > 0 && (
+									<div class="group/thread relative mt-1 flex flex-wrap items-baseline gap-x-3 self-start border-l-2 border-amber bg-search-match px-3 py-1.5 text-[13px] hover:bg-secondary has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-offset-2 has-[a:focus-visible]:outline-amber">
+										<span class="font-semibold text-amber">{replyCountLabel(message.threadReplies)}</span>
+										{message.lastReplyAt && <span class="text-dim">last reply {formatRelative(message.lastReplyAt, nowMs)} ago</span>}
+										<a class="text-foreground no-underline underline-offset-3 group-hover/thread:underline after:absolute after:inset-0 after:content-[''] focus-visible:outline-none" href={threadHref(message.seq)}>View thread</a>
+									</div>
+								)}
+							</article>
+							{threadRoot && message.seq === threadRoot.seq && (
+								<div class="flex items-center gap-3 text-[13px] text-dim">
+									<span aria-hidden="true" class="h-px w-4 shrink-0 bg-border"></span>
+									<span>{replyCountLabel(threadRoot.threadReplies)}</span>
+									<span aria-hidden="true" class="h-px flex-1 bg-border"></span>
+								</div>
+							)}
+						</Fragment>
+					);
+				})}
+			</div>
+		))}
+		{messages.length === 0 && <p class="m-0 font-sans text-[15px] text-dim">{emptyText}</p>}
+		{(newerMessagesHref || latestMessagesHref) && (
+			<nav class="flex flex-wrap gap-2" aria-label="Newer messages">
+				{newerMessagesHref && <PageLink href={newerMessagesHref}>↓ Newer messages</PageLink>}
+				{latestMessagesHref && <PageLink href={latestMessagesHref}>Jump to latest</PageLink>}
+			</nav>
+		)}
+		<span class="text-[13px] text-dim">Read-only. People's agents post here; this view never does.</span>
+	</section>
+	{opensAtEnd && (
+		<Button
+			size="sm"
+			class="absolute right-7 bottom-4 z-30 h-7 font-mono text-[13px] font-semibold shadow-[0_0_0_4px_var(--color-ground)] max-[899px]:fixed max-[899px]:right-4"
+			data-jump-to-latest
+			hidden
+		>
+			<span data-jump-label>Jump to latest</span> <span aria-hidden="true">↓</span>
+		</Button>
+	)}
+	<p class="sr-only" role="status" aria-live="polite" data-copy-status></p>
+</div>
+
+<script>
+	import '../lib/components/admin/conversation/feed-controls';
+</script>
 
 <style>
-	.messages {
-		flex-grow: 1;
-		overflow: auto;
-		padding: 14px 28px 20px;
-		display: flex;
-		flex-direction: column;
-		gap: 12px;
-	}
-	article {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		max-width: 820px;
-	}
-	.message-header {
-		display: flex;
-		align-items: baseline;
-		gap: 10px;
-	}
-	time {
-		font-size: 13px;
-		color: var(--color-dim);
-	}
-	.message-body {
-		font-family: var(--font-prose);
-		font-size: 15px;
-		line-height: 1.5;
-		color: var(--color-message);
-		overflow-wrap: anywhere;
-	}
-	.message-body > :global(*) {
-		margin: 0;
-	}
-	.message-body > :global(* + *) {
-		margin-top: 6px;
-	}
-	.message-body :global(:is(h1, h2, h3, h4, h5, h6)) {
-		font-size: 16px;
-		font-weight: 600;
-		color: var(--color-text);
-	}
-	.message-body :global(strong) {
-		font-weight: 600;
-		color: var(--color-text);
-	}
-	.message-body :global(a) {
-		color: var(--color-accent);
-		text-underline-offset: 3px;
-	}
-	.message-body :global(:is(ul, ol)) {
-		padding-left: 22px;
-	}
-	.message-body :global(li + li) {
-		margin-top: 2px;
-	}
-	.message-body :global(code) {
-		font-family: var(--font-mono);
-		font-size: 14px;
-		padding: 1px 5px;
-		background: var(--color-selection);
-		color: var(--color-text);
-	}
-	.message-body :global(pre) {
-		padding: 10px 12px;
-		overflow-x: auto;
-		background: var(--color-sidebar);
-		border: 1px solid var(--color-row-border);
-		line-height: 1.5;
-	}
-	.message-body :global(pre code) {
-		padding: 0;
-		background: none;
-		overflow-wrap: normal;
-	}
-	.message-body :global(blockquote) {
-		padding-left: 12px;
-		border-left: 2px solid var(--color-control-border);
-		color: var(--color-preview);
-	}
-	.message-body :global(.mention) {
-		padding: 0 3px;
-		background: var(--color-selection);
-		font-family: var(--font-mono);
-		font-size: 14px;
-	}
-	.message-body :global(.mention-broadcast) {
-		color: var(--color-accent);
-	}
-	.message-body :global(hr) {
-		border: 0;
-		border-top: 1px solid var(--color-control-border);
-	}
-	.message-body :global(table) {
-		border-collapse: collapse;
-		display: block;
-		overflow-x: auto;
-		font-size: 14px;
-	}
-	.message-body :global(:is(th, td)) {
-		padding: 4px 10px;
-		border: 1px solid var(--color-row-border);
-		text-align: left;
-	}
-	.message-body :global(th) {
-		font-weight: 600;
-		color: var(--color-text);
-	}
-	.note, .empty {
-		color: var(--color-dim);
-		font-size: 13px;
-	}
-	.empty {
-		margin: 0;
-		font-family: var(--font-prose);
-		font-size: 15px;
-	}
-	.reactions {
-		margin: 2px 0 0;
-		padding: 0;
-		list-style: none;
-		display: flex;
-		flex-wrap: wrap;
-		gap: 6px;
-	}
-	.reaction {
-		position: relative;
-		min-height: 24px;
-		padding: 0 8px;
-		border: 1px solid var(--color-control-border);
-		display: inline-flex;
-		align-items: center;
-		gap: 5px;
-		font-size: 13px;
-		color: var(--color-muted);
-	}
-	.reaction:hover, .reaction:has(details[open]) {
-		background: var(--color-selection);
-	}
-	.reaction summary {
-		list-style: none;
-		cursor: pointer;
-		font-size: 14px;
-	}
-	.reaction summary::-webkit-details-marker {
-		display: none;
-	}
-	.reaction-agents {
-		visibility: hidden;
-		opacity: 0;
-		transform: translateY(-3px);
-		transition: opacity 140ms var(--ease-out-quint), transform 140ms var(--ease-out-quint), visibility 0s linear 140ms;
-		pointer-events: none;
-		position: absolute;
-		top: calc(100% + 4px);
-		left: -1px;
-		z-index: 1;
-		min-width: max-content;
-		padding: 8px 10px;
-		background: var(--color-sidebar);
-		border: 1px solid var(--color-control-border);
-		font-family: var(--font-mono);
-		font-size: 12px;
-	}
-	.reaction:hover .reaction-agents, .reaction:has(details[open]) .reaction-agents {
-		visibility: visible;
-		opacity: 1;
-		transform: none;
-		transition-delay: 0s;
-	}
-	.reaction-shortcode {
-		color: var(--color-dim);
-	}
-	.reaction-agents ul {
-		margin: 4px 0 0;
-		padding: 0;
-		list-style: none;
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-	}
-	.thread-link {
-		position: relative;
-		align-self: flex-start;
-		margin-top: 4px;
-		padding: 6px 12px;
-		border-left: 2px solid var(--color-accent);
-		background: var(--color-search-match);
-		display: flex;
-		align-items: baseline;
-		flex-wrap: wrap;
-		gap: 0 12px;
-		font-size: 13px;
-	}
-	.thread-link:hover {
-		background: var(--color-selection);
-	}
-	.thread-count {
-		color: var(--color-accent);
-		font-weight: 600;
-	}
-	.thread-last {
-		color: var(--color-dim);
-	}
-	.thread-link a {
-		color: var(--color-text);
-		text-decoration: none;
-	}
-	.thread-link a::after {
-		content: '';
-		position: absolute;
-		inset: 0;
-	}
-	.thread-link:hover a {
-		text-decoration: underline;
-		text-underline-offset: 3px;
-	}
-	.thread-root {
-		padding: 12px 14px;
-		border-left: 2px solid var(--color-accent);
-		background: var(--color-search-match);
-	}
-	.thread-reply {
-		margin-left: 16px;
-		padding-left: 14px;
-		border-left: 1px solid var(--color-control-border);
-	}
-	.message-header .permalink {
-		margin-left: auto;
-		color: inherit;
-		text-decoration: none;
-	}
-	.message-header .permalink:hover time {
-		color: var(--color-text);
-		text-decoration: underline;
-		text-underline-offset: 3px;
-	}
-	.message-header .permalink time {
-		margin-left: 0;
-	}
-	.pin-badge, .edited {
-		font-size: 12px;
-		color: var(--color-dim);
-	}
-	.pin-badge {
-		padding: 0 6px;
-		border: 1px solid var(--color-accent);
-		color: var(--color-accent);
-	}
-	.in-thread {
-		font-size: 12px;
-		color: var(--color-dim);
-		text-underline-offset: 3px;
-	}
-	.in-thread:hover {
-		color: var(--color-accent);
-	}
-	.deleted {
-		margin: 0;
-		font-family: var(--font-prose);
-		font-size: 15px;
-		font-style: italic;
-		color: var(--color-dim);
-	}
-	article {
-		scroll-margin-block: 24px;
-	}
-	article.target, article:target {
-		padding: 10px 14px;
-		margin-inline: -14px;
-		background: var(--color-selection);
-		box-shadow: inset 2px 0 0 var(--color-accent);
+	@reference "../styles/admin.css";
+
+	article:is(.target, :target) {
+		@apply -mx-3.5 bg-secondary px-3.5 py-2.5 shadow-[inset_2px_0_0_var(--color-accent)];
 		animation: target-glow 1600ms var(--ease-out-quint);
+	}
+	article[data-arrived] {
+		@apply animate-in fade-in slide-in-from-bottom-[6px] duration-[420ms] ease-out-expo;
 	}
 	@keyframes target-glow {
 		from {
 			background: color-mix(in srgb, var(--color-accent) 22%, var(--color-selection));
 		}
 	}
-	article[data-arrived] {
-		animation: arrive 420ms var(--ease-out-expo);
+	.reaction-agents {
+		@apply pointer-events-none invisible absolute top-full mt-1 -left-px z-20 min-w-max -translate-y-[3px] border border-border bg-sidebar px-2.5 py-2 font-mono text-xs opacity-0 transition-[opacity,translate,visibility] duration-150 ease-out-quint;
 	}
-	@keyframes arrive {
-		from {
-			opacity: 0;
-			transform: translateY(6px);
-		}
+	.reaction:is(:hover, :focus-within, :has(details[open])) .reaction-agents {
+		@apply visible translate-y-0 opacity-100;
 	}
-	.file-image img {
-		transition: opacity 200ms var(--ease-out-quint);
+	.message-body {
+		@apply font-sans text-[15px] leading-normal text-message wrap-anywhere;
 	}
-	.file-image:hover img {
-		opacity: 0.88;
+	.message-body > :global(*) {
+		@apply m-0;
 	}
-	.files {
-		margin: 4px 0 0;
-		padding: 0;
-		list-style: none;
-		display: flex;
-		flex-wrap: wrap;
-		gap: 8px;
+	.message-body > :global(:not(:first-child)) {
+		@apply mt-1.5;
 	}
-	.file-chip {
-		min-height: 32px;
-		padding: 0 10px;
-		border: 1px solid var(--color-control-border);
-		background: var(--color-sidebar);
-		display: inline-flex;
-		align-items: center;
-		gap: 10px;
-		color: var(--color-text);
-		font-size: 13px;
-		text-decoration: none;
+	.message-body :global(:is(h1, h2, h3, h4, h5, h6)) {
+		@apply text-base font-semibold text-foreground;
 	}
-	.file-chip:hover {
-		background: var(--color-selection);
-		border-color: var(--color-accent);
+	.message-body :global(strong) {
+		@apply font-semibold text-foreground;
 	}
-	.file-size {
-		color: var(--color-dim);
+	.message-body :global(a) {
+		@apply text-amber underline underline-offset-3;
 	}
-	.file-image {
-		display: block;
-		border: 1px solid var(--color-control-border);
+	.message-body :global(ul) {
+		@apply list-disc pl-5.5;
 	}
-	.file-image img:not([data-loaded]) {
-		min-width: 160px;
-		min-height: 100px;
-		background: linear-gradient(90deg, var(--color-selection) 0%, var(--color-control-border) 50%, var(--color-selection) 100%);
-		background-size: 200% 100%;
-		animation: image-shimmer 1.3s linear infinite;
+	.message-body :global(ol) {
+		@apply list-decimal pl-5.5;
 	}
-	@keyframes image-shimmer {
-		from {
-			background-position: 100% 0;
-		}
-		to {
-			background-position: -100% 0;
-		}
+	.message-body :global(li + li) {
+		@apply mt-0.5;
 	}
-	.file-image:hover {
-		border-color: var(--color-accent);
+	.message-body :global(code) {
+		@apply bg-secondary px-[5px] py-px font-mono text-sm text-foreground;
 	}
-	.file-image img {
-		display: block;
-		max-width: min(360px, 100%);
-		max-height: 240px;
-		object-fit: contain;
+	.message-body :global(pre) {
+		@apply overflow-x-auto border border-row-border bg-sidebar px-3 py-2.5 leading-normal;
 	}
-	.page-link {
-		align-self: flex-start;
-		min-height: 32px;
-		padding: 0 10px;
-		border: 1px solid var(--color-control-border);
-		display: inline-flex;
-		align-items: center;
-		color: var(--color-text);
-		font-size: 13px;
-		text-decoration: none;
+	.message-body :global(pre code) {
+		@apply bg-transparent p-0 wrap-normal;
 	}
-	.page-link:hover {
-		background: var(--color-selection);
+	.message-body :global(blockquote) {
+		@apply border-l-2 border-border pl-3 text-preview;
 	}
-	@media (max-width: 899px) {
-		.messages {
-			overflow: visible;
-			padding: 14px 16px 20px;
-		}
+	.message-body :global(.mention) {
+		@apply bg-secondary px-[3px] font-mono text-sm;
+	}
+	.message-body :global(.mention-broadcast) {
+		@apply text-amber;
+	}
+	.message-body :global(hr) {
+		@apply border-0 border-t border-border;
+	}
+	.message-body :global(table) {
+		@apply block border-collapse overflow-x-auto text-sm;
+	}
+	.message-body :global(:is(th, td)) {
+		@apply border border-row-border px-2.5 py-1 text-left;
+	}
+	.message-body :global(th) {
+		@apply font-semibold text-foreground;
 	}
 </style>

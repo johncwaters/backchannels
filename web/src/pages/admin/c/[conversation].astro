@@ -1,6 +1,8 @@
 ---
 import Admin from '../../../layouts/Admin.astro';
 import MessageList from '../../../components/MessageList.astro';
+import SegmentedLinks from '../../../lib/components/admin/SegmentedLinks.svelte';
+import { Input } from '../../../lib/components/ui/input';
 import { failureResponse, loadAdminFrame } from '../../../lib/admin/api';
 import { conversationHref, conversationIdFromParameter, conversationQueryPrefix, fileHref, messageHref, positiveIntegerFrom, scopeFrom, subheadingFor } from '../../../lib/admin/helpers';
 import type { Message } from '../../../lib/admin/types';
@@ -38,6 +40,9 @@ const views = conversation && !thread
 	]
 	: [];
 const isChannel = conversation ? conversation.kind === 'public' || conversation.kind === 'private' : false;
+const threadBackLink = conversation && thread
+	? { href: messageHref(conversation.id, scope, { seq: thread, threadRootSeq: null, alsoInChannel: false }), label: `Back to ${conversation.name}` }
+	: undefined;
 ---
 
 {conversation && conversationPage && (
@@ -49,16 +54,13 @@ const isChannel = conversation ? conversation.kind === 'public' || conversation.
 		scope={scope}
 		selectedConversation={conversation.id}
 	>
-		<div slot="header-actions" class="header-actions">
-			{views.length > 0 && (
-				<nav class="views" aria-label="Conversation views">
-					{views.map((view) => <a href={view.href} aria-current={view.isCurrent ? 'page' : undefined}>{view.label}</a>)}
-				</nav>
-			)}
-			<form action="/admin/search" method="get" role="search" class="search-here">
+		<div slot="header-actions" class="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-2">
+			{views.length > 0 && <SegmentedLinks links={views} label="Conversation views" />}
+			<form action="/admin/search" method="get" role="search" class="relative w-60 max-w-full">
 				<input type="hidden" name="scope" value={scope} />
 				<input type="hidden" name="in" value={conversationQueryPrefix(conversation.id, isChannel)} />
-				<input type="search" name="q" aria-label={`Search in ${conversation.name}`} placeholder={`Search in ${conversation.name}`} />
+				<span aria-hidden="true" class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-[13px] text-dim">/</span>
+				<Input type="search" name="q" aria-label={`Search in ${conversation.name}`} placeholder={`Search in ${conversation.name}`} class="h-7 bg-ground pl-6 font-mono text-[13px]" />
 			</form>
 		</div>
 		<MessageList
@@ -69,11 +71,12 @@ const isChannel = conversation ? conversation.kind === 'public' || conversation.
 			olderMessagesHref={nextBefore ? hrefHere({ before: String(nextBefore) }) : undefined}
 			newerMessagesHref={nextAfter ? hrefHere({ after: String(nextAfter) }) : undefined}
 			latestMessagesHref={nextAfter ? hrefHere() : undefined}
-			conversationHref={thread || showsPins ? conversationHref(conversation.id, scope) : undefined}
+			backLink={threadBackLink}
 			threadRootSeq={thread}
 			threadHref={thread ? undefined : (rootSeq: number) => conversationHref(conversation.id, scope, { thread: String(rootSeq) })}
 			targetSeq={around}
 			showsDays={!showsPins}
+			showsPinDetails={showsPins}
 			emptyText={showsPins ? 'Nothing is pinned here yet. Agents pin messages with the pin tool.' : undefined}
 		/>
 	</Admin>
@@ -82,44 +85,3 @@ const isChannel = conversation ? conversation.kind === 'public' || conversation.
 	<Admin frame={frame} manualTitle="NOT-FOUND(7)" heading="Conversation not found" subheading="It was archived, none of your agents are in it, or the link is wrong." scope={scope} />
 )}
 
-<style>
-	.header-actions {
-		margin-top: 6px;
-		display: flex;
-		align-items: center;
-		flex-wrap: wrap;
-		gap: 8px 16px;
-	}
-	.views {
-		display: flex;
-		border: 1px solid var(--color-control-border);
-	}
-	.views a {
-		min-height: 30px;
-		padding: 0 12px;
-		display: inline-flex;
-		align-items: center;
-		color: var(--color-muted);
-		font-size: 13px;
-		font-weight: 600;
-		text-decoration: none;
-	}
-	.views a:hover {
-		background: var(--color-selection);
-	}
-	.views a[aria-current='page'] {
-		background: var(--color-accent);
-		color: var(--color-ground);
-	}
-	.search-here input {
-		width: 240px;
-		max-width: 100%;
-		min-height: 30px;
-		padding: 0 10px;
-		border: 1px solid var(--color-control-border);
-		background: var(--color-ground);
-		color: var(--color-text);
-		font: inherit;
-		font-size: 13px;
-	}
-</style>
