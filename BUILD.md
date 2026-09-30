@@ -5,12 +5,13 @@ The entry point for an agent that builds the api worker, the installer, or the a
 ## Read in this order
 
 1. [README.md](README.md): the product. It wins every conflict.
-2. [MCP.md](MCP.md): the installer, protocol, auth, tools, conventions, security, testing.
+2. [MCP.md](MCP.md): protocol, auth, tools, conventions, security, testing.
 3. [DATA.md](DATA.md): every table, ID format and storage layout.
 4. [SEARCH.md](SEARCH.md): the search pipeline and every starting number.
 5. [NOTIFICATIONS.md](NOTIFICATIONS.md): inbox fan-out, preferences, what reading clears.
 6. [WEB.md](WEB.md): the admin UI, and the `AdminApi` contract the api worker must serve.
-7. `api/wrangler.jsonc`: the source of truth for bindings and resource IDs. `scripts/provision.mjs` creates missing resources.
+7. [INSTALLER.md](INSTALLER.md): the `npx backchannels` installer, its package and publishing.
+8. `api/wrangler.jsonc`: the source of truth for bindings and resource IDs. `scripts/provision.mjs` creates missing resources.
 
 Bible rules from the README apply to all code and docs: the name is always `backchannels` (lowercase, one word), and the reference chat product is named only in the README, never in code, UI copy, tool descriptions, agent instructions or other docs.
 
@@ -71,7 +72,7 @@ Each step ends with `pnpm typecheck` passing and a deploy that keeps `/health` g
 7. **Semantic search.** Queue producer and consumer, embeddings, Vectorize upserts and deletes, the semantic leg, fusion, the optional cross-encoder, the `REINDEX` workflow.
 8. **Files.** `upload_file`, R2 storage, `file_ids` on `send_message`, `has:file`.
 9. **AdminApi.** The WEB.md contract over the same Durable Object methods, with admin visibility (every conversation) and token checks.
-10. **Installer.** The `cli/` package (MCP.md, Installer).
+10. **Installer.** The `cli/` package (INSTALLER.md).
 11. **Evaluation.** The search corpus (SEARCH.md), MCP Inspector checks, agent evals and the red-team set (MCP.md, Testing).
 
 ## Starting limits
@@ -126,7 +127,7 @@ Checked against Cloudflare, MCP and Google docs on 2026-09-30. They shaped the d
 - Google: the `hd` request parameter is only a UI hint; check the `hd` claim in the ID token. Consumer accounts have no `hd`. Key on `sub`. An ID token fetched directly from Google's token endpoint over TLS with the client secret can be trusted without a signature check, but MCP.md adds `jose` verification anyway. <https://developers.google.com/identity/openid-connect/openid-connect>
 - The Internal audience works only because the Google Cloud project sits in the posthog.com organization. Other companies need an External app with the `hd` allow list.
 
-**Clients** (for the installer; MCP.md has the commands)
+**Clients** (for the installer; INSTALLER.md has the commands)
 - Claude Code, Codex, Cursor and VS Code all support remote Streamable HTTP servers with OAuth. Claude Code: `claude mcp add --transport http`, `claude mcp login`. Codex: `codex mcp add --url`, `codex mcp login`. Cursor: `~/.cursor/mcp.json`, `agent mcp login`; Cursor's CIMD support is undocumented. <https://code.claude.com/docs/en/mcp>, <https://cursor.com/docs/context/mcp>
 - Skills: `~/.claude/skills/` (Claude Code; Cursor and VS Code also read it) and `~/.agents/skills/` (Codex, Cursor, VS Code).
 - Cursor's fixed static-OAuth callback is `http://localhost:8787/callback`, which is why the api worker's dev port is 8788.

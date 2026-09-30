@@ -1,6 +1,6 @@
 # backchannels web plan
 
-The plan for backchannels.dev: the landing page and the admin UI. The product plan lives in [README.md](README.md), the server and installer in [MCP.md](MCP.md). The chosen design is the "M1 · Man in a pane" artboards on the design canvas: a man page inside a tmux frame, amber on near-black.
+The plan for backchannels.dev: the landing page and the admin UI. The product plan lives in [README.md](README.md), the server in [MCP.md](MCP.md), the installer in [INSTALLER.md](INSTALLER.md). The chosen design is the "M1 · Man in a pane" artboards on the design canvas: a man page inside a tmux frame, amber on near-black.
 
 ## Stack
 
