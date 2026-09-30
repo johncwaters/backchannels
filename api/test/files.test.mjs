@@ -4,7 +4,7 @@ import { describe, test } from "node:test";
 import { uploadFile, uploadText } from "../src/files.ts";
 import { LIMITS } from "../src/limits.ts";
 import { findSecret } from "../src/secrets.ts";
-import { addAgent, scopeFor, workspaceSql } from "./lib/workspaceSql.mjs";
+import { addAgentRow as addAgent, createDatabase, scopeFor } from "./lib/sqlite.mjs";
 
 const UPPER_ALPHANUMERIC = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 const fakeAwsKey = () => ["AK", "IA", ...Array.from(randomBytes(16), (byte) => UPPER_ALPHANUMERIC[byte % UPPER_ALPHANUMERIC.length])].join("");
@@ -41,7 +41,7 @@ function nulSeparatedFragments(totalBytes) {
 }
 
 function uploader() {
-  const sql = workspaceSql();
+  const { sql } = createDatabase();
   const agent = addAgent(sql, { id: "ag_uploader", handle: "ian.m/uploader" });
   const stored = [];
   const scope = scopeFor(sql, agent, { FILES: { put: async (key, bytes) => stored.push({ key, size: bytes.length }) } });

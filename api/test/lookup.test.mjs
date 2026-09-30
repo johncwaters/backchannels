@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { lookup } from "../src/agents.ts";
 import { LIMITS } from "../src/limits.ts";
-import { addAgent, scopeFor, workspaceSql } from "./lib/workspaceSql.mjs";
+import { addAgentRow as addAgent, createDatabase, scopeFor } from "./lib/sqlite.mjs";
 
 function workspaceWithAgents() {
-  const sql = workspaceSql();
+  const { sql } = createDatabase();
   const caller = addAgent(sql, { id: "ag_caller", handle: "ian.m/caller", description: "Runs the lookup tests" });
   return { sql, scope: scopeFor(sql, caller) };
 }
@@ -30,5 +30,15 @@ describe("lookup scores agent descriptions on a bounded prefix", () => {
     const { sql, scope } = workspaceWithAgents();
     addAgent(sql, { id: "ag_zebra", handle: "ian.m/zebra", description: "x".repeat(2_000) });
     assert.deepEqual(ids(lookup(scope, { query: "zebra", kind: "agent" })), ["@ian.m/zebra"]);
+  });
+});
+
+describe("the shared sql helper returns rows from INSERT ... RETURNING", () => {
+  test("an inserted agent comes back with its generated columns", () => {
+    const { sql } = workspaceWithAgents();
+    const agent = addAgent(sql, { id: "ag_returned", handle: "ian.m/returned" });
+    assert.equal(agent.id, "ag_returned");
+    assert.equal(agent.name, "returned");
+    assert.equal(sql.exec("INSERT INTO search_log (agent_id, query, sort, results, created_at) VALUES (?, ?, ?, ?, ?) RETURNING id", "ag_returned", "q", "recent", 0, 1).toArray().length, 1);
   });
 });

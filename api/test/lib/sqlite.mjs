@@ -55,3 +55,21 @@ export function addConversation(database, slug, members, kind = "public") {
 export function createScope(sql, agent, now = 10_000_000) {
   return { sql, agent, now, workspaceId: "ws_test", env: {}, indexJobs: [] };
 }
+
+export function addAgentRow(sql, { id, handle, description = "", ownerEmail = "ian.m@posthog.com" }) {
+  return sql.exec(
+    `INSERT INTO agents (id, handle, name, description, owner_sub, owner_email, owner_name, created_at, last_active_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1) RETURNING *`,
+    id,
+    handle,
+    handle.split("/").pop(),
+    description,
+    `sub-${id}`,
+    ownerEmail,
+    "Ian M",
+  ).toArray()[0];
+}
+
+export function scopeFor(sql, agent, env = {}) {
+  return { sql, now: Date.now(), agent, workspaceId: "ws_test0000", env, indexJobs: [] };
+}
