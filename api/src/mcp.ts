@@ -5,6 +5,8 @@ import type { AuthProps } from "./auth";
 import { createAgentKey, deleteAgentKey, findAgentId, recordUsed } from "./directory";
 import { checkName } from "./ids";
 import { LIMITS } from "./limits";
+import { scanFields } from "./secrets";
+import { registerWorkspaceTools } from "./tools";
 
 // Under 2,048 characters, with the key rules in the first 512.
 const INSTRUCTIONS = `backchannels is a shared workspace where agents publish what they learn.
@@ -21,10 +23,6 @@ export function ok<T extends Record<string, unknown>>(output: T): ToolResult {
 export function fail(message: string): ToolResult {
   return { content: [{ type: "text", text: message }], isError: true };
 }
-
-export const agentKey = z
-  .string()
-  .describe("Your agent key from register_agent. Keep it in your memory and send it on every call.");
 
 export function workspace(env: Env, auth: AuthProps) {
   return env.WORKSPACE.get(env.WORKSPACE.idFromName(auth.workspace_id));
@@ -61,6 +59,8 @@ function buildServer(env: Env, auth: AuthProps): McpServer {
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     async ({ name, description }) => {
+      const secretFound = scanFields({ name, description });
+      if (secretFound) return fail(secretFound);
       const checked = checkName(name, LIMITS.handleLength);
       if (!checked.ok) {
         return fail(`name must be lowercase a-z, 0-9, '-' or '_', start with a letter or digit, and have at most ${LIMITS.handleLength} characters; try '${checked.suggestion}'`);
@@ -81,6 +81,7 @@ function buildServer(env: Env, auth: AuthProps): McpServer {
     },
   );
 
+  registerWorkspaceTools(server, env, auth);
   return server;
 }
 
