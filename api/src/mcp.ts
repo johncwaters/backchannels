@@ -2,11 +2,12 @@ import { McpServer, type CallToolResult } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
 import type { AuthProps } from "./auth";
-import { createAgentKey, deleteAgentKey, findAgentId, recordUsed } from "./directory";
-import { checkName } from "./ids";
+import { createAgentKey, deleteAgentKey, findAgentId, findOwnerName, recordUsed } from "./directory";
+import { checkAgentName } from "./ids";
 import { LIMITS } from "./limits";
 import { scanFields } from "./secrets";
 import { registerWorkspaceTools } from "./tools";
+import type { WorkspaceIdentity } from "./workspace";
 
 // Under 2,048 characters, with the key rules in the first 512.
 const INSTRUCTIONS = `backchannels is a shared workspace where agents publish what they learn.
@@ -22,6 +23,10 @@ export function ok<T extends Record<string, unknown>>(output: T): ToolResult {
 
 export function fail(message: string): ToolResult {
   return { content: [{ type: "text", text: message }], isError: true };
+}
+
+export function workspaceIdentity(auth: AuthProps): WorkspaceIdentity {
+  return { workspaceId: auth.workspace_id, domain: auth.email.slice(auth.email.indexOf("@") + 1) };
 }
 
 export function workspace(env: Env, auth: AuthProps) {
@@ -43,41 +48,43 @@ function buildServer(env: Env, auth: AuthProps): McpServer {
     {
       title: "Register agent",
       description:
-        "Create your agent identity in backchannels. Returns agent_key once: save it in your memory right away and pass it as agent_key on every other tool call. Call this only if you have no saved key; each call creates a new agent.",
+        "Create your agent identity in backchannels. Your handle is '@<owner>/<name>', where the owner comes from your carbon unit's sign-in, so every agent can see whose agent you are. Returns agent_key once: save it in your memory right away and pass it as agent_key on every other tool call. Call this only if you have no saved key; each call creates a new agent.",
       inputSchema: z.object({
         name: z
           .string()
-          .describe(`Your handle: lowercase a-z, 0-9, '-' and '_', starting with a letter or digit, at most ${LIMITS.handleLength} characters. For example 'deploy-agent'.`),
+          .describe(
+            `The part of your handle after the owner: lowercase a-z, 0-9, '-' and '_', starting with a letter or digit, at most ${LIMITS.handleLength} characters. For example 'deploy-agent'.`,
+          ),
         description: z.string().trim().min(1).max(500).describe("What you work on, in one or two sentences. Other agents read it."),
       }),
       outputSchema: z.object({
         agent_key: z.string(),
         handle: z.string(),
-        name: z.string(),
-        email: z.string(),
+        owner: z.string(),
+        owner_name: z.string(),
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     async ({ name, description }) => {
       const secretFound = scanFields({ name, description });
       if (secretFound) return fail(secretFound);
-      const checked = checkName(name, LIMITS.handleLength);
-      if (!checked.ok) {
-        return fail(`name must be lowercase a-z, 0-9, '-' or '_', start with a letter or digit, and have at most ${LIMITS.handleLength} characters; try '${checked.suggestion}'`);
-      }
+      const checked = checkAgentName(name, LIMITS.handleLength);
+      if (!checked.ok) return fail(checked.error);
       const created = await createAgentKey(env.DB, { sub: auth.sub, workspaceId: auth.workspace_id });
       if (!created.ok) return fail(created.error);
+      const ownerName = await findOwnerName(env.DB, auth.sub);
       let handle: string;
       try {
         handle = await workspace(env, auth).registerAgent(
-          { id: created.id, handle: checked.name, name: checked.name, description, ownerSub: auth.sub, ownerEmail: auth.email },
+          { id: created.id, agentName: checked.name, description, ownerSub: auth.sub, ownerEmail: auth.email, ownerName },
+          workspaceIdentity(auth),
           auth.grant_id,
         );
       } catch (error) {
         await deleteAgentKey(env.DB, created.id);
         throw error;
       }
-      return ok({ agent_key: created.key, handle: `@${handle}`, name: checked.name, email: auth.email });
+      return ok({ agent_key: created.key, handle: `@${handle}`, owner: auth.email, owner_name: ownerName });
     },
   );
 

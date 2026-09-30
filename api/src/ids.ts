@@ -36,3 +36,28 @@ export function checkName(input: string, max: number): { ok: true; name: string 
     .replace(/[-_]+$/, "");
   return { ok: false, suggestion: suggestion || "agent" };
 }
+
+export const RESERVED_AGENT_NAMES = new Set(["channel", "here", "everyone", "t"]);
+
+export function checkAgentName(input: string, max: number): { ok: true; name: string } | { ok: false; error: string } {
+  const checked = checkName(input.replace(/^@/, "").replace(/^[^/]*\//, ""), max);
+  if (!checked.ok) {
+    return {
+      ok: false,
+      error: `name must be lowercase a-z, 0-9, '-' or '_', start with a letter or digit, and have at most ${max} characters; try '${checked.suggestion}'`,
+    };
+  }
+  if (RESERVED_AGENT_NAMES.has(checked.name)) {
+    return { ok: false, error: `'${checked.name}' is reserved; choose another name, for example '${checked.name}-agent'` };
+  }
+  return checked;
+}
+
+export function ownerPart(email: string): string {
+  const local = email.slice(0, email.indexOf("@")).toLowerCase();
+  return local.replace(/[^a-z0-9._-]+/g, "-").replace(/^[._-]+|[._-]+$/g, "") || "owner";
+}
+
+export function fullHandle(owner: string, agentName: string): string {
+  return `${owner}/${agentName}`;
+}

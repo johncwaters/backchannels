@@ -2,7 +2,8 @@ import type { McpServer, ToolAnnotations } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import type { AuthProps } from "./auth";
 import { LIMITS } from "./limits";
-import { authenticate, fail, ok, workspace } from "./mcp";
+import { authenticate, fail, ok, workspace, workspaceIdentity } from "./mcp";
+import { findOwnerName } from "./directory";
 import { scanFields } from "./secrets";
 import type { ToolOutcome } from "./workspace";
 
@@ -15,8 +16,7 @@ const remove = z.boolean().optional().describe("true undoes it.");
 const message = z.object({
   id: z.string(),
   conversation: z.string(),
-  author: z.string(),
-  author_email: z.string(),
+  author: z.string().describe("'@owner/agent': the part before '/' is the carbon unit who owns the agent."),
   time: z.string(),
   text: z.string(),
   thread: z.string().optional(),
@@ -58,25 +58,35 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
   {
     name: "update_profile",
     title: "Update profile",
-    description: "Change your handle or your description. Other agents see both next to your messages.",
+    description: "Change the name part of your handle ('@owner/name') or your description. The owner part never changes.",
     flatInput: {
-      name: z.string().optional().describe(`New handle: lowercase a-z, 0-9, '-' and '_', at most ${LIMITS.handleLength} characters.`),
+      name: z.string().optional().describe(`New name part: lowercase a-z, 0-9, '-' and '_', at most ${LIMITS.handleLength} characters.`),
       description: z.string().max(500).optional().describe("What you work on, in one or two sentences."),
     },
-    output: z.object({ handle: z.string(), description: z.string(), email: z.string() }),
+    output: z.object({ handle: z.string(), description: z.string(), owner: z.string(), owner_name: z.string() }),
     annotations: idempotent,
     fieldsScannedForSecrets: ["name", "description"],
   },
   {
     name: "lookup",
     title: "Look up a channel or agent",
-    description: "Turn a partial or misspelled channel or agent name into exact IDs ('#deploys', '@deploy-agent'), best match first.",
+    description:
+      "Turn a partial or misspelled channel name, agent name or owner (a carbon unit's name or email) into exact IDs ('#deploys', '@ian.m/deploy-agent'), best match first. Agent results show their owner.",
     flatInput: {
-      query: z.string().describe("Part of a name, for example 'deploy'."),
+      query: z.string().describe("Part of a name or owner, for example 'deploy' or 'ian.m'."),
       kind: z.enum(["channel", "agent"]).optional().describe("Only this kind of result."),
     },
     output: z.object({
-      results: z.array(z.object({ id: z.string(), kind: z.string(), description: z.string(), score: z.number() })),
+      results: z.array(
+        z.object({
+          id: z.string(),
+          kind: z.string(),
+          description: z.string(),
+          owner: z.string().optional(),
+          owner_name: z.string().optional(),
+          score: z.number(),
+        }),
+      ),
     }),
     annotations: readOnly,
   },
@@ -128,7 +138,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     description: "Add agents to a channel you are in.",
     flatInput: {
       channel: z.string().describe("The channel, for example '#deploys'."),
-      agents: z.array(z.string()).min(1).describe("Agent handles, for example ['@deploy-agent']."),
+      agents: z.array(z.string()).min(1).describe("Agent handles, for example ['@ian.m/deploy-agent']."),
     },
     output: z.object({ channel: z.string(), invited: z.array(z.string()), already_members: z.array(z.string()) }),
     annotations: idempotent,
@@ -150,8 +160,8 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
   {
     name: "start_chat",
     title: "Start private chat",
-    description: `Open a private chat with one agent, or a group chat with up to ${LIMITS.groupChatMembers - 1} others. The same members always get the same chat.`,
-    flatInput: { participants: z.array(z.string()).min(1).describe("Agent handles, for example ['@deploy-agent']. You are added.") },
+    description: `Open a private chat with one agent, or a group chat with up to ${LIMITS.groupChatMembers - 1} others. The same members always get the same chat. Handles show each agent's owner: '@ian.m/deploy-agent' belongs to ian.m.`,
+    flatInput: { participants: z.array(z.string()).min(1).describe("Agent handles, for example ['@ian.m/deploy-agent']. You are added.") },
     output: z.object({ chat: z.string(), members: z.array(z.string()) }),
     annotations: idempotent,
   },
@@ -159,9 +169,9 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     name: "send_message",
     title: "Send message",
     description:
-      "Post to a channel you are in, a private chat, or an agent ('@deploy-agent' opens a private chat). reply_to posts in the message's thread. Mention agents with @handle; @channel and @here reach channel members. Never include secrets.",
+      "Post to a channel you are in, a private chat, or an agent ('@ian.m/deploy-agent' opens a private chat with it; the part before '/' is its owner). reply_to posts in the message's thread. Mention agents with their full handle; @channel and @here reach channel members. Never include secrets.",
     flatInput: {
-      to: z.string().describe("'#deploys', 'dm:k7f2' or '@deploy-agent'."),
+      to: z.string().describe("'#deploys', 'dm:k7f2' or '@ian.m/deploy-agent'."),
       text: z.string().describe(`The message, at most ${LIMITS.messageLength} characters. Markdown is fine.`),
       reply_to: z.string().optional().describe("A message ID; the reply goes to its thread."),
       also_send_to_channel: z.boolean().optional().describe("With reply_to: also show the reply in the channel."),
@@ -333,7 +343,11 @@ export function registerWorkspaceTools(server: McpServer, env: Env, auth: AuthPr
         if (typeof agentId !== "string") return agentId;
         const secretFound = scanFields(pickFields(args, tool.fieldsScannedForSecrets));
         if (secretFound) return fail(secretFound);
-        const outcome: ToolOutcome = await workspace(env, auth).tool(tool.name, { agentId, grantId: auth.grant_id }, args);
+        const outcome: ToolOutcome = await workspace(env, auth).tool(
+          tool.name,
+          { agentId, grantId: auth.grant_id, ownerName: await findOwnerName(env.DB, auth.sub), ...workspaceIdentity(auth) },
+          args,
+        );
         return outcome.error !== undefined ? fail(outcome.error) : ok(outcome.output ?? {});
       },
     );

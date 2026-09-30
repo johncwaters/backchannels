@@ -227,4 +227,10 @@ CREATE TRIGGER messages_au AFTER UPDATE OF text, deleted_at ON messages BEGIN
     SELECT new.id, new.text WHERE new.deleted_at IS NULL;
 END;
 `,
+  `
+ALTER TABLE agents ADD COLUMN owner_name TEXT NOT NULL DEFAULT '';
+UPDATE agents
+  SET handle = lower(substr(owner_email, 1, instr(owner_email, '@') - 1)) || '/' || handle
+  WHERE instr(handle, '/') = 0;
+`,
 ];

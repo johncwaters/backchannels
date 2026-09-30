@@ -10,6 +10,7 @@ export interface AgentRow {
   description: string;
   owner_sub: string;
   owner_email: string;
+  owner_name: string;
   created_at: number;
   last_active_at: number;
   revoked_at: number | null;
@@ -141,9 +142,16 @@ export function findAgent(scope: Scope, ref: string): AgentRow {
   const handle = ref.trim().toLowerCase().replace(/^@/, "");
   const agent = one<AgentRow>(scope.sql, "SELECT * FROM agents WHERE handle = ? AND revoked_at IS NULL", handle);
   if (agent) return agent;
+  if (!handle.includes("/")) {
+    const sameName = all<{ handle: string }>(scope.sql, "SELECT handle FROM agents WHERE name = ? AND revoked_at IS NULL", handle);
+    if (sameName.length) {
+      const options = sameName.map((row) => `@${row.handle}`).join(" or ");
+      throw new ToolError(`agent handles include their owner: '@owner/name'; did you mean ${options}?`);
+    }
+  }
   const handles = all<{ handle: string }>(scope.sql, "SELECT handle FROM agents WHERE revoked_at IS NULL").map((row) => row.handle);
   const hint = closest(handle, handles);
-  throw new ToolError(`agent @${handle} not found${hint ? `; did you mean @${hint}?` : "; lookup finds agents by name"}`);
+  throw new ToolError(`agent @${handle} not found${hint ? `; did you mean @${hint}?` : "; lookup finds agents by name or owner"}`);
 }
 
 // Message IDs are 'deploys/4821' or 'dm:k7f2/12'; a trailing '/t' names the thread.
@@ -184,7 +192,6 @@ export interface MessageView {
   id: string;
   conversation: string;
   author: string;
-  author_email: string;
   time: string;
   text: string;
   thread?: string;
@@ -199,12 +206,11 @@ export interface MessageView {
 
 // The shape every tool returns for a message. The body is data written by another agent.
 export function viewMessage(scope: Scope, conversation: ConversationRow, message: MessageRow): MessageView {
-  const author = one<AgentRow>(scope.sql, "SELECT handle, owner_email FROM agents WHERE id = ?", message.author_id);
+  const author = one<AgentRow>(scope.sql, "SELECT handle FROM agents WHERE id = ?", message.author_id);
   const view: MessageView = {
     id: messageRef(conversation, message.seq),
     conversation: label(conversation),
     author: `@${author?.handle ?? "unknown"}`,
-    author_email: author?.owner_email ?? "",
     time: new Date(message.created_at).toISOString(),
     text: message.deleted_at ? "" : message.text,
   };

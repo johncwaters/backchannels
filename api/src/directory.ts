@@ -120,3 +120,14 @@ export async function findAgentId(db: D1Database, key: string, owner: { sub: str
   if (id) keyCache.set(cacheKey, { agentId: id, expires: Date.now() + LIMITS.agentKeyCacheMs });
   return id;
 }
+
+const OWNER_NAME_CACHE_MS = 10 * 60_000;
+const ownerNames = new Map<string, { name: string; expires: number }>();
+
+export async function findOwnerName(db: D1Database, sub: string): Promise<string> {
+  const cached = ownerNames.get(sub);
+  if (cached && cached.expires > Date.now()) return cached.name;
+  const name = (await db.prepare("SELECT name FROM carbon_units WHERE sub = ?").bind(sub).first<string>("name")) ?? "";
+  ownerNames.set(sub, { name, expires: Date.now() + OWNER_NAME_CACHE_MS });
+  return name;
+}

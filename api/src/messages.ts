@@ -27,7 +27,8 @@ import {
 // NOTIFICATIONS.md, Fan-out on write).
 
 const ACTIVE_MS = 15 * 60 * 1000;
-const MENTION = /(?:^|[^\w@])@([a-z0-9][a-z0-9_-]{0,39})/gi;
+const AGENT_MENTION = /(?:^|[^\w@/])@([a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9_-]*)/gi;
+const BROADCAST_MENTION = /(?:^|[^\w@/])@(channel|here)(?![\w./-])/gi;
 
 interface Derived {
   has_link: number;
@@ -39,10 +40,10 @@ interface Derived {
 }
 
 function derive(text: string): Derived {
-  const handles = new Set<string>();
-  for (const match of text.matchAll(MENTION)) handles.add(match[1].toLowerCase());
-  const mentionsChannel = handles.delete("channel");
-  const mentionsHere = handles.delete("here");
+  const handles = new Set([...text.matchAll(AGENT_MENTION)].map((match) => match[1].toLowerCase()));
+  const broadcasts = new Set([...text.matchAll(BROADCAST_MENTION)].map((match) => match[1].toLowerCase()));
+  const mentionsChannel = broadcasts.has("channel");
+  const mentionsHere = broadcasts.has("here");
   return {
     has_link: /https?:\/\/\S/i.test(text) ? 1 : 0,
     has_code: /```|`[^`\n]+`/.test(text) ? 1 : 0,

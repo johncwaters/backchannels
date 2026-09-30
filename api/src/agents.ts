@@ -1,29 +1,38 @@
-import { checkName } from "./ids";
+import { checkAgentName, fullHandle, ownerPart } from "./ids";
 import { LIMITS } from "./limits";
 import { ToolError, all, one, run, similarity, type AgentRow, type Scope } from "./store";
 
 // Agent tools that run inside the workspace object.
 
+function viewOwner(agent: Pick<AgentRow, "owner_email" | "owner_name">) {
+  return { owner: agent.owner_email, owner_name: agent.owner_name };
+}
+
 export function updateProfile(scope: Scope, args: { name?: string; description?: string }) {
   const { agent } = scope;
   let handle = agent.handle;
+  let agentName = agent.name;
   if (args.name !== undefined) {
-    const checked = checkName(args.name, LIMITS.handleLength);
-    if (!checked.ok) throw new ToolError(`name must be lowercase a-z, 0-9, '-' or '_'; try '${checked.suggestion}'`);
-    if (checked.name !== agent.handle && one(scope.sql, "SELECT 1 FROM agents WHERE handle = ?", checked.name)) {
-      throw new ToolError(`@${checked.name} is taken; choose another name`);
+    const checked = checkAgentName(args.name, LIMITS.handleLength);
+    if (!checked.ok) throw new ToolError(checked.error);
+    const candidate = fullHandle(ownerPart(agent.owner_email), checked.name);
+    if (candidate !== agent.handle && one(scope.sql, "SELECT 1 FROM agents WHERE handle = ?", candidate)) {
+      throw new ToolError(`@${candidate} is taken; choose another name`);
     }
-    handle = checked.name;
+    handle = candidate;
+    agentName = checked.name;
   }
   const description = args.description?.trim() || agent.description;
-  run(scope.sql, "UPDATE agents SET handle = ?, name = ?, description = ? WHERE id = ?", handle, handle, description, agent.id);
-  return { handle: `@${handle}`, description, email: agent.owner_email };
+  run(scope.sql, "UPDATE agents SET handle = ?, name = ?, description = ? WHERE id = ?", handle, agentName, description, agent.id);
+  return { handle: `@${handle}`, description, ...viewOwner(agent) };
 }
 
 interface Match {
   id: string;
   kind: "channel" | "agent";
   description: string;
+  owner?: string;
+  owner_name?: string;
   score: number;
 }
 
@@ -42,10 +51,17 @@ function score(query: string, ...fields: string[]): number {
   return best;
 }
 
-// Turns a partial channel or agent name into exact IDs, best match first.
+function scoreAgent(query: string, agent: AgentRow): number {
+  const [owner] = agent.handle.split("/");
+  const byHandle = score(query, agent.handle, agent.description);
+  const byAgentName = score(query, agent.name);
+  const byOwner = Math.max(score(query, owner), score(query, agent.owner_email), score(query, agent.owner_name)) * 0.95;
+  return Math.max(byHandle, byAgentName, byOwner);
+}
+
 export function lookup(scope: Scope, args: { query: string; kind?: "channel" | "agent" }) {
   const query = args.query.trim().toLowerCase().replace(/^[#@]/, "");
-  if (!query) throw new ToolError("query is empty; pass part of a channel or agent name");
+  if (!query) throw new ToolError("query is empty; pass part of a channel, agent or owner name");
   const matches: Match[] = [];
   if (args.kind !== "agent") {
     const channels = all<{ slug: string; kind: string; purpose: string; topic: string }>(
@@ -64,20 +80,20 @@ export function lookup(scope: Scope, args: { query: string; kind?: "channel" | "
     }
   }
   if (args.kind !== "channel") {
-    const agents = all<AgentRow>(scope.sql, "SELECT handle, description, owner_email FROM agents WHERE revoked_at IS NULL");
-    for (const agent of agents) {
+    for (const agent of all<AgentRow>(scope.sql, "SELECT * FROM agents WHERE revoked_at IS NULL")) {
       matches.push({
         id: `@${agent.handle}`,
         kind: "agent",
-        description: `${agent.description} (${agent.owner_email})`,
-        score: score(query, agent.handle, agent.description),
+        description: agent.description,
+        ...viewOwner(agent),
+        score: scoreAgent(query, agent),
       });
     }
   }
   const results = matches
     .filter((match) => match.score >= 0.45)
     .sort((a, b) => b.score - a.score)
-    .slice(0, 10)
+    .slice(0, 20)
     .map((match) => ({ ...match, score: Math.round(match.score * 100) / 100 }));
   return { results };
 }

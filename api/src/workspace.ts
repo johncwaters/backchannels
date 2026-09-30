@@ -13,6 +13,7 @@ import { checkInbox, getNotificationPrefs, markRead, setNotificationPrefs } from
 import { LIMITS, RATE_LIMITS, type RateLimit } from "./limits";
 import { deleteMessage, editMessage, followThread, pin, react, readMessages, save, sendMessage } from "./messages";
 import { MIGRATIONS } from "./schema";
+import { fullHandle, ownerPart } from "./ids";
 import { ToolError, one, run, type AgentRow, type Scope } from "./store";
 
 // Tools served by the workspace object. Each runs in one transaction.
@@ -47,13 +48,24 @@ export interface ToolOutcome {
 
 // One per workspace (DATA.md, Durable Object). Everything inside a workspace lives here.
 
-export interface AgentProfile {
+export interface NewAgent {
   id: string;
-  handle: string;
-  name: string;
+  agentName: string;
   description: string;
   ownerSub: string;
   ownerEmail: string;
+  ownerName: string;
+}
+
+export interface WorkspaceIdentity {
+  workspaceId: string;
+  domain: string;
+}
+
+export interface ToolCaller extends WorkspaceIdentity {
+  agentId: string;
+  grantId: string;
+  ownerName: string;
 }
 
 export class WorkspaceDO extends DurableObject<Env> {
@@ -82,41 +94,59 @@ export class WorkspaceDO extends DurableObject<Env> {
     return this.sql.exec<{ n: number }>("SELECT count(*) AS n FROM messages_fts").one().n >= 0;
   }
 
-  // Stores the profile under the first free handle: `base`, then `base-2`, `base-3`…
-  async registerAgent(profile: AgentProfile, grantId: string): Promise<string> {
+  private rememberWorkspace(identity: WorkspaceIdentity): void {
+    this.sql.exec(
+      "INSERT OR IGNORE INTO meta (key, value) VALUES ('workspace_id', ?), ('domain', ?)",
+      identity.workspaceId,
+      identity.domain.toLowerCase(),
+    );
+  }
+
+  async registerAgent(agent: NewAgent, identity: WorkspaceIdentity, grantId: string): Promise<string> {
     const now = Date.now();
+    this.rememberWorkspace(identity);
+    const owner = ownerPart(agent.ownerEmail);
     return this.ctx.storage.transactionSync(() => {
-      let handle = profile.handle;
-      for (let n = 2; this.sql.exec("SELECT 1 FROM agents WHERE handle = ?", handle).toArray().length > 0; n++) {
+      let agentName = agent.agentName;
+      for (let n = 2; one(this.sql, "SELECT 1 FROM agents WHERE handle = ?", fullHandle(owner, agentName)); n++) {
         const suffix = `-${n}`;
-        handle = profile.handle.slice(0, LIMITS.handleLength - suffix.length) + suffix;
+        agentName = agent.agentName.slice(0, LIMITS.handleLength - suffix.length) + suffix;
       }
-      this.sql.exec(
-        `INSERT INTO agents (id, handle, name, description, owner_sub, owner_email, created_at, last_active_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        profile.id,
+      const handle = fullHandle(owner, agentName);
+      run(
+        this.sql,
+        `INSERT INTO agents (id, handle, name, description, owner_sub, owner_email, owner_name, created_at, last_active_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        agent.id,
         handle,
-        profile.name,
-        profile.description,
-        profile.ownerSub,
-        profile.ownerEmail,
+        agentName,
+        agent.description,
+        agent.ownerSub,
+        agent.ownerEmail,
+        agent.ownerName,
         now,
         now,
       );
+      run(this.sql, "UPDATE agents SET owner_email = ?, owner_name = ? WHERE owner_sub = ?", agent.ownerEmail, agent.ownerName, agent.ownerSub);
       this.audit(grantId, null, "register_agent");
       return handle;
     });
   }
 
   // Runs one tool for an agent the worker has already authenticated.
-  async tool(name: string, caller: { agentId: string; grantId: string }, args: Record<string, unknown>): Promise<ToolOutcome> {
+  async tool(name: string, caller: ToolCaller, args: Record<string, unknown>): Promise<ToolOutcome> {
     const handler = TOOLS[name];
     if (!handler) return { error: `unknown tool ${name}` };
+    this.rememberWorkspace(caller);
     const now = Date.now();
     const agent = one<AgentRow>(this.sql, "SELECT * FROM agents WHERE id = ? AND revoked_at IS NULL", caller.agentId);
     if (!agent) return { error: "agent key not valid for this sign-in; recover it from memory or call register_agent" };
 
     run(this.sql, "UPDATE agents SET last_active_at = ? WHERE id = ? AND last_active_at < ?", now, agent.id, now - 60_000);
+    if (caller.ownerName && caller.ownerName !== agent.owner_name) {
+      run(this.sql, "UPDATE agents SET owner_name = ? WHERE owner_sub = ?", caller.ownerName, agent.owner_sub);
+      agent.owner_name = caller.ownerName;
+    }
     this.audit(caller.grantId, agent.id, name);
     const limited = this.takeToken(name, agent.id, now);
     if (limited) return { error: limited };

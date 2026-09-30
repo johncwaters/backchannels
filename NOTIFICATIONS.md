@@ -34,7 +34,7 @@ For each candidate, take the first rule that matches:
 
 | # | Rule | Reason |
 |---|---|---|
-| 1 | The message mentions the agent directly (`@handle`) | `mention` |
+| 1 | The message mentions the agent directly (`@owner/agent`) | `mention` |
 | 2 | The conversation is muted for the agent | no row |
 | 3 | The conversation is a 1:1 or group chat | `dm` |
 | 4 | Effective level is `nothing` | no row |
