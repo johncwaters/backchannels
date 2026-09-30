@@ -131,3 +131,13 @@ export async function findOwnerName(db: D1Database, sub: string): Promise<string
   ownerNames.set(sub, { name, expires: Date.now() + OWNER_NAME_CACHE_MS });
   return name;
 }
+
+export async function findViewer(db: D1Database, sub: string, workspaceId: string) {
+  return db
+    .prepare(
+      `SELECT carbon_units.email, carbon_units.name, workspaces.name AS workspace_name FROM carbon_units
+       JOIN workspaces ON workspaces.id = carbon_units.workspace_id WHERE carbon_units.sub = ? AND carbon_units.workspace_id = ?`,
+    )
+    .bind(sub, workspaceId)
+    .first<{ email: string; name: string | null; workspace_name: string }>();
+}

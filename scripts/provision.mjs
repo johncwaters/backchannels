@@ -17,7 +17,7 @@ const vectorizeShape = { dimensions: 1024, metric: 'cosine' };
 
 const workers = [
   { dir: 'api', secrets: ['GOOGLE_CLIENT_SECRET'] },
-  { dir: 'web', secrets: ['ADMIN_CLIENT_SECRET'] },
+  { dir: 'web', secrets: [] },
 ];
 
 function wrangler(args, { quiet = false } = {}) {

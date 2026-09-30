@@ -1,63 +1,87 @@
-import { findMatchOffsets, sortConversations } from './helpers';
-import { buildSampleConversations, type ConversationWithMessages } from './sample';
-import type { AdminApi, Conversation, ListOptions, ReadOptions, SearchOptions } from './types';
+import type { APIContext } from 'astro';
+import { env } from 'cloudflare:workers';
+import { buildSidebarGroups, loginHref, sidebarSortFor } from './helpers';
+import type { AdminApiRpc, AdminResult, AdminSession, Conversation, DirectoryKind, Scope } from './types';
 
-function summarizeConversation(conversation: ConversationWithMessages): Conversation {
-	const { messages, ...summary } = conversation;
-	return summary;
+type AdminFailure = Extract<AdminResult<unknown>, { ok: false }>['error'];
+export interface AdminApi {
+	viewer(): ReturnType<AdminApiRpc['viewer']>;
+	listConversations(options: Parameters<AdminApiRpc['listConversations']>[1]): ReturnType<AdminApiRpc['listConversations']>;
+	readConversation(options: Parameters<AdminApiRpc['readConversation']>[1]): ReturnType<AdminApiRpc['readConversation']>;
+	search(options: Parameters<AdminApiRpc['search']>[1]): ReturnType<AdminApiRpc['search']>;
 }
 
-function paginate<Item>(items: Item[], cursor?: string) {
-	const requestedOffset = Number(cursor ?? 0);
-	const offset = Number.isSafeInteger(requestedOffset) && requestedOffset >= 0 ? requestedOffset : 0;
-	const pageSize = 100;
+const refreshWindowMs = 60_000;
+
+export function adminRpc(): AdminApiRpc {
+	return env.ADMIN_API as unknown as AdminApiRpc;
+}
+
+export function adminRedirectUri(url: URL): string {
+	return new URL('/admin/callback', url.origin).href;
+}
+
+export function signInRedirect(context: APIContext): Response {
+	context.session?.destroy();
+	return context.redirect(loginHref(context.url), 302);
+}
+
+export function failureResponse(context: APIContext, failure: AdminFailure): Response {
+	if (failure === 'unauthorized') return signInRedirect(context);
+	return new Response(null, { status: failure === 'not_found' ? 404 : 400 });
+}
+
+async function freshAdminSession(context: APIContext): Promise<AdminSession | null> {
+	const storedSession = await context.session?.get('adminSession');
+	if (!storedSession) return null;
+	if (storedSession.expiresAt - Date.now() > refreshWindowMs) return storedSession;
+	const refreshed = await adminRpc().refreshAdminSession({
+		refreshToken: storedSession.refreshToken,
+		redirectUri: adminRedirectUri(context.url),
+	});
+	if (!refreshed.ok) return null;
+	context.session?.set('adminSession', refreshed.value);
+	return refreshed.value;
+}
+
+export async function adminApiFor(context: APIContext): Promise<AdminApi | Response> {
+	const adminSession = await freshAdminSession(context);
+	if (!adminSession) return signInRedirect(context);
+	const rpc = adminRpc();
+	const { accessToken } = adminSession;
 	return {
-		items: items.slice(offset, offset + pageSize),
-		nextCursor: offset + pageSize < items.length ? String(offset + pageSize) : undefined,
+		viewer: () => rpc.viewer(accessToken),
+		listConversations: (options) => rpc.listConversations(accessToken, options),
+		readConversation: (options) => rpc.readConversation(accessToken, options),
+		search: (options) => rpc.search(accessToken, options),
 	};
 }
 
-export class FakeAdminApi implements AdminApi {
-	private readonly conversations = buildSampleConversations();
-
-	async listConversations(token: string, options: ListOptions) {
-		const needle = options.filter?.trim().toLowerCase() ?? '';
-		const matching = this.conversations.filter((conversation) => {
-			if (options.scope === 'mine' && !conversation.isMine) return false;
-			if (options.kind && conversation.isPrivate !== (options.kind === 'private')) return false;
-			return `${conversation.name} ${conversation.topic}`.toLowerCase().includes(needle);
-		});
-		const page = paginate(sortConversations(matching.map(summarizeConversation), options.sort ?? 'active'), options.cursor);
-		return { conversations: page.items, nextCursor: page.nextCursor };
-	}
-
-	async readConversation(token: string, options: ReadOptions) {
-		const conversation = this.conversations.find((conversation) => conversation.id === options.conversation);
-		if (!conversation) return null;
-		const before = options.before;
-		const messagesBefore = conversation.messages.filter((message) => !before || message.time < before);
-		const requestedLimit = options.limit ?? 100;
-		const limit = Number.isSafeInteger(requestedLimit) && requestedLimit > 0 ? requestedLimit : 100;
-		const messages = messagesBefore.slice(-limit);
-		return {
-			conversation: summarizeConversation(conversation),
-			messages,
-			nextBefore: messagesBefore.length > messages.length ? messages[0].time : undefined,
-		};
-	}
-
-	async search(token: string, options: SearchOptions) {
-		const visible = this.conversations.filter((conversation) => options.scope === 'everyone' || conversation.isMine);
-		const matches = visible.flatMap((conversation) => conversation.messages.flatMap((message) => {
-			const offsets = findMatchOffsets(message.text, options.query);
-			if (!offsets) return [];
-			return [{ conversation: summarizeConversation(conversation), message, ...offsets }];
-		}));
-		const page = paginate(matches, options.cursor);
-		return { matches: page.items, nextCursor: page.nextCursor };
-	}
+export async function loadAdminFrame(context: APIContext, scope: Scope) {
+	const adminApi = await adminApiFor(context);
+	if (adminApi instanceof Response) return adminApi;
+	const listSidebarKind = (kind: DirectoryKind) => adminApi.listConversations({ scope, kind, sort: sidebarSortFor(kind, scope) });
+	const [viewer, publicListing, privateListing] = await Promise.all([
+		adminApi.viewer(),
+		listSidebarKind('public'),
+		listSidebarKind('private'),
+	]);
+	if (!viewer.ok) return failureResponse(context, viewer.error);
+	if (!publicListing.ok) return failureResponse(context, publicListing.error);
+	if (!privateListing.ok) return failureResponse(context, privateListing.error);
+	const nowMs = Date.now();
+	const conversationsByKind: Record<DirectoryKind, Conversation[]> = {
+		public: publicListing.value.conversations,
+		private: privateListing.value.conversations,
+	};
+	return {
+		adminApi,
+		frame: {
+			viewer: viewer.value,
+			nowMs,
+			sidebarGroups: buildSidebarGroups(conversationsByKind, publicListing.value.totals, scope, nowMs),
+		},
+	};
 }
 
-export function adminApiFor(locals: unknown): AdminApi {
-	return new FakeAdminApi();
-}
+export type AdminFrame = Exclude<Awaited<ReturnType<typeof loadAdminFrame>>, Response>['frame'];

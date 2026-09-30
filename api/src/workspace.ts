@@ -9,6 +9,8 @@ import {
   startChat,
   updateChannel,
 } from "./conversations";
+import type { ConversationSort, DirectoryKind, Scope as AdminScope } from "./admin";
+import { adminList, adminRead, adminSearch, type AdminContext } from "./adminData";
 import { checkInbox, getNotificationPrefs, markRead, setNotificationPrefs } from "./inbox";
 import { LIMITS, RATE_LIMITS } from "./limits";
 import { deleteMessage, editMessage, followThread, pin, react, readMessages, save, sendMessage } from "./messages";
@@ -68,6 +70,11 @@ export interface ToolCaller extends WorkspaceIdentity {
   agentId: string;
   grantId: string;
   ownerName: string;
+}
+
+export interface AdminCaller {
+  sub: string;
+  grantId: string;
 }
 
 export class WorkspaceDO extends DurableObject<Env> {
@@ -159,6 +166,30 @@ export class WorkspaceDO extends DurableObject<Env> {
       if (error instanceof ToolError) return { error: error.message };
       throw error;
     }
+  }
+
+  async adminList(
+    caller: AdminCaller,
+    options: { scope: AdminScope; kind?: DirectoryKind; sort?: ConversationSort; filter?: string; cursor?: string },
+  ) {
+    return adminList(this.adminContext(caller), options);
+  }
+
+  async adminRead(caller: AdminCaller, options: { conversation: string; before?: number; limit?: number }) {
+    return adminRead(this.adminContext(caller), options);
+  }
+
+  async adminSearch(caller: AdminCaller, options: { query: string; scope: AdminScope; cursor?: string }) {
+    return adminSearch(this.adminContext(caller), options);
+  }
+
+  private adminContext(caller: AdminCaller): AdminContext {
+    return {
+      sql: this.sql,
+      now: Date.now(),
+      sub: caller.sub,
+      audit: (tool, conversationId) => this.audit(caller.grantId, null, tool, conversationId ?? null),
+    };
   }
 
   // Token buckets (BUILD.md, Starting limits). Returns an error with a retry time, or null.

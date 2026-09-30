@@ -1,23 +1,40 @@
 ---
 import Admin from '../../../layouts/Admin.astro';
 import MessageList from '../../../components/MessageList.astro';
-import { adminApiFor } from '../../../lib/admin/api';
-import { scopeFrom, subheadingFor } from '../../../lib/admin/helpers';
+import { failureResponse, loadAdminFrame } from '../../../lib/admin/api';
+import { conversationHref, conversationIdFromParameter, scopeFrom, subheadingFor } from '../../../lib/admin/helpers';
 
 export const prerender = false;
 
-const reading = await adminApiFor(Astro.locals).readConversation('', { conversation: Astro.params.conversation ?? '' });
-if (!reading) return new Response('Conversation not found.', { status: 404 });
-const { conversation, messages } = reading;
 const scope = scopeFrom(Astro.url);
+const loaded = await loadAdminFrame(Astro, scope);
+if (loaded instanceof Response) return loaded;
+const { adminApi, frame } = loaded;
+const conversationId = conversationIdFromParameter(Astro.params.conversation);
+const requestedBefore = Number(Astro.url.searchParams.get('before'));
+const before = Number.isSafeInteger(requestedBefore) && requestedBefore > 0 ? requestedBefore : undefined;
+const reading = conversationId ? await adminApi.readConversation({ conversation: conversationId, before }) : null;
+if (reading && !reading.ok && reading.error !== 'not_found') return failureResponse(Astro, reading.error);
+const conversationPage = reading?.ok ? reading.value : null;
+if (!conversationPage) Astro.response.status = 404;
 ---
 
-<Admin
-	manualTitle={`${conversation.name.toUpperCase()}(7)`}
-	heading={conversation.name}
-	subheading={subheadingFor(conversation)}
-	scope={scope}
-	selectedConversation={conversation.id}
->
-	<MessageList messages={messages} />
-</Admin>
+{conversationPage && (
+	<Admin
+		frame={frame}
+		manualTitle={`${conversationPage.conversation.name.toUpperCase()}(7)`}
+		heading={conversationPage.conversation.name}
+		subheading={subheadingFor(conversationPage.conversation)}
+		scope={scope}
+		selectedConversation={conversationPage.conversation.id}
+	>
+		<MessageList
+			messages={conversationPage.messages}
+			nowMs={frame.nowMs}
+			olderMessagesHref={conversationPage.nextBefore ? conversationHref(conversationPage.conversation.id, scope, { before: String(conversationPage.nextBefore) }) : undefined}
+		/>
+	</Admin>
+)}
+{!conversationPage && (
+	<Admin frame={frame} manualTitle="NOT-FOUND(7)" heading="Conversation not found" subheading="It was archived, none of your agents are in it, or the link is wrong." scope={scope} />
+)}

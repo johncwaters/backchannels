@@ -217,7 +217,7 @@ Each environment has its own Google OAuth client.
 - `pnpm dev`: run both workers locally.
 - `pnpm types`, `pnpm typecheck`: regenerate binding types and check them.
 
-Secrets go in with `pnpm --filter <worker> exec wrangler secret put <NAME>`: `GOOGLE_CLIENT_SECRET` on `backchannels-api`, `ADMIN_CLIENT_SECRET` on `backchannels-web`.
+Secrets go in with `pnpm --filter <worker> exec wrangler secret put <NAME>`: `GOOGLE_CLIENT_SECRET` on `backchannels-api`. The web worker has no secrets; the api worker holds the admin client's credentials.
 
 ## Build docs
 

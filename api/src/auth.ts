@@ -5,14 +5,16 @@ import {
   OAuthError,
   OAuthResourceServer,
   authorizationErrorRedirect,
+  type AuthRequest,
   type ConsentDescription,
-  type OAuthResourceHandler,
+  type OAuthHelpers,
   type TokenExchangeCallbackOptions,
 } from "@cloudflare/workers-oauth-provider";
 import { recordChecked, recordInstallation, recordRevoked, recordSignIn } from "./directory";
 import { GoogleSignInError, authorizeUrl, exchangeCode, recheck } from "./google";
 import { randomToken } from "./ids";
 import { LIMITS } from "./limits";
+import { serveMcp } from "./mcp";
 
 // The OAuth server every MCP client signs in through, with Google as the sign-in step.
 
@@ -51,6 +53,30 @@ export function mcpResource(env: Env): string {
   return `${env.PUBLIC_URL}/mcp`;
 }
 
+export function adminResource(env: Env): string {
+  return `${env.PUBLIC_URL}/admin`;
+}
+
+export interface AdminClient {
+  clientId: string;
+  clientSecret: string;
+}
+
+export function adminRedirectUris(env: Env): string[] {
+  return env.ADMIN_REDIRECT_URIS.split(",").map((uri) => uri.trim()).filter(Boolean);
+}
+
+const adminClients = (env: Env) => env.ADMIN_CLIENTS.get(env.ADMIN_CLIENTS.idFromName("admin-clients"));
+
+export function isAdminClient(env: Env, clientId: string): Promise<boolean> {
+  return adminClients(env).isAdminClient(clientId);
+}
+
+export async function adminClient(env: Env, redirectUri: string): Promise<AdminClient | null> {
+  if (!adminRedirectUris(env).includes(redirectUri)) return null;
+  return adminClients(env).ensureClient(redirectUri);
+}
+
 // Records the installation once its grant ID exists, and re-checks the Google account on
 // refresh at most once a day. Access tokens last an hour, so an offboarded carbon unit loses
 // access within a day, and an idle grant is checked before it can be used again.
@@ -63,7 +89,7 @@ async function tokenExchangeCallback({ grantType, grantId, clientId, props, env 
       workspaceId: grant.workspace_id,
       clientId,
       clientName: grant.client_name,
-      kind: "mcp",
+      kind: (await isAdminClient(env, clientId)) ? "admin" : "mcp",
     });
     const newProps: GrantProps = { ...grant, grant_id: grantId };
     return { newProps, accessTokenProps: accessProps(newProps) };
@@ -91,13 +117,15 @@ async function tokenExchangeCallback({ grantType, grantId, clientId, props, env 
 const servers = new Map<string, { authorization: OAuthAuthorizationServer<Env>; resource: OAuthResourceServer<Env, AuthProps> }>();
 
 // One pair per issuer, so `wrangler dev` and production share the code.
-export function oauthServers(env: Env, handler: OAuthResourceHandler<Env, AuthProps>) {
+export function oauthServers(env: Env) {
   let pair = servers.get(env.PUBLIC_URL);
   if (!pair) {
     const issuer = env.PUBLIC_URL;
     const authorization = new OAuthAuthorizationServer<Env>({
       issuer,
-      resources: [mcpResource(env)],
+      resources: [mcpResource(env), adminResource(env)],
+      defaultResource: mcpResource(env),
+      legacyGrantResource: mcpResource(env),
       authorizeEndpoint: "/auth/authorize",
       tokenEndpoint: "/auth/token",
       clientRegistrationEndpoint: "/auth/register",
@@ -108,7 +136,7 @@ export function oauthServers(env: Env, handler: OAuthResourceHandler<Env, AuthPr
     const resource = new OAuthResourceServer<Env, AuthProps>({
       resourceMetadata: { resource: mcpResource(env), authorization_servers: [issuer] },
       validateToken: (env) => (resource, token) => authorization.validateToken<AuthProps>(resource, token, env),
-      handler,
+      handler: { fetch: (request, env, ctx) => serveMcp(request, env, ctx, ctx.props) },
     });
     pair = { authorization, resource };
     servers.set(env.PUBLIC_URL, pair);
@@ -122,6 +150,7 @@ export async function authorize(request: Request, env: Env, authorization: OAuth
   return withAuthorizationErrors(async () => {
     if (request.method === "GET") {
       const authRequest = await oauth.parseAuthRequest(request);
+      if (await isAdminClient(env, authRequest.clientId)) return beginAdminSignIn(env, oauth, authRequest);
       const details = await oauth.describeConsent(authRequest);
       const consent = await oauth.beginConsent(authRequest);
       consent.headers.set("content-type", "text/html; charset=utf-8");
@@ -136,11 +165,22 @@ export async function authorize(request: Request, env: Env, authorization: OAuth
       return new Response(null, { status: 302, headers: denied.headers });
     }
     const approved = await oauth.approveConsent(request, handle);
-    const data: UpstreamData = { verifier: randomToken(48), nonce: randomToken(16) };
-    const { state, headers } = await oauth.beginUpstream(approved.request, { data, headers: approved.headers });
-    headers.set("location", await authorizeUrl(env, state, data.verifier, data.nonce));
-    return new Response(null, { status: 302, headers });
+    return redirectToGoogle(env, oauth, approved.request, approved.headers);
   });
+}
+
+async function beginAdminSignIn(env: Env, oauth: OAuthHelpers, authRequest: AuthRequest): Promise<Response> {
+  if (authRequest.resource !== adminResource(env)) {
+    return messagePage("Sign-in stopped", "The admin client signs in only to the admin UI.", 400);
+  }
+  return redirectToGoogle(env, oauth, authRequest);
+}
+
+async function redirectToGoogle(env: Env, oauth: OAuthHelpers, authRequest: AuthRequest, headers?: Headers): Promise<Response> {
+  const data: UpstreamData = { verifier: randomToken(48), nonce: randomToken(16) };
+  const upstream = await oauth.beginUpstream(authRequest, { data, headers });
+  upstream.headers.set("location", await authorizeUrl(env, upstream.state, data.verifier, data.nonce));
+  return new Response(null, { status: 302, headers: upstream.headers });
 }
 
 export async function googleCallback(request: Request, env: Env, authorization: OAuthAuthorizationServer<Env>): Promise<Response> {

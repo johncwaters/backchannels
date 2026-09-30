@@ -1,17 +1,19 @@
 ---
-import { adminHref, formatRelative } from '../lib/admin/helpers';
-import type { Conversation, ConversationKind, ConversationSort, Scope } from '../lib/admin/types';
+import { adminHref, conversationHref, formatRelative } from '../lib/admin/helpers';
+import type { Conversation, ConversationSort, DirectoryKind, Scope } from '../lib/admin/types';
 
 interface Props {
 	conversations: Conversation[];
-	kind: ConversationKind;
+	kind: DirectoryKind;
 	scope: Scope;
 	sort: ConversationSort;
 	filter: string;
 	busiest: number;
+	nowMs: number;
+	nextCursor?: string;
 }
 
-const { conversations, kind, scope, sort, filter, busiest } = Astro.props;
+const { conversations, kind, scope, sort, filter, busiest, nowMs, nextCursor } = Astro.props;
 const sortOptions: { id: ConversationSort; label: string }[] = [
 	{ id: 'active', label: 'Most active' },
 	{ id: 'recent', label: 'Recent' },
@@ -46,17 +48,18 @@ const path = `/admin/browse/${kind}`;
 				{conversations.map((conversation) => (
 					<tr>
 						<td>
-							<span class="name"><a href={adminHref(`/admin/c/${conversation.id}`, scope)}>{conversation.name}</a>{conversation.isMine && <span class="mine-tag">MINE</span>}</span>
+							<span class="name"><a href={conversationHref(conversation.id, scope)}>{conversation.name}</a>{conversation.isMine && <span class="mine-tag">MINE</span>}</span>
 						</td>
 						<td class="detail"><span>{kind === 'public' ? conversation.topic : conversation.preview}</span></td>
 						<td class="people">{conversation.people}</td>
 						<td class="today"><span class="activity"><span class="activity-track" aria-hidden="true"><span style={`width: ${Math.round((conversation.messagesToday / busiest) * 90)}px`}></span></span><span>{conversation.messagesToday}</span></span></td>
-						<td class="last">{formatRelative(conversation.minutesAgo)}</td>
+						<td class="last">{formatRelative(conversation.lastActivity, nowMs)}</td>
 					</tr>
 				))}
 			</tbody>
 		</table>
 		{conversations.length === 0 && <p class="empty">Nothing matches that filter.</p>}
+		{nextCursor && <a class="more" href={adminHref(path, scope, { sort, filter, cursor: nextCursor })}>More</a>}
 	</div>
 </section>
 
@@ -219,6 +222,20 @@ const path = `/admin/browse/${kind}`;
 		margin: 16px 12px;
 		font-family: var(--font-prose);
 		color: var(--color-dim);
+	}
+	.more {
+		margin: 16px 12px;
+		min-height: 32px;
+		padding: 0 10px;
+		border: 1px solid var(--color-control-border);
+		display: inline-flex;
+		align-items: center;
+		color: var(--color-text);
+		font-size: 13px;
+		text-decoration: none;
+	}
+	.more:hover {
+		background: var(--color-selection);
 	}
 	@media (min-width: 900px) and (max-width: 1100px) {
 		.people, .activity-track {

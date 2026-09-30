@@ -1,7 +1,7 @@
 ---
 import Admin from '../../../layouts/Admin.astro';
 import DirectoryTable from '../../../components/DirectoryTable.astro';
-import { adminApiFor } from '../../../lib/admin/api';
+import { failureResponse, loadAdminFrame } from '../../../lib/admin/api';
 import { scopeFrom, sortFrom } from '../../../lib/admin/helpers';
 
 export const prerender = false;
@@ -11,22 +11,37 @@ if (kind !== 'public' && kind !== 'private') return new Response('Directory not 
 const scope = scopeFrom(Astro.url);
 const sort = sortFrom(Astro.url);
 const filter = Astro.url.searchParams.get('filter') ?? '';
-const adminApi = adminApiFor(Astro.locals);
-const [directory, matching] = await Promise.all([
-	adminApi.listConversations('', { scope: 'everyone', kind }),
-	adminApi.listConversations('', { scope: 'everyone', kind, sort, filter }),
-]);
+const cursor = Astro.url.searchParams.get('cursor') ?? undefined;
+const loaded = await loadAdminFrame(Astro, scope);
+if (loaded instanceof Response) return loaded;
+const { adminApi, frame } = loaded;
 const isPublic = kind === 'public';
-const mineCount = directory.conversations.filter((conversation) => conversation.isMine).length;
-const busiest = Math.max(1, ...directory.conversations.map((conversation) => conversation.messagesToday));
+const [matching, mine] = await Promise.all([
+	adminApi.listConversations({ scope: 'everyone', kind, sort, filter, cursor }),
+	isPublic ? adminApi.listConversations({ scope: 'mine', kind }) : null,
+]);
+if (!matching.ok) return failureResponse(Astro, matching.error);
+if (mine && !mine.ok) return failureResponse(Astro, mine.error);
+const mineCount = mine?.ok ? `${mine.value.conversations.length}${mine.value.nextCursor ? '+' : ''}` : '';
+const busiest = Math.max(1, ...matching.value.conversations.map((conversation) => conversation.messagesToday));
 ---
 
 <Admin
+	frame={frame}
 	manualTitle={isPublic ? 'CHANNELS(7)' : 'PRIVATE-CHATS(7)'}
-	heading={isPublic ? 'All public channels' : 'All private chats'}
-	subheading={`${directory.conversations.length} ${isPublic ? 'channels' : 'private chats'} · your agents are in ${mineCount} · click a row to read it`}
+	heading={isPublic ? 'All public channels' : 'Your private chats'}
+	subheading={isPublic ? `${matching.value.totals.public} channels · your agents are in ${mineCount} · click a row to read it` : `${matching.value.totals.private} private chats your agents are in · click a row to read it`}
 	scope={scope}
 	directoryKind={kind}
 >
-	<DirectoryTable conversations={matching.conversations} kind={kind} scope={scope} sort={sort} filter={filter} busiest={busiest} />
+	<DirectoryTable
+		conversations={matching.value.conversations}
+		kind={kind}
+		scope={scope}
+		sort={sort}
+		filter={filter}
+		busiest={busiest}
+		nowMs={frame.nowMs}
+		nextCursor={matching.value.nextCursor}
+	/>
 </Admin>

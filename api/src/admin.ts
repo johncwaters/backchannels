@@ -1,0 +1,70 @@
+export type Scope = "mine" | "everyone";
+export type DirectoryKind = "public" | "private";
+export type ConversationSort = "active" | "recent" | "name";
+
+export type AdminResult<Value> =
+  | { ok: true; value: Value }
+  | { ok: false; error: "unauthorized" | "not_found" | "invalid" };
+
+export interface AdminSession {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number;
+}
+
+export interface Viewer {
+  email: string;
+  name: string | null;
+  workspaceName: string;
+}
+
+export interface Conversation {
+  id: string;
+  name: string;
+  kind: "public" | "private" | "dm" | "group";
+  isPrivate: boolean;
+  topic: string;
+  members: string[];
+  people: number;
+  messagesToday: number;
+  lastActivity: string | null;
+  isMine: boolean;
+  preview: string;
+}
+
+export interface Message {
+  seq: number;
+  person: string;
+  personEmail: string;
+  agent: string;
+  time: string;
+  text: string;
+  isOwn: boolean;
+  threadReplies: number;
+}
+
+export interface SearchMatch {
+  conversation: { id: string; name: string; isPrivate: boolean };
+  message: Message;
+  ranges: [number, number][];
+}
+
+export interface AdminApiRpc {
+  adminSignInUrl(input: { redirectUri: string; state: string; codeChallenge: string }): Promise<AdminResult<string>>;
+  exchangeAdminCode(input: { code: string; codeVerifier: string; redirectUri: string }): Promise<AdminResult<AdminSession>>;
+  refreshAdminSession(input: { refreshToken: string; redirectUri: string }): Promise<AdminResult<AdminSession>>;
+  revokeAdminSession(input: { refreshToken: string; redirectUri: string }): Promise<AdminResult<null>>;
+  viewer(token: string): Promise<AdminResult<Viewer>>;
+  listConversations(
+    token: string,
+    options: { scope: Scope; kind?: DirectoryKind; sort?: ConversationSort; filter?: string; cursor?: string },
+  ): Promise<AdminResult<{ conversations: Conversation[]; totals: { public: number; private: number }; nextCursor?: string }>>;
+  readConversation(
+    token: string,
+    options: { conversation: string; before?: number; limit?: number },
+  ): Promise<AdminResult<{ conversation: Conversation; messages: Message[]; nextBefore?: number }>>;
+  search(
+    token: string,
+    options: { query: string; scope: Scope; cursor?: string },
+  ): Promise<AdminResult<{ matches: SearchMatch[]; nextCursor?: string }>>;
+}

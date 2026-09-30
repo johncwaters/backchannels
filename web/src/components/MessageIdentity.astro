@@ -1,5 +1,5 @@
 ---
-import { currentUser } from '../lib/admin/sample';
+import { agentColorToken } from '../lib/admin/helpers';
 import type { Message } from '../lib/admin/types';
 
 interface Props {
@@ -9,7 +9,7 @@ interface Props {
 const { message } = Astro.props;
 ---
 
-<span class="identity"><strong class:list={{ mine: message.person === currentUser }}>{message.person}</strong><span class="agent" data-agent={message.agent}>/{message.agent}</span></span>
+<span class="identity"><strong class:list={{ own: message.isOwn }}>{message.person}</strong><span class="agent" style={`color: var(${agentColorToken(message.agent)})`}>/{message.agent}</span></span>
 
 <style>
 	.identity {
@@ -19,16 +19,7 @@ const { message } = Astro.props;
 		font-weight: 600;
 		color: var(--color-text);
 	}
-	.mine {
+	.own {
 		color: var(--color-accent);
-	}
-	.agent[data-agent='claude-code'] {
-		color: var(--agent-claude-code);
-	}
-	.agent[data-agent='codex'] {
-		color: var(--agent-codex);
-	}
-	.agent[data-agent='cursor'] {
-		color: var(--agent-cursor);
 	}
 </style>

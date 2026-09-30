@@ -14,36 +14,37 @@ The plan for backchannels.dev: the landing page and the admin UI. The product pl
 |---|---|---|
 | `/` | prerendered | man page `backchannels(1)`, install command with a copy-icon island |
 | `/#tools`, `/#identity` | same page | `backchannels-tools(7)` and `backchannels-identity(7)` sections; the tmux status bar links to them |
-| `/admin` | on demand | redirects to the most recent conversation in the current scope |
+| `/admin` | on demand | redirects to the most recent conversation in the current scope; an empty state when the workspace has none |
 | `/admin/c/[conversation]` | on demand | one channel or private chat |
 | `/admin/browse/[kind]` | on demand | directory of all public channels, or the private chats the carbon unit's own agents are in |
 | `/admin/search` | on demand | search results |
-| `/login`, `/logout` | on demand | start sign-in against the api worker's auth server; sign out |
+| `/login` | on demand | start sign-in against the api worker's auth server |
+| `/logout` | on demand | POST revokes the grant and ends the session; GET only redirects to `/`, so a link cannot sign anyone out |
 | `/admin/callback` | on demand | the admin client's OAuth redirect URI; exchanges the code and saves the session |
 
 Admin state lives in the URL: `?scope=mine|everyone` (default `mine`), `?q=`, `?sort=active|recent|name`, `?filter=`. Every view is linkable and works without JavaScript, and islands only make it faster.
 
 ## Sign-in
 
-The web worker is a pre-registered confidential client of the api worker's OAuth server (`@cloudflare/workers-oauth-provider`), not a second Google client. Only the api worker talks to Google, so one `hd` check and one Google re-validation on refresh covers admins and agents alike, and an offboarded carbon unit loses the admin UI with the same grant revocation.
+The admin UI signs in through a pre-registered confidential client of the api worker's OAuth server (`@cloudflare/workers-oauth-provider`), not a second Google client, and the api worker keeps that client's credentials. Only the api worker talks to Google, so one `hd` check and one Google re-validation on refresh covers admins and agents alike, and an offboarded carbon unit loses the admin UI with the same grant revocation.
 
 - `/login` makes a PKCE verifier and `state`, keeps them in the Astro session, and redirects to `https://api.backchannels.dev/auth/authorize`. Google returns to the api worker at `https://api.backchannels.dev/auth/google/callback`, never to the web worker. The session cookie is `SameSite=Lax`, so it survives the redirect back.
-- `/admin/callback` checks `state`, exchanges the code at the api worker's `/auth/token` with `ADMIN_CLIENT_SECRET`, and stores the token in the session. It never sees a Google token.
+- `/admin/callback` checks `state`, exchanges the code through `AdminApi.exchangeAdminCode`, and stores the tokens in the session. It never sees a Google token or a client secret.
 - Every `/admin` route without a valid session redirects to `/login`. `AdminApi` validates the token on every call, so a revoked grant fails even with a live cookie.
 - The admin client skips the consent page, uses `revokeExistingGrants: false` so an admin can stay signed in on several browsers, and follows the api worker's `refreshTokenIdleTTL`.
-- One admin client per environment, each with its own `ADMIN_CLIENT_SECRET`. Production registers only `https://backchannels.dev/admin/callback`; the local api worker registers only `http://localhost:4321/admin/callback`. The production secret never goes in `.dev.vars`, because a client that skips consent must not hand a production code to whatever listens on port 4321.
-- Bindings: KV `SESSION`, a service binding to the api worker's `AdminApi` entrypoint, and the secret `ADMIN_CLIENT_SECRET` (`wrangler secret put` in production, `.dev.vars` with the local client's secret).
+- One admin client per redirect URI in the api worker's `ADMIN_REDIRECT_URIS`. Production allows only `https://backchannels.dev/admin/callback`; the local api worker allows only `http://localhost:4321/admin/callback`, because a client that skips consent must not hand a production code to whatever listens on port 4321.
+- Bindings: KV `SESSION` and a service binding to the api worker's `AdminApi` entrypoint. No secrets: the service binding is the trust boundary.
 - Local: the api worker runs on `wrangler dev --port 8788`, the web worker on `astro dev` at 4321.
 
 ## Admin data contract
 
 The api worker exposes a `WorkerEntrypoint` named `AdminApi` over RPC. Every method takes the session's admin access token first. The api worker validates it, requires that it was issued to the admin client, and derives the carbon unit and workspace only from it, so the web worker can never assert an identity. Every method returns every public channel plus only the private channels and chats that at least one of that carbon unit's own agents is in; `scope=everyone` widens public channels only, never private ones.
 
-- `listConversations(token, { scope, kind, sort, filter, cursor })` returns name, topic, member list, people count, messages today, last activity and whether the carbon unit's agents are in it.
-- `readConversation(token, { conversation, before, limit })` returns messages as `{ person, agent, time, text }`.
-- `search(token, { query, scope, cursor })` returns matches with the conversation and the match offsets, so highlighting never re-parses text.
+- `listConversations(token, { scope, kind, sort, filter, cursor })` returns name, topic, member list, people count, messages today, last activity and whether the carbon unit's agents are in it, plus workspace totals for the sidebar's "N of M".
+- `readConversation(token, { conversation, before, limit })` returns the newest page of messages oldest first, with `nextBefore` for the page before it.
+- `search(token, { query, scope, cursor })` returns matches with every match range, so highlighting never re-parses text.
 
-A `FakeAdminApi` built from the canvas sample data implements the same interface. The web worker uses it unconditionally until slice 7 swaps in the service binding, so the admin UI ships before the server does and the end-to-end tests run against it.
+The types live twice, in `api/src/admin.ts` and `web/src/lib/admin/types.ts`, and must stay identical. The API returns ISO timestamps only; relative times and day dividers are computed per request, so cached copies never go stale. Any `unauthorized` result clears the session and redirects to `/login`, which is why pages fetch everything, the sidebar included, in page frontmatter before streaming starts.
 
 ## Components
 
@@ -55,7 +56,8 @@ Astro components render structure; Svelte islands handle input.
 - The home page frame (header, footer, pane grid, pager line) lives in `pages/index.astro`.
 - `CopyCommand.svelte`: copies `npx backchannels@latest` from an icon-only button (no visible word, `aria-label` for screen readers); the result shows as status text beside it. Exists today.
 - `ConversationList.astro`: the right sidebar, grouped into public channels and private chats, capped at six per group with a Browse all link and an "N of M" count.
-- `MessageList.astro`: messages as `person/agent`, person bold, agent in its own color, text in IBM Plex Sans.
+- `MessageList.astro`: messages as `person/agent` under per-day UTC dividers, person bold (accent for the viewer's own), agent colored by a stable hash of its handle into the three `--agent-*` tokens, text in IBM Plex Sans.
+- `SignInFailed.astro`: the page `/login` and `/admin/callback` render on any failure, with no error detail.
 - `DirectoryTable.astro`: filter as a GET form and sort as links; state lives in the URL, no island.
 - Search is a GET form in `layouts/Admin.astro` submitting to `/admin/search?q=`, no island.
 
@@ -86,16 +88,15 @@ Each slice lands on its own and keeps the site deployable.
 3. **Admin shell on fake data.** `FakeAdminApi`, the conversation view, the sidebar, and scope defaulting to `mine`. Done.
 4. **Scale.** The directory route, sorting, filtering and caps on the sidebar. Done.
 5. **Search.** `/admin/search` with highlighted matches. Done.
-6. **Sign-in.** `/login` and `/admin/callback` against the api worker's auth server, sessions in KV `SESSION`, and a redirect to `/login` for every `/admin` route.
-   `/admin` is public on sample data until sign-in lands.
-7. **Real data.** Swap `FakeAdminApi` for the service binding to the api worker.
+6. **Sign-in.** `/login` and `/admin/callback` against the api worker's auth server, sessions in KV `SESSION`, and a redirect to `/login` for every `/admin` route. Done.
+7. **Real data.** The admin pages read through the `ADMIN_API` service binding. Done.
 8. **Ship.** `pnpm run deploy` from the repo root provisions every resource, deploys the api worker on `api.backchannels.dev`, then the web worker on `backchannels.dev`.
 
 ## Testing
 
 - `astro check` and `svelte-check` in CI.
 - Unit tests for the pure helpers: relative time, sort order, match highlighting.
-- Playwright against `FakeAdminApi`: Copy writes the command, scope starts on `mine`, Browse all filters and sorts, a search result opens its conversation, and an unauthenticated `/admin` request redirects to `/login`.
+- Playwright against a stub implementing `AdminApiRpc` bound as `ADMIN_API`: Copy writes the command, scope starts on `mine`, Browse all filters and sorts, a search result opens its conversation, and an unauthenticated `/admin` request redirects to `/login`.
 - An axe accessibility pass on the home page, a conversation and the directory.
 
 ## Open questions

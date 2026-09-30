@@ -1,40 +1,53 @@
 ---
 import Admin from '../../layouts/Admin.astro';
 import MessageIdentity from '../../components/MessageIdentity.astro';
-import { adminApiFor } from '../../lib/admin/api';
-import { adminHref, scopeFrom, splitMatchText } from '../../lib/admin/helpers';
+import { failureResponse, loadAdminFrame } from '../../lib/admin/api';
+import { adminHref, conversationHref, dayLabel, formatClockTime, highlightSegments, invalidSearchQueryCause, scopeFrom, searchSummary } from '../../lib/admin/helpers';
 
 export const prerender = false;
 
 const scope = scopeFrom(Astro.url);
 const query = (Astro.url.searchParams.get('q') ?? '').trim();
 if (!query) return Astro.redirect(adminHref('/admin', scope), 302);
-const { matches } = await adminApiFor(Astro.locals).search('', { query, scope });
+const loaded = await loadAdminFrame(Astro, scope);
+if (loaded instanceof Response) return loaded;
+const { adminApi, frame } = loaded;
+const cursor = Astro.url.searchParams.get('cursor') ?? undefined;
+const searched = await adminApi.search({ query, scope, cursor });
+const invalidQueryCause = invalidSearchQueryCause(query);
+const isQueryRejected = !searched.ok && searched.error === 'invalid' && invalidQueryCause !== null;
+if (!searched.ok && searched.error === 'invalid' && !isQueryRejected) return Astro.redirect(adminHref('/admin/search', scope, { q: query }), 302);
+if (!searched.ok && !isQueryRejected) return failureResponse(Astro, searched.error);
+const { matches, nextCursor } = searched.ok ? searched.value : { matches: [], nextCursor: undefined };
 const conversationCount = new Set(matches.map((match) => match.conversation.id)).size;
+const rejectedQueryMessage = invalidQueryCause === 'no-words' ? 'Search for at least one word.' : 'Shorten the search to at most 16 words and 200 characters.';
 ---
 
 <Admin
+	frame={frame}
 	manualTitle="SEARCH(1)"
 	heading={`“${query}”`}
-	subheading={`${matches.length} messages in ${conversationCount} conversations. Click one to open it.`}
+	subheading={isQueryRejected ? undefined : `${searchSummary({ matchCount: matches.length, conversationCount, cursor, hasNextCursor: Boolean(nextCursor) })} Click one to open it.`}
 	scope={scope}
 	query={query}
 >
 	<section class="search-results" aria-label="Search results">
-		{matches.length === 0 && <p class="empty">Nobody's agent has written that yet. Try a shorter word.</p>}
+		{isQueryRejected && <p class="empty">{rejectedQueryMessage}</p>}
+		{!isQueryRejected && matches.length === 0 && <p class="empty">Nobody's agent has written that yet. Try a shorter word.</p>}
 		{matches.map((match) => {
-			const segments = splitMatchText(match.message.text, match);
+			const segments = highlightSegments(match.message.text, match.ranges);
 			return (
-				<a class="match" href={adminHref(`/admin/c/${match.conversation.id}`, scope)}>
+				<a class="match" href={conversationHref(match.conversation.id, scope)}>
 					<span class="match-header">
 						<MessageIdentity message={match.message} />
 						<span class="conversation">in <span>{match.conversation.name}</span></span>
-						<time>{match.message.time}</time>
+						<time datetime={match.message.time}>{dayLabel(match.message.time, frame.nowMs)} {formatClockTime(match.message.time)}</time>
 					</span>
-					<span class="message-text">{segments.before}<mark>{segments.matched}</mark>{segments.after}</span>
+					<span class="message-text">{segments.map((segment) => segment.isMatch ? <mark>{segment.text}</mark> : segment.text)}</span>
 				</a>
 			);
 		})}
+		{nextCursor && <a class="more" href={adminHref('/admin/search', scope, { q: query, cursor: nextCursor })}>More</a>}
 	</section>
 </Admin>
 
@@ -87,6 +100,20 @@ const conversationCount = new Set(matches.map((match) => match.conversation.id))
 		font-size: 15px;
 		line-height: 1.6;
 		color: var(--color-message);
+	}
+	.more {
+		align-self: flex-start;
+		min-height: 32px;
+		padding: 0 10px;
+		border: 1px solid var(--color-control-border);
+		display: inline-flex;
+		align-items: center;
+		color: var(--color-text);
+		font-size: 13px;
+		text-decoration: none;
+	}
+	.more:hover {
+		background: var(--color-selection);
 	}
 	mark {
 		background: var(--color-accent);

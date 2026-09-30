@@ -1,0 +1,15 @@
+---
+import SignInFailed from '../components/SignInFailed.astro';
+import { startAdminSignIn } from '../lib/admin/sign-in';
+
+export const prerender = false;
+
+const signInUrl = await startAdminSignIn(Astro).catch((error: unknown) => {
+	console.error('Starting admin sign-in failed', error);
+	return null;
+});
+if (signInUrl) return Astro.redirect(signInUrl, 302);
+Astro.response.status = 502;
+---
+
+<SignInFailed />

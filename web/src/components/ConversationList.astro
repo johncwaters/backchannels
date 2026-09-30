@@ -1,16 +1,16 @@
 ---
-import { adminHref, buildSidebarGroups, formatRelative } from '../lib/admin/helpers';
-import type { Conversation, ConversationKind, Scope } from '../lib/admin/types';
+import { adminHref, conversationHref, formatRelative, type buildSidebarGroups } from '../lib/admin/helpers';
+import type { DirectoryKind, Scope } from '../lib/admin/types';
 
 interface Props {
-	conversations: Conversation[];
+	groups: ReturnType<typeof buildSidebarGroups>;
+	nowMs: number;
 	scope: Scope;
 	selectedConversation?: string;
-	directoryKind?: ConversationKind;
+	directoryKind?: DirectoryKind;
 }
 
-const { conversations, scope, selectedConversation, directoryKind } = Astro.props;
-const groups = buildSidebarGroups(conversations, scope);
+const { groups, nowMs, scope, selectedConversation, directoryKind } = Astro.props;
 ---
 
 <nav aria-label="Conversations">
@@ -23,12 +23,12 @@ const groups = buildSidebarGroups(conversations, scope);
 			{group.conversations.map((conversation) => (
 				<a
 					class="conversation"
-					href={adminHref(`/admin/c/${conversation.id}`, scope)}
+					href={conversationHref(conversation.id, scope)}
 					aria-current={conversation.id === selectedConversation ? 'page' : undefined}
 				>
 					<span class="conversation-header">
 						<strong>{conversation.name}</strong>
-						<span class="last-active">{formatRelative(conversation.minutesAgo)}</span>
+						<span class="last-active">{formatRelative(conversation.lastActivity, nowMs)}</span>
 					</span>
 					<span class="preview">{conversation.preview}</span>
 				</a>

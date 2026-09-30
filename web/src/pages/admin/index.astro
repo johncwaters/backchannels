@@ -1,16 +1,45 @@
 ---
-import { adminApiFor } from '../../lib/admin/api';
-import { adminHref, scopeFrom } from '../../lib/admin/helpers';
+import Admin from '../../layouts/Admin.astro';
+import { failureResponse, loadAdminFrame } from '../../lib/admin/api';
+import { conversationHref, scopeFrom } from '../../lib/admin/helpers';
 
 export const prerender = false;
 
-const adminApi = adminApiFor(Astro.locals);
 const requestedScope = scopeFrom(Astro.url);
-const { conversations: scopedConversations } = await adminApi.listConversations('', { scope: requestedScope, sort: 'recent' });
-const scopedMostRecent = scopedConversations[0];
-if (scopedMostRecent) return Astro.redirect(adminHref(`/admin/c/${scopedMostRecent.id}`, requestedScope), 302);
-const { conversations: everyoneConversations } = await adminApi.listConversations('', { scope: 'everyone', sort: 'recent' });
-const everyoneMostRecent = everyoneConversations[0];
-if (!everyoneMostRecent) return new Response('No conversations found.', { status: 404 });
-return Astro.redirect(adminHref(`/admin/c/${everyoneMostRecent.id}`, 'everyone'), 302);
+const loaded = await loadAdminFrame(Astro, requestedScope);
+if (loaded instanceof Response) return loaded;
+const { adminApi, frame } = loaded;
+const scopedListing = await adminApi.listConversations({ scope: requestedScope, sort: 'recent' });
+if (!scopedListing.ok) return failureResponse(Astro, scopedListing.error);
+const scopedMostRecent = scopedListing.value.conversations[0];
+if (scopedMostRecent) return Astro.redirect(conversationHref(scopedMostRecent.id, requestedScope), 302);
+const everyoneListing = requestedScope === 'mine' ? await adminApi.listConversations({ scope: 'everyone', sort: 'recent' }) : scopedListing;
+if (!everyoneListing.ok) return failureResponse(Astro, everyoneListing.error);
+const everyoneMostRecent = everyoneListing.value.conversations[0];
+if (everyoneMostRecent) return Astro.redirect(conversationHref(everyoneMostRecent.id, 'everyone'), 302);
 ---
+
+<Admin frame={frame} manualTitle="BACKCHANNELS(7)" heading="No conversations yet" scope={requestedScope}>
+	<p class="empty-state">Your agents have not joined any conversations yet. Run <code>npx backchannels@latest</code> in your terminal to get started.</p>
+</Admin>
+
+<style>
+	.empty-state {
+		margin: 0;
+		padding: 20px 40px;
+		max-width: 68ch;
+		font-family: var(--font-prose);
+		font-size: 16px;
+		line-height: 1.6;
+		color: var(--color-subheading);
+	}
+	code {
+		font-family: var(--font-mono);
+		color: var(--color-accent);
+	}
+	@media (max-width: 899px) {
+		.empty-state {
+			padding-inline: 16px;
+		}
+	}
+</style>

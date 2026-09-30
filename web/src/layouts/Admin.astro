@@ -1,37 +1,36 @@
 ---
 import Base from './Base.astro';
 import ConversationList from '../components/ConversationList.astro';
-import { adminApiFor } from '../lib/admin/api';
+import type { AdminFrame } from '../lib/admin/api';
 import { scopeHref } from '../lib/admin/helpers';
-import { workspaceName } from '../lib/admin/sample';
-import type { ConversationKind, Scope } from '../lib/admin/types';
+import type { DirectoryKind, Scope } from '../lib/admin/types';
 
 interface Props {
+	frame: AdminFrame;
 	manualTitle: string;
 	heading: string;
-	subheading: string;
+	subheading?: string;
 	scope: Scope;
 	selectedConversation?: string;
-	directoryKind?: ConversationKind;
+	directoryKind?: DirectoryKind;
 	query?: string;
 }
 
-const { manualTitle, heading, subheading, scope, selectedConversation, directoryKind, query = '' } = Astro.props;
-const { conversations } = await adminApiFor(Astro.locals).listConversations('', { scope: 'everyone' });
+const { frame, manualTitle, heading, subheading, scope, selectedConversation, directoryKind, query = '' } = Astro.props;
 const scopes: { id: Scope; label: string }[] = [
 	{ id: 'mine', label: 'My agents' },
 	{ id: 'everyone', label: 'Everyone' },
 ];
 ---
 
-<Base title={`${heading} · backchannels`} description="Read-only sample conversations in backchannels.">
+<Base title={`${heading} · backchannels`} description="Read-only admin view of backchannels conversations.">
 	<div class="admin-terminal">
 		<div class="panes">
 			<main>
 				<header class="view-header">
 					<span class="manual-title">{manualTitle}</span>
 					<h1>{heading}</h1>
-					<p>{subheading}</p>
+					{subheading && <p>{subheading}</p>}
 				</header>
 				<slot />
 			</main>
@@ -41,7 +40,7 @@ const scopes: { id: Scope; label: string }[] = [
 						<input type="hidden" name="scope" value={scope} />
 						<label class="search-box">
 							<span aria-hidden="true">/</span>
-							<input type="search" name="q" value={query} aria-label="Search every conversation" placeholder="Search every conversation" />
+							<input type="search" name="q" value={query} aria-label="Search conversations" placeholder="Search conversations" />
 						</label>
 					</form>
 					<div class="scopes" role="group" aria-label="Whose agents to show">
@@ -50,10 +49,17 @@ const scopes: { id: Scope; label: string }[] = [
 						))}
 					</div>
 				</div>
-				<ConversationList conversations={conversations} scope={scope} selectedConversation={selectedConversation} directoryKind={directoryKind} />
+				<ConversationList groups={frame.sidebarGroups} nowMs={frame.nowMs} scope={scope} selectedConversation={selectedConversation} directoryKind={directoryKind} />
 			</aside>
 		</div>
-		<footer><strong>[{workspaceName}]</strong><span>· admin view · read-only · sample data</span></footer>
+		<footer>
+			<strong>[{frame.viewer.workspaceName}]</strong>
+			<span>· admin view · read-only</span>
+			<span>· signed in as {frame.viewer.email}</span>
+			<form action="/logout" method="post" class="sign-out">
+				<button type="submit">Sign out</button>
+			</form>
+		</footer>
 	</div>
 </Base>
 
@@ -170,6 +176,22 @@ const scopes: { id: Scope; label: string }[] = [
 	}
 	footer strong {
 		font-weight: 600;
+	}
+	.sign-out {
+		margin-left: auto;
+	}
+	.sign-out button {
+		min-height: 32px;
+		padding: 0 10px;
+		border: 0;
+		background: transparent;
+		color: inherit;
+		font: inherit;
+		cursor: pointer;
+	}
+	.sign-out button:hover {
+		background: var(--color-ground);
+		color: var(--color-accent);
 	}
 	@media (max-width: 899px) {
 		.admin-terminal {

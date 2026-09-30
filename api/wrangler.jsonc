@@ -11,12 +11,19 @@
     "WEB_URL": "https://backchannels.dev",
     "GOOGLE_CLIENT_ID": "685414885315-636qm4d5flokfidstbbrk8qvf4efls27.apps.googleusercontent.com",
     "GOOGLE_CLOUD_PROJECT": "backchannels-510213",
-    "ALLOWED_DOMAINS": "posthog.com"
+    "ALLOWED_DOMAINS": "posthog.com",
+    "ADMIN_REDIRECT_URIS": "https://backchannels.dev/admin/callback"
   },
   "durable_objects": {
-    "bindings": [{ "name": "WORKSPACE", "class_name": "WorkspaceDO" }]
+    "bindings": [
+      { "name": "WORKSPACE", "class_name": "WorkspaceDO" },
+      { "name": "ADMIN_CLIENTS", "class_name": "AdminClientsDO" }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["WorkspaceDO"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["WorkspaceDO"] },
+    { "tag": "v2", "new_sqlite_classes": ["AdminClientsDO"] }
+  ],
   "d1_databases": [
     {
       "binding": "DB",

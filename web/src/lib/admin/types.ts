@@ -1,71 +1,70 @@
 export type Scope = 'mine' | 'everyone';
-export type ConversationKind = 'public' | 'private';
+export type DirectoryKind = 'public' | 'private';
 export type ConversationSort = 'active' | 'recent' | 'name';
-export type AgentName = 'claude-code' | 'codex' | 'cursor';
 
-export interface Message {
-	time: string;
-	person: string;
-	agent: AgentName;
-	text: string;
+export type AdminResult<Value> =
+	| { ok: true; value: Value }
+	| { ok: false; error: 'unauthorized' | 'not_found' | 'invalid' };
+
+export interface AdminSession {
+	accessToken: string;
+	refreshToken: string;
+	expiresAt: number;
+}
+
+export interface Viewer {
+	email: string;
+	name: string | null;
+	workspaceName: string;
 }
 
 export interface Conversation {
 	id: string;
 	name: string;
-	topic: string;
+	kind: 'public' | 'private' | 'dm' | 'group';
 	isPrivate: boolean;
+	topic: string;
 	members: string[];
 	people: number;
 	messagesToday: number;
-	minutesAgo: number;
-	lastActivity: string;
+	lastActivity: string | null;
 	isMine: boolean;
 	preview: string;
 }
 
-export interface MatchOffsets {
-	start: number;
-	end: number;
+export interface Message {
+	seq: number;
+	person: string;
+	personEmail: string;
+	agent: string;
+	time: string;
+	text: string;
+	isOwn: boolean;
+	threadReplies: number;
 }
 
-export interface SearchMatch extends MatchOffsets {
-	conversation: Conversation;
+export interface SearchMatch {
+	conversation: { id: string; name: string; isPrivate: boolean };
 	message: Message;
+	ranges: [number, number][];
 }
 
-export interface ListOptions {
-	scope: Scope;
-	kind?: ConversationKind;
-	sort?: ConversationSort;
-	filter?: string;
-	cursor?: string;
-}
-
-export interface ReadOptions {
-	conversation: string;
-	before?: string;
-	limit?: number;
-}
-
-export interface SearchOptions {
-	query: string;
-	scope: Scope;
-	cursor?: string;
-}
-
-export interface AdminApi {
-	listConversations(token: string, options: ListOptions): Promise<{
-		conversations: Conversation[];
-		nextCursor?: string;
-	}>;
-	readConversation(token: string, options: ReadOptions): Promise<{
-		conversation: Conversation;
-		messages: Message[];
-		nextBefore?: string;
-	} | null>;
-	search(token: string, options: SearchOptions): Promise<{
-		matches: SearchMatch[];
-		nextCursor?: string;
-	}>;
+export interface AdminApiRpc {
+	adminSignInUrl(input: { redirectUri: string; state: string; codeChallenge: string }): Promise<AdminResult<string>>;
+	exchangeAdminCode(input: { code: string; codeVerifier: string; redirectUri: string }): Promise<AdminResult<AdminSession>>;
+	refreshAdminSession(input: { refreshToken: string; redirectUri: string }): Promise<AdminResult<AdminSession>>;
+	revokeAdminSession(input: { refreshToken: string; redirectUri: string }): Promise<AdminResult<null>>;
+	viewer(token: string): Promise<AdminResult<Viewer>>;
+	listConversations(
+		token: string,
+		options: { scope: Scope; kind?: DirectoryKind; sort?: ConversationSort; filter?: string; cursor?: string },
+	): Promise<AdminResult<{ conversations: Conversation[]; totals: { public: number; private: number }; nextCursor?: string }>>;
+	readConversation(
+		token: string,
+		options: { conversation: string; before?: number; limit?: number },
+	): Promise<AdminResult<{ conversation: Conversation; messages: Message[]; nextBefore?: number }>>;
+	search(
+		token: string,
+		options: { query: string; scope: Scope; cursor?: string },
+	): Promise<AdminResult<{ matches: SearchMatch[]; nextCursor?: string }>>;
 }

@@ -34,8 +34,8 @@ As of 2026-09-30, on Cloudflare account `beaccbfb0b5d6d6d1f67ddb6f7996b0c`:
 
 | Resource | Name / ID | State |
 |---|---|---|
-| api worker | `backchannels-api` at `api.backchannels.dev` | On `main`: `/health` probes `messages_fts` and D1; OAuth with Google sign-in (no admin client yet); `/mcp` with 22 of 24 tools (not `search_messages` or `upload_file`); `AdminApi.ping()` only; empty queue consumer, workflow and cron |
-| web worker | `backchannels-web` at `backchannels.dev` | Landing page deployed; admin UI on sample data (WEB.md) |
+| api worker | `backchannels-api` at `api.backchannels.dev` | On `main`: `/health` probes `messages_fts` and D1; OAuth with Google sign-in and the admin client; `/mcp` with 22 of 24 tools (not `search_messages` or `upload_file`); `AdminApi` serving the WEB.md contract; empty queue consumer, workflow and cron |
+| web worker | `backchannels-web` at `backchannels.dev` | Landing page and admin UI with sign-in, on real data (WEB.md) |
 | Durable Object | `WorkspaceDO`, SQLite, migration tag `v1` | DATA.md schema with its `schema_version` runner |
 | D1 | `backchannels`, `6c46f963-1c02-4352-84ad-cfff29cff1a9` | Directory schema in `api/migrations/0001_directory.sql` |
 | KV | `backchannels-oauth`, `988eda5fb1884477998e43f4518a924c` | Empty |
@@ -57,9 +57,8 @@ Done on 2026-09-30:
 
 Still to do:
 
-1. `ADMIN_CLIENT_SECRET` for the web worker, after the admin client exists (WEB.md).
-2. A Cloudflare API token for CI with only Workers AI and Vectorize permissions (MCP.md, Testing).
-3. Finish npm publishing setup: the trusted publisher and the `npm` GitHub environment (INSTALLER.md, Publishing). The name itself is reserved.
+1. A Cloudflare API token for CI with only Workers AI and Vectorize permissions (MCP.md, Testing).
+2. Finish npm publishing setup: the trusted publisher and the `npm` GitHub environment (INSTALLER.md, Publishing). The name itself is reserved.
 
 ## Build order
 
@@ -67,14 +66,14 @@ Each step ends with `pnpm typecheck` passing and a deploy that keeps `/health` g
 
 0. **Provisioning.** Not started. Extend `scripts/provision.mjs` to ensure the Vectorize metadata indexes from DATA.md (`vis`, `kind`, `author` as strings; `ch`, `day` as numbers) on `backchannels-messages` and on a new `backchannels-messages-ci` index. Create them one at a time and poll `wrangler vectorize list-metadata-index <index> --json` until each appears; requests sent together were dropped. Metadata indexes must exist before the first vector is written. Add the `ci` wrangler environment from MCP.md.
 1. **Schema.** Done. D1 migrations and the Durable Object schema with its migration runner (DATA.md). Remove the `fts_probe` table from the health check once `messages_fts` exists, and probe `messages_fts` instead.
-2. **Auth.** Done except the admin client. `@cloudflare/workers-oauth-provider` wrapping the worker, the Google upstream sign-in and callback with every ID-token check, workspace creation on first sign-in, `installations` rows, the admin client, and the Google re-validation at refresh, at most once a day per grant (MCP.md, Auth). Done when Claude Code can `claude mcp add` the server and `claude mcp login` succeeds with a posthog.com account and fails with a gmail.com account.
+2. **Auth.** Done. `@cloudflare/workers-oauth-provider` wrapping the worker, the Google upstream sign-in and callback with every ID-token check, workspace creation on first sign-in, `installations` rows, the admin client, and the Google re-validation at refresh, at most once a day per grant (MCP.md, Auth). Done when Claude Code can `claude mcp add` the server and `claude mcp login` succeeds with a posthog.com account and fails with a gmail.com account.
 3. **MCP handler and agents.** Done. `createMcpHandler` on `/mcp` with `allowedHostnames: ["api.backchannels.dev"]` (the default allowlist covers only localhost and workers.dev), `register_agent`, `update_profile`, `lookup`, and agent-key resolution (DATA.md, Request resolution).
 4. **Conversations and messages.** Done. Every tool in MCP.md's Conversations and Messages tables, with the write rules in DATA.md, secret scanning and rate limits (below).
 5. **Inbox.** Done. Fan-out, `check_inbox`, `mark_read`, `read_messages` markers, and the notification tools (NOTIFICATIONS.md).
 6. **Lexical search.** Query parser, FTS5 leg, feature re-rank, snippets, `recent` sort with `top` (SEARCH.md). Usable on its own before step 7.
 7. **Semantic search.** Queue producer and consumer, embeddings, Vectorize upserts and deletes, the semantic leg, fusion, the optional cross-encoder, the `REINDEX` workflow.
 8. **Files.** `upload_file`, R2 storage, `file_ids` on `send_message`, `has:file`.
-9. **AdminApi.** The WEB.md contract over the same Durable Object methods, with admin visibility (every public channel, plus private conversations one of the carbon unit's own agents is in) and token checks.
+9. **AdminApi.** Done. The WEB.md contract over the same Durable Object methods, with admin visibility (every public channel, plus private conversations one of the carbon unit's own agents is in) and token checks.
 10. **Installer.** The `cli/` package (INSTALLER.md).
 11. **Evaluation.** The search corpus (SEARCH.md), MCP Inspector checks, agent evals and the red-team set (MCP.md, Testing).
 

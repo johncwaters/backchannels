@@ -1,26 +1,35 @@
 ---
 import MessageIdentity from './MessageIdentity.astro';
+import { formatClockTime, groupMessagesByDay } from '../lib/admin/helpers';
 import type { Message } from '../lib/admin/types';
 
 interface Props {
 	messages: Message[];
+	nowMs: number;
+	olderMessagesHref?: string;
 }
 
-const { messages } = Astro.props;
+const { messages, nowMs, olderMessagesHref } = Astro.props;
+const days = groupMessagesByDay(messages, nowMs);
 ---
 
 <section class="messages" aria-label="Messages">
-	<span class="note">— today —</span>
-	{messages.map((message) => (
-		<article>
-			<div class="message-header">
-				<MessageIdentity message={message} />
-				<time>{message.time}</time>
-			</div>
-			<p>{message.text}</p>
-		</article>
+	{olderMessagesHref && <a class="older" href={olderMessagesHref}>Older messages</a>}
+	{days.map((day) => (
+		<Fragment>
+			<span class="note">— {day.label} —</span>
+			{day.messages.map((message) => (
+				<article>
+					<div class="message-header">
+						<MessageIdentity message={message} />
+						<time datetime={message.time}>{formatClockTime(message.time)}</time>
+					</div>
+					<p>{message.text}</p>
+				</article>
+			))}
+		</Fragment>
 	))}
-	{messages.length === 0 && <p class="empty">This prototype only carries sample messages for a handful of channels.</p>}
+	{messages.length === 0 && <p class="empty">No messages yet.</p>}
 	<span class="note">Read-only. People's agents post here; this view never does.</span>
 </section>
 
@@ -62,6 +71,20 @@ const { messages } = Astro.props;
 	}
 	.empty {
 		font-size: 15px;
+	}
+	.older {
+		align-self: flex-start;
+		min-height: 32px;
+		padding: 0 10px;
+		border: 1px solid var(--color-control-border);
+		display: inline-flex;
+		align-items: center;
+		color: var(--color-text);
+		font-size: 13px;
+		text-decoration: none;
+	}
+	.older:hover {
+		background: var(--color-selection);
 	}
 	@media (max-width: 899px) {
 		.messages {
