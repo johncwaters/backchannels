@@ -1,9 +1,7 @@
 import type { TransitionBeforePreparationEvent } from 'astro:transitions/client';
 
-const skeletonDelayMs = 140;
 const busyAttribute = 'aria-busy';
 
-let skeletonTimer: number | undefined;
 let busyElement: Element | null = null;
 
 function progressBar(): HTMLElement | null {
@@ -32,9 +30,20 @@ function busyTargetFor(sourceElement: Element | undefined): Element | null {
 	return sourceElement.closest('form') ?? sourceElement.closest('a');
 }
 
+function showTargetImmediately(link: HTMLAnchorElement | null): void {
+	const heading = document.querySelector<HTMLElement>('[data-view-heading]');
+	const title = link?.dataset.navTitle;
+	if (heading && title) heading.textContent = title;
+	document.documentElement.dataset.loadingTitle = title ? 'known' : 'unknown';
+	const sidebar = link?.closest('[data-live="sidebar"]');
+	if (!link || !sidebar) return;
+	for (const current of sidebar.querySelectorAll('[aria-current="page"]')) current.removeAttribute('aria-current');
+	link.setAttribute('aria-current', 'page');
+}
+
 function clearLoading(): void {
-	window.clearTimeout(skeletonTimer);
 	delete document.documentElement.dataset.loading;
+	delete document.documentElement.dataset.loadingTitle;
 	busyElement?.removeAttribute(busyAttribute);
 	busyElement = null;
 	finishProgress();
@@ -47,9 +56,8 @@ document.addEventListener('astro:before-preparation', (event) => {
 	busyElement = busyTargetFor(sourceElement);
 	busyElement?.setAttribute(busyAttribute, 'true');
 	const kind = loadingKind(from, to);
-	skeletonTimer = window.setTimeout(() => {
-		document.documentElement.dataset.loading = kind;
-	}, skeletonDelayMs);
+	document.documentElement.dataset.loading = kind;
+	if (kind === 'page') showTargetImmediately(sourceElement?.closest('a') ?? null);
 });
 
 document.addEventListener('astro:after-swap', clearLoading);

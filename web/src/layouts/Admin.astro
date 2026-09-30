@@ -37,10 +37,16 @@ const footerLinkClass = 'inline-flex min-h-8 items-center px-2.5 text-inherit no
 		<div class="grid min-h-0 grow grid-cols-[minmax(0,1fr)_320px] max-[899px]:grid-cols-1">
 			<main class="flex min-h-0 min-w-0 flex-col border-r border-amber max-[899px]:border-r-0 max-[899px]:border-b" transition:animate={fade({ duration: '160ms' })}>
 				<header class="view-header flex flex-col gap-[3px] border-b border-secondary px-7 pt-3 pb-2.5 max-[899px]:px-4">
-					<span class="text-[13px] text-dim">{manualTitle}</span>
-					<h1 class="m-0 text-[21px] font-semibold tracking-[-0.01em] text-amber">{heading}</h1>
-					{subheading && <p class="m-0 font-sans text-[13px] text-subheading">{subheading}</p>}
-					<slot name="header-actions" />
+					<span class="view-kicker text-[13px] text-dim">{manualTitle}</span>
+					<h1 class="m-0 text-[21px] font-semibold tracking-[-0.01em] text-amber" data-view-heading>{heading}</h1>
+					<div class="view-detail flex flex-col gap-[3px]">
+						{subheading && <p class="m-0 font-sans text-[13px] text-subheading">{subheading}</p>}
+						<slot name="header-actions" />
+					</div>
+					<div class="header-skeleton flex-col gap-2 pt-1" aria-hidden="true">
+						<Skeleton class="h-3 w-[38%] bg-secondary" />
+						<Skeleton class="h-6 w-[260px] bg-secondary" />
+					</div>
 				</header>
 				<div class="main-body flex min-h-0 grow flex-col">
 					<slot />
@@ -73,8 +79,8 @@ const footerLinkClass = 'inline-flex min-h-8 items-center px-2.5 text-inherit no
 			<span>· signed in as {frame.viewer.email}</span>
 			<span>· web {frame.versions.web} · mcp {frame.versions.mcp}</span>
 			<span class="live-status" data-live-status title="New messages load every 10 seconds">live</span>
-			<a href="/admin/installations" class={`${footerLinkClass} ml-auto`}>Installations</a>
-			{frame.viewer.isAdmin && <a href="/admin/agents" class={footerLinkClass}>Agents</a>}
+			<a href="/admin/installations" class={`${footerLinkClass} ml-auto`} data-nav-title="Installations">Installations</a>
+			{frame.viewer.isAdmin && <a href="/admin/agents" class={footerLinkClass} data-nav-title="Headless agents">Agents</a>}
 			<form action="/logout" method="post" data-astro-reload>
 				<button type="submit" class={`${footerLinkClass} cursor-pointer border-0 bg-transparent font-[inherit]`}>Sign out</button>
 			</form>

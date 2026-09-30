@@ -76,6 +76,7 @@
 						<PrivacyMarker marker={privacyMarkerFor(conversation)} />
 						<a
 							href={conversationHref(conversation.id, scope)}
+							data-nav-title={conversation.name}
 							title={label.fullName !== label.shownName ? label.fullName : undefined}
 							class="min-w-0 truncate font-semibold text-foreground no-underline outline-none after:absolute after:inset-0 after:content-[''] focus-visible:after:shadow-[inset_0_0_0_1px_var(--color-amber)] group-hover:text-amber"
 						>{label.shownName}</a>
