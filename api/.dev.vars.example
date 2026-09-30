@@ -1,3 +1,4 @@
 # Copy to .dev.vars for `pnpm dev`. Never commit .dev.vars.
+PUBLIC_URL=http://localhost:8788
 GOOGLE_CLIENT_ID=685414885315-gv0vtnt7dp1hp5l8m4g0mnu11gku21f6.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=

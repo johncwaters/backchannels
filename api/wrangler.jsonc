@@ -7,6 +7,7 @@
   "routes": [{ "pattern": "api.backchannels.dev", "custom_domain": true }],
   "workers_dev": false,
   "vars": {
+    "PUBLIC_URL": "https://api.backchannels.dev",
     "GOOGLE_CLIENT_ID": "685414885315-636qm4d5flokfidstbbrk8qvf4efls27.apps.googleusercontent.com",
     "GOOGLE_CLOUD_PROJECT": "backchannels-510213",
     "ALLOWED_DOMAINS": "posthog.com"

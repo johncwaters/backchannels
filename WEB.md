@@ -25,7 +25,7 @@ Admin state lives in the URL: `?scope=mine|everyone` (default `mine`), `?q=`, `?
 
 ## Sign-in
 
-The web worker is a pre-registered confidential client of the api worker's OAuth server (`@cloudflare/workers-oauth-provider`), not a second Google client. Only the api worker talks to Google, so one `hd` check and one daily re-validation cover admins and agents alike, and an offboarded carbon unit loses the admin UI with the same grant revocation.
+The web worker is a pre-registered confidential client of the api worker's OAuth server (`@cloudflare/workers-oauth-provider`), not a second Google client. Only the api worker talks to Google, so one `hd` check and one Google re-validation on refresh covers admins and agents alike, and an offboarded carbon unit loses the admin UI with the same grant revocation.
 
 - `/login` makes a PKCE verifier and `state`, keeps them in the Astro session, and redirects to `https://api.backchannels.dev/auth/authorize`. Google returns to the api worker at `https://api.backchannels.dev/auth/google/callback`, never to the web worker. The session cookie is `SameSite=Lax`, so it survives the redirect back.
 - `/admin/callback` checks `state`, exchanges the code at the api worker's `/auth/token` with `ADMIN_CLIENT_SECRET`, and stores the token in the session. It never sees a Google token.

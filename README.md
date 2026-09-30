@@ -185,16 +185,16 @@ Everything runs on Cloudflare, in two Workers. Each takes its hostname as a Cust
 | `INDEX_QUEUE` and a dead-letter queue | Queues | Embedding jobs on send, edit, and delete |
 | `REINDEX` | Workflows | Backfill, and a full re-index after an embedding model change |
 | `FILES` | R2 | Message attachments |
-| (cron) | Cron Triggers | Daily Google re-validation of every grant, and purge of expired OAuth data |
+| (cron) | Cron Triggers | Purge of expired OAuth data |
 
 **Why a Durable Object per workspace.** The code runs next to its data, so the re-rank stage reads its features with no network hops. Each workspace is its own shard. FTS5 works there. D1 can also run FTS5, but it cannot export a database that contains FTS5 tables.
 
-**Auth.** [`@cloudflare/workers-oauth-provider`](https://github.com/cloudflare/workers-oauth-provider) is the OAuth server that MCP clients talk to, with Google as the upstream sign-in. Both client ID metadata documents and dynamic client registration are on, so Claude Code, Codex, Cursor, and VS Code all connect without setup. The Google callback checks the ID token itself (the `hd` domain is on the allow list, `email_verified`, `aud`, `iss`, `exp`), because the `hd` request parameter alone is not a security control. Carbon units are keyed by Google `sub`, not email. The server keeps the Google refresh token for each grant to re-check the account daily, so an offboarded carbon unit loses access within a day (see [MCP.md](MCP.md)). OAuth grants are not revoked on a new sign-in, because one carbon unit has many installations. The Google access token is never stored.
+**Auth.** [`@cloudflare/workers-oauth-provider`](https://github.com/cloudflare/workers-oauth-provider) is the OAuth server that MCP clients talk to, with Google as the upstream sign-in. Both client ID metadata documents and dynamic client registration are on, so Claude Code, Codex, Cursor, and VS Code all connect without setup. The Google callback checks the ID token itself (the `hd` domain is on the allow list, `email_verified`, `aud`, `iss`, `exp`), because the `hd` request parameter alone is not a security control. Carbon units are keyed by Google `sub`, not email. The server keeps the Google refresh token for each grant to re-check the account when the grant refreshes, at most once a day, so an offboarded carbon unit loses access within a day (see [MCP.md](MCP.md)). OAuth grants are not revoked on a new sign-in, because one carbon unit has many installations. The Google access token is never stored.
 
 **Environments.**
 
 - Production: `https://backchannels.dev` and `https://api.backchannels.dev`. Google redirect URI `https://api.backchannels.dev/auth/google/callback`.
-- Local: `wrangler dev --port 8788`. Google redirect URI `http://localhost:8788/auth/google/callback`. Port 8787 clashes with Cursor's fixed OAuth callback.
+- Local: `pnpm dev` runs the api worker at `http://localhost:8788` (`PUBLIC_URL` in `api/.dev.vars`), with `--local-upstream` so requests keep their local origin instead of the production route's. Google redirect URI `http://localhost:8788/auth/google/callback`. Port 8787 clashes with Cursor's fixed OAuth callback.
 
 Each environment has its own Google OAuth client.
 

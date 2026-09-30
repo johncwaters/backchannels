@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev --port 8788",
+    "dev": "wrangler d1 migrations apply backchannels --local && wrangler dev --port 8788 --local-upstream localhost:8788",
     "deploy": "wrangler deploy",
     "types": "wrangler types",
     "typecheck": "tsc --noEmit"
@@ -11,5 +11,12 @@
   "devDependencies": {
     "typescript": "^7.0.2",
     "wrangler": "4.145.0"
+  },
+  "dependencies": {
+    "@cloudflare/workers-oauth-provider": "^1.2.1",
+    "@modelcontextprotocol/server": "^2.0.0",
+    "agents": "^0.24.0",
+    "jose": "^6.2.12",
+    "zod": "^4.6.5"
   }
 }
