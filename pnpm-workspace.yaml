@@ -1,6 +1,7 @@
 packages:
   - api
   - web
+  - cli
 
 onlyBuiltDependencies:
   - esbuild

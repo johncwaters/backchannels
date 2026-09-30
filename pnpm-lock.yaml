@@ -18,7 +18,7 @@ importers:
         version: 2.0.0
       agents:
         specifier: ^0.24.0
-        version: 0.24.0(@babel/core@8.0.6)(@babel/runtime@7.29.7)(@modelcontextprotocol/client@2.0.0)(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(zod@4.6.5))(@modelcontextprotocol/server@2.0.0)(rolldown@1.2.12)(vite@8.3.1(esbuild@0.28.2)(yaml@2.9.1))(zod@4.6.5)
+        version: 0.24.0(@babel/core@8.0.6)(@babel/runtime@7.29.7)(@modelcontextprotocol/client@2.0.0)(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(zod@4.6.5))(@modelcontextprotocol/server@2.0.0)(rolldown@1.2.12)(vite@8.3.1(@types/node@22.20.4)(esbuild@0.28.2)(yaml@2.9.1))(zod@4.6.5)
       jose:
         specifier: ^6.2.12
         version: 6.2.12
@@ -31,16 +31,25 @@ importers:
         version: 7.0.2
       wrangler:
         specifier: 4.145.0
-        version: 4.145.0
+        version: 4.145.0(@types/node@22.20.4)
+
+  cli:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.12.0
+        version: 22.20.4
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
 
   web:
     dependencies:
       '@astrojs/cloudflare':
         specifier: ^14.3.3
-        version: 14.3.3(astro@7.3.5(yaml@2.9.1))(esbuild@0.28.2)(wrangler@4.145.0)(yaml@2.9.1)
+        version: 14.3.3(@types/node@22.20.4)(astro@7.3.5(@types/node@22.20.4)(yaml@2.9.1))(esbuild@0.28.2)(wrangler@4.145.0(@types/node@22.20.4))(yaml@2.9.1)
       '@astrojs/svelte':
         specifier: ^9.0.1
-        version: 9.0.1(astro@7.3.5(yaml@2.9.1))(esbuild@0.28.2)(svelte@5.57.1)(typescript@6.0.3)(yaml@2.9.1)
+        version: 9.0.1(@types/node@22.20.4)(astro@7.3.5(@types/node@22.20.4)(yaml@2.9.1))(esbuild@0.28.2)(svelte@5.57.1)(typescript@6.0.3)(yaml@2.9.1)
       '@fontsource/ibm-plex-mono':
         specifier: ^5.3.0
         version: 5.3.0
@@ -49,7 +58,7 @@ importers:
         version: 5.3.0
       astro:
         specifier: ^7.3.5
-        version: 7.3.5(yaml@2.9.1)
+        version: 7.3.5(@types/node@22.20.4)(yaml@2.9.1)
       svelte:
         specifier: ^5.57.1
         version: 5.57.1
@@ -58,7 +67,7 @@ importers:
         version: 6.0.3
       wrangler:
         specifier: 4.145.0
-        version: 4.145.0
+        version: 4.145.0(@types/node@22.20.4)
 
 packages:
 
@@ -1284,6 +1293,9 @@ packages:
 
   '@types/nlcst@2.0.3':
     resolution: {integrity: sha512-vSYNSDe6Ix3q+6Z7ri9lyWqgGhJTmzRjZRqyq15N0Z/1/UnVsno9G/N40NBijoYx2seFDIl0+B2mgAb9mezUCA==}
+
+  '@types/node@22.20.4':
+    resolution: {integrity: sha512-zJRE40jpHtKqE/C4fgHrAKQLJuSpzEnP9ff9Y7YtoR3Wd2pwqzlekDeEuUQXjRd+QCYnVnNwuJYmhdk9XV8gvA==}
 
   '@types/unist@3.0.3':
     resolution: {integrity: sha512-ko/gIFJRv177XgZsZcBwnqJN5x/Gien8qNOn0D5bQU/zAzVf9Zt3BlcUiLqhV9y4ARk0GbT3tnUiPNgnTXzc/Q==}
@@ -2520,6 +2532,9 @@ packages:
   uncrypto@0.1.3:
     resolution: {integrity: sha512-Ql87qFHB3s/De2ClA9e0gsnS6zXG27SkTiSJwjCc9MebbfapQfuPzumMIUMi38ezPZVNFcHI9sUIepeQfw8J8Q==}
 
+  undici-types@6.21.0:
+    resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
+
   undici@7.29.1:
     resolution: {integrity: sha512-RYONW2MeafgYlkVOKYKkA/Ag7BmXqgIWCa8t1m0JcxrQg9pI9lEqRhAOruOBCbAohOa/gkCF+iPi9hrgvTzu6Q==}
     engines: {node: '>=20.18.1'}
@@ -2766,15 +2781,15 @@ packages:
 
 snapshots:
 
-  '@astrojs/cloudflare@14.3.3(astro@7.3.5(yaml@2.9.1))(esbuild@0.28.2)(wrangler@4.145.0)(yaml@2.9.1)':
+  '@astrojs/cloudflare@14.3.3(@types/node@22.20.4)(astro@7.3.5(@types/node@22.20.4)(yaml@2.9.1))(esbuild@0.28.2)(wrangler@4.145.0(@types/node@22.20.4))(yaml@2.9.1)':
     dependencies:
       '@astrojs/internal-helpers': 0.11.0
       '@astrojs/underscore-redirects': 1.0.4
-      '@cloudflare/vite-plugin': 1.62.3(vite@8.3.1(esbuild@0.28.2)(yaml@2.9.1))(wrangler@4.145.0)
-      astro: 7.3.5(yaml@2.9.1)
+      '@cloudflare/vite-plugin': 1.62.3(@types/node@22.20.4)(vite@8.3.1(@types/node@22.20.4)(esbuild@0.28.2)(yaml@2.9.1))(wrangler@4.145.0(@types/node@22.20.4))
+      astro: 7.3.5(@types/node@22.20.4)(yaml@2.9.1)
       piccolore: 0.1.3
-      vite: 8.3.1(esbuild@0.28.2)(yaml@2.9.1)
-      wrangler: 4.145.0
+      vite: 8.3.1(@types/node@22.20.4)(esbuild@0.28.2)(yaml@2.9.1)
+      wrangler: 4.145.0(@types/node@22.20.4)
     transitivePeerDependencies:
       - '@types/node'
       - '@vitejs/devtools'
@@ -2864,15 +2879,15 @@ snapshots:
     dependencies:
       prismjs: 1.30.0
 
-  '@astrojs/svelte@9.0.1(astro@7.3.5(yaml@2.9.1))(esbuild@0.28.2)(svelte@5.57.1)(typescript@6.0.3)(yaml@2.9.1)':
+  '@astrojs/svelte@9.0.1(@types/node@22.20.4)(astro@7.3.5(@types/node@22.20.4)(yaml@2.9.1))(esbuild@0.28.2)(svelte@5.57.1)(typescript@6.0.3)(yaml@2.9.1)':
     dependencies:
-      '@sveltejs/vite-plugin-svelte': 7.3.1(svelte@5.57.1)(vite@8.3.1(esbuild@0.28.2)(yaml@2.9.1))
-      astro: 7.3.5(yaml@2.9.1)
+      '@sveltejs/vite-plugin-svelte': 7.3.1(svelte@5.57.1)(vite@8.3.1(@types/node@22.20.4)(esbuild@0.28.2)(yaml@2.9.1))
+      astro: 7.3.5(@types/node@22.20.4)(yaml@2.9.1)
       svelte: 5.57.1
       svelte2tsx: 0.7.61(svelte@5.57.1)(typescript@6.0.3)
       typescript: 6.0.3
-      vite: 8.3.1(esbuild@0.28.2)(yaml@2.9.1)
-      vitefu: 1.1.3(vite@8.3.1(esbuild@0.28.2)(yaml@2.9.1))
+      vite: 8.3.1(@types/node@22.20.4)(esbuild@0.28.2)(yaml@2.9.1)
+      vitefu: 1.1.3(vite@8.3.1(@types/node@22.20.4)(esbuild@0.28.2)(yaml@2.9.1))
     transitivePeerDependencies:
       - '@types/node'
       - '@vitejs/devtools'
@@ -3105,14 +3120,14 @@ snapshots:
     optionalDependencies:
       workerd: 1.20260930.2
 
-  '@cloudflare/vite-plugin@1.62.3(vite@8.3.1(esbuild@0.28.2)(yaml@2.9.1))(wrangler@4.145.0)':
+  '@cloudflare/vite-plugin@1.62.3(@types/node@22.20.4)(vite@8.3.1(@types/node@22.20.4)(esbuild@0.28.2)(yaml@2.9.1))(wrangler@4.145.0(@types/node@22.20.4))':
     dependencies:
       '@cloudflare/unenv-preset': 2.16.2(unenv@2.0.0-rc.24)(workerd@1.20260930.2)
-      miniflare: 5.20260930.0-alpha
+      miniflare: 5.20260930.0-alpha(@types/node@22.20.4)
       unenv: 2.0.0-rc.24
-      vite: 8.3.1(esbuild@0.28.2)(yaml@2.9.1)
+      vite: 8.3.1(@types/node@22.20.4)(esbuild@0.28.2)(yaml@2.9.1)
       workerd: 1.20260930.2
-      wrangler: 4.145.0
+      wrangler: 4.145.0(@types/node@22.20.4)
       ws: 8.21.0
     transitivePeerDependencies:
       - '@types/node'
@@ -3693,14 +3708,14 @@ snapshots:
   '@rolldown/binding-win32-x64-msvc@1.2.12':
     optional: true
 
-  '@rolldown/plugin-babel@0.2.4(@babel/core@8.0.6)(@babel/runtime@7.29.7)(rolldown@1.2.12)(vite@8.3.1(esbuild@0.28.2)(yaml@2.9.1))':
+  '@rolldown/plugin-babel@0.2.4(@babel/core@8.0.6)(@babel/runtime@7.29.7)(rolldown@1.2.12)(vite@8.3.1(@types/node@22.20.4)(esbuild@0.28.2)(yaml@2.9.1))':
     dependencies:
       '@babel/core': 8.0.6
       picomatch: 4.0.7
       rolldown: 1.2.12
     optionalDependencies:
       '@babel/runtime': 7.29.7
-      vite: 8.3.1(esbuild@0.28.2)(yaml@2.9.1)
+      vite: 8.3.1(@types/node@22.20.4)(esbuild@0.28.2)(yaml@2.9.1)
 
   '@rolldown/pluginutils@1.0.1': {}
 
@@ -3752,14 +3767,14 @@ snapshots:
     dependencies:
       acorn: 8.18.0
 
-  '@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.1)(vite@8.3.1(esbuild@0.28.2)(yaml@2.9.1))':
+  '@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.1)(vite@8.3.1(@types/node@22.20.4)(esbuild@0.28.2)(yaml@2.9.1))':
     dependencies:
       deepmerge: 4.3.1
       magic-string: 1.4.2
       obug: 2.2.1
       svelte: 5.57.1
-      vite: 8.3.1(esbuild@0.28.2)(yaml@2.9.1)
-      vitefu: 1.1.3(vite@8.3.1(esbuild@0.28.2)(yaml@2.9.1))
+      vite: 8.3.1(@types/node@22.20.4)(esbuild@0.28.2)(yaml@2.9.1)
+      vitefu: 1.1.3(vite@8.3.1(@types/node@22.20.4)(esbuild@0.28.2)(yaml@2.9.1))
 
   '@tybys/wasm-util@0.10.4':
     dependencies:
@@ -3787,6 +3802,10 @@ snapshots:
   '@types/nlcst@2.0.3':
     dependencies:
       '@types/unist': 3.0.3
+
+  '@types/node@22.20.4':
+    dependencies:
+      undici-types: 6.21.0
 
   '@types/unist@3.0.3': {}
 
@@ -3859,14 +3878,14 @@ snapshots:
 
   acorn@8.18.0: {}
 
-  agents@0.24.0(@babel/core@8.0.6)(@babel/runtime@7.29.7)(@modelcontextprotocol/client@2.0.0)(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(zod@4.6.5))(@modelcontextprotocol/server@2.0.0)(rolldown@1.2.12)(vite@8.3.1(esbuild@0.28.2)(yaml@2.9.1))(zod@4.6.5):
+  agents@0.24.0(@babel/core@8.0.6)(@babel/runtime@7.29.7)(@modelcontextprotocol/client@2.0.0)(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(zod@4.6.5))(@modelcontextprotocol/server@2.0.0)(rolldown@1.2.12)(vite@8.3.1(@types/node@22.20.4)(esbuild@0.28.2)(yaml@2.9.1))(zod@4.6.5):
     dependencies:
       '@babel/plugin-proposal-decorators': 8.0.2(@babel/core@8.0.6)
       '@cfworker/json-schema': 4.1.1
       '@modelcontextprotocol/client': 2.0.0
       '@modelcontextprotocol/sdk': 1.30.0(@cfworker/json-schema@4.1.1)(zod@4.6.5)
       '@modelcontextprotocol/server': 2.0.0
-      '@rolldown/plugin-babel': 0.2.4(@babel/core@8.0.6)(@babel/runtime@7.29.7)(rolldown@1.2.12)(vite@8.3.1(esbuild@0.28.2)(yaml@2.9.1))
+      '@rolldown/plugin-babel': 0.2.4(@babel/core@8.0.6)(@babel/runtime@7.29.7)(rolldown@1.2.12)(vite@8.3.1(@types/node@22.20.4)(esbuild@0.28.2)(yaml@2.9.1))
       capnweb: 0.12.0
       cron-schedule: 6.0.0
       esbuild: 0.28.2
@@ -3877,7 +3896,7 @@ snapshots:
       yaml: 2.9.1
       zod: 4.6.5
     optionalDependencies:
-      vite: 8.3.1(esbuild@0.28.2)(yaml@2.9.1)
+      vite: 8.3.1(@types/node@22.20.4)(esbuild@0.28.2)(yaml@2.9.1)
     transitivePeerDependencies:
       - '@babel/core'
       - '@babel/plugin-transform-runtime'
@@ -3910,7 +3929,7 @@ snapshots:
 
   aria-query@5.3.2: {}
 
-  astro@7.3.5(yaml@2.9.1):
+  astro@7.3.5(@types/node@22.20.4)(yaml@2.9.1):
     dependencies:
       '@astrojs/compiler-rs': 0.5.1
       '@astrojs/internal-helpers': 0.11.0
@@ -3960,13 +3979,13 @@ snapshots:
       unifont: 0.7.5
       unstorage: 1.17.5
       verkit: 0.4.1
-      vite: 8.3.1(esbuild@0.28.2)(yaml@2.9.1)
-      vitefu: 1.1.3(vite@8.3.1(esbuild@0.28.2)(yaml@2.9.1))
+      vite: 8.3.1(@types/node@22.20.4)(esbuild@0.28.2)(yaml@2.9.1)
+      vitefu: 1.1.3(vite@8.3.1(@types/node@22.20.4)(esbuild@0.28.2)(yaml@2.9.1))
       xxhash-wasm: 1.1.0
       yargs-parser: 22.0.0
       zod: 4.6.5
     optionalDependencies:
-      sharp: 0.35.5
+      sharp: 0.35.5(@types/node@22.20.4)
     transitivePeerDependencies:
       - '@azure/app-configuration'
       - '@azure/cosmos'
@@ -4630,10 +4649,10 @@ snapshots:
       js-base64: 3.9.4
       mime-types: 2.1.35
 
-  miniflare@5.20260930.0-alpha:
+  miniflare@5.20260930.0-alpha(@types/node@22.20.4):
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
-      sharp: 0.35.4
+      sharp: 0.35.4(@types/node@22.20.4)
       undici: 7.29.1
       workerd: 1.20260930.2
       ws: 8.21.0
@@ -4882,7 +4901,7 @@ snapshots:
 
   setprototypeof@1.2.0: {}
 
-  sharp@0.35.4:
+  sharp@0.35.4(@types/node@22.20.4):
     dependencies:
       '@img/colour': 1.1.0
       detect-libc: 2.1.2
@@ -4913,8 +4932,9 @@ snapshots:
       '@img/sharp-win32-arm64': 0.35.4
       '@img/sharp-win32-ia32': 0.35.4
       '@img/sharp-win32-x64': 0.35.4
+      '@types/node': 22.20.4
 
-  sharp@0.35.5:
+  sharp@0.35.5(@types/node@22.20.4):
     dependencies:
       '@img/colour': 1.1.0
       detect-libc: 2.1.2
@@ -4945,6 +4965,7 @@ snapshots:
       '@img/sharp-win32-arm64': 0.35.5
       '@img/sharp-win32-ia32': 0.35.5
       '@img/sharp-win32-x64': 0.35.5
+      '@types/node': 22.20.4
     optional: true
 
   shebang-command@2.0.0:
@@ -5103,6 +5124,8 @@ snapshots:
 
   uncrypto@0.1.3: {}
 
+  undici-types@6.21.0: {}
+
   undici@7.29.1: {}
 
   undici@8.11.2: {}
@@ -5185,7 +5208,7 @@ snapshots:
       '@types/unist': 3.0.3
       vfile-message: 4.0.3
 
-  vite@8.3.1(esbuild@0.28.2)(yaml@2.9.1):
+  vite@8.3.1(@types/node@22.20.4)(esbuild@0.28.2)(yaml@2.9.1):
     dependencies:
       lightningcss: 1.33.0
       picomatch: 4.0.7
@@ -5193,13 +5216,14 @@ snapshots:
       rolldown: 1.2.12
       tinyglobby: 0.2.17
     optionalDependencies:
+      '@types/node': 22.20.4
       esbuild: 0.28.2
       fsevents: 2.3.3
       yaml: 2.9.1
 
-  vitefu@1.1.3(vite@8.3.1(esbuild@0.28.2)(yaml@2.9.1)):
+  vitefu@1.1.3(vite@8.3.1(@types/node@22.20.4)(esbuild@0.28.2)(yaml@2.9.1)):
     optionalDependencies:
-      vite: 8.3.1(esbuild@0.28.2)(yaml@2.9.1)
+      vite: 8.3.1(@types/node@22.20.4)(esbuild@0.28.2)(yaml@2.9.1)
 
   which@2.0.2:
     dependencies:
@@ -5213,13 +5237,13 @@ snapshots:
       '@cloudflare/workerd-linux-arm64': 1.20260930.2
       '@cloudflare/workerd-windows-64': 1.20260930.2
 
-  wrangler@4.145.0:
+  wrangler@4.145.0(@types/node@22.20.4):
     dependencies:
       '@cloudflare/kv-asset-handler': 0.5.0
       '@cloudflare/unenv-preset': 2.16.2(unenv@2.0.0-rc.24)(workerd@1.20260930.2)
       blake3-wasm: 2.1.5
       esbuild: 0.28.1
-      miniflare: 5.20260930.0-alpha
+      miniflare: 5.20260930.0-alpha(@types/node@22.20.4)
       path-to-regexp: 6.3.0
       unenv: 2.0.0-rc.24
       workerd: 1.20260930.2

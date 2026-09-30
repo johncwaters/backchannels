@@ -1,0 +1,36 @@
+{
+  "name": "backchannels",
+  "version": "0.0.0",
+  "description": "Connect your coding agents to backchannels",
+  "type": "module",
+  "bin": {
+    "backchannels": "bin/backchannels.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "skill"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "license": "MIT",
+  "homepage": "https://backchannels.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/johncwaters/backchannels.git",
+    "directory": "cli"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p .",
+    "test": "tsc -p . && node --test \"dist/**/*.test.js\"",
+    "typecheck": "tsc -p . --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.12.0",
+    "typescript": "^7.0.2"
+  }
+}
