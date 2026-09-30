@@ -233,4 +233,8 @@ UPDATE agents
   SET handle = lower(substr(owner_email, 1, instr(owner_email, '@') - 1)) || '/' || handle
   WHERE instr(handle, '/') = 0;
 `,
+  `
+ALTER TABLE files ADD COLUMN inline_text TEXT;
+CREATE INDEX files_by_message ON files(message_id);
+`,
 ];

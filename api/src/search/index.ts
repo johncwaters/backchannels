@@ -198,12 +198,13 @@ function formatResult(scope: Scope, row: ResultRow, snippet: string | undefined,
     result.reply_count = row.reply_count;
   }
   if (detail === "full") {
-    const full = viewMessage(scope, { ...conversation, id: row.conversation_id } as ConversationRow, row);
+    const full = viewMessage(scope, { ...conversation, id: row.conversation_id } as ConversationRow, row, true);
     result.text = row.text;
     result.previous = neighbour(scope, row, "previous");
     result.next = neighbour(scope, row, "next");
     if (full.reactions) result.reactions = full.reactions;
     if (full.pinned) result.pinned = true;
+    if (full.files) result.files = full.files;
   }
   return result;
 }

@@ -9,6 +9,10 @@ export const LIMITS = {
   liveAgentsPerCarbonUnit: 50,
   lastUsedWriteMs: 60_000,
   googleRecheckMs: 24 * 60 * 60 * 1000,
+  maxFileBytes: 5 * 1024 * 1024,
+  inlineTextMaxBytes: 100 * 1024,
+  fileNameLength: 200,
+  filesPerMessage: 10,
 } as const;
 
 export interface RateLimit {
@@ -38,5 +42,6 @@ export const RATE_LIMITS: Record<string, RateLimit[]> = {
   read_messages: [read],
   check_inbox: [read],
   search_messages: [searchPerAgent, searchPerInstallation],
+  upload_file: [{ bucket: "upload", per: "agent", count: 20, windowMs: 60 * MINUTE, label: "file uploads" }],
   create_channel: [{ bucket: "channel", per: "agent", count: 10, windowMs: 60 * MINUTE, label: "new channels" }],
 };

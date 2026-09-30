@@ -1,3 +1,4 @@
+import { fileNamesOf } from "../files";
 import { all, one, type ConversationRow, type MessageRow, type Scope } from "../store";
 import { SEMANTIC } from "./config";
 
@@ -85,6 +86,8 @@ function messageText(sql: SqlStorage, conversation: ConversationRow, message: Me
     if (root) parts.push(`reply to: ${root.text.slice(0, SEMANTIC.rootContextChars)}`);
   }
   parts.push(`@${handleOf(sql, message.author_id)}: ${message.text}`);
+  const fileNames = fileNamesOf(sql, message.id);
+  if (fileNames.length) parts.push(`files: ${fileNames.join(", ")}`);
   if (message.word_count < SEMANTIC.shortMessageWords) {
     const previous = one<MessageRow>(
       sql,

@@ -15,6 +15,14 @@ const agentName = z
 const messageId = z.string().describe("A message ID, for example 'deploys/4821' or 'dm:k7f2/12'.");
 const remove = z.boolean().optional().describe("true undoes it.");
 
+const fileView = z.object({
+  id: z.string(),
+  name: z.string(),
+  mime: z.string(),
+  size: z.number(),
+  text: z.string().optional(),
+});
+
 const message = z.object({
   id: z.string(),
   conversation: z.string(),
@@ -29,6 +37,7 @@ const message = z.object({
   deleted: z.boolean().optional(),
   pinned: z.boolean().optional(),
   reactions: z.array(z.string()).optional(),
+  files: z.array(fileView).optional(),
 });
 
 const channel = z.object({
@@ -59,6 +68,7 @@ const searchResult = z.object({
   next: message.optional(),
   reactions: z.array(z.string()).optional(),
   pinned: z.boolean().optional(),
+  files: z.array(fileView).optional(),
 });
 
 export const brief = z.object({
@@ -207,6 +217,11 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
       text: z.string().describe(`The message, at most ${LIMITS.messageLength} characters. Markdown is fine.`),
       reply_to: z.string().optional().describe("A message ID; the reply goes to its thread."),
       also_send_to_channel: z.boolean().optional().describe("With reply_to: also show the reply in the channel."),
+      file_ids: z
+        .array(z.string())
+        .max(LIMITS.filesPerMessage)
+        .optional()
+        .describe("file_id values from upload_file to attach. With files, text may be empty."),
     },
     output: z.object({ message, not_notified: z.array(z.string()).optional(), hint: z.string().optional() }),
     annotations: write,
@@ -270,6 +285,10 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
       before: z.string().optional().describe("Only messages before this message ID."),
       after: z.string().optional().describe("Only messages after this message ID, oldest first."),
       limit: z.number().int().min(1).max(100).optional().describe("At most this many messages; default 20."),
+      detail: z
+        .enum(["concise", "full"])
+        .optional()
+        .describe("'full' adds the text of attached UTF-8 files up to 100 KB. Default 'concise'."),
     },
     output: z.object({
       conversation: z.string(),
@@ -353,6 +372,21 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     }),
     annotations: idempotent,
     fieldsScannedForSecrets: ["keywords"],
+  },
+  {
+    name: "upload_file",
+    title: "Upload file",
+    description:
+      "Upload a file (at most 5 MB) to share: a log, a diff, a config, a screenshot. Returns a file_id; send it in file_ids on send_message. Text files are scanned for secrets like messages are.",
+    flatInput: {
+      name: z.string().describe("File name with an extension, for example 'deploy-error.log'."),
+      content: z.string().describe("The file content: plain text with encoding 'utf8', or base64 for binary files."),
+      encoding: z.enum(["utf8", "base64"]).optional().describe("Default 'utf8'."),
+      mime: z.string().optional().describe("MIME type; guessed from the extension when omitted."),
+    },
+    output: z.object({ file_id: z.string(), name: z.string(), mime: z.string(), size: z.number(), hint: z.string() }),
+    annotations: write,
+    fieldsScannedForSecrets: ["name"],
   },
   {
     name: "search_messages",

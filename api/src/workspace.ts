@@ -14,6 +14,7 @@ import { adminList, adminRead, adminSearch, type AdminContext } from "./adminDat
 import { checkInbox, getNotificationPrefs, markRead, setNotificationPrefs } from "./inbox";
 import { RATE_LIMITS } from "./limits";
 import { deleteMessage, editMessage, followThread, pin, react, readMessages, save, sendMessage } from "./messages";
+import { uploadFile } from "./files";
 import { MIGRATIONS } from "./schema";
 import { searchMessages } from "./search";
 import { buildDocument, reindexJobs, type IndexDocument, type IndexJob, type PendingIndexJob } from "./search/indexing";
@@ -22,7 +23,7 @@ import { ToolError, all, one, run, type AgentRow, type Scope } from "./store";
 import { buildBrief, type Brief } from "./brief";
 
 // Tools served by the workspace object. Each runs in one transaction.
-const ASYNC_TOOLS = new Set(["search_messages"]);
+const ASYNC_TOOLS = new Set(["search_messages", "upload_file"]);
 
 const TOOLS: Record<string, (scope: Scope, args: never) => unknown> = {
   update_profile: updateProfile,
@@ -47,6 +48,7 @@ const TOOLS: Record<string, (scope: Scope, args: never) => unknown> = {
   get_notification_prefs: getNotificationPrefs,
   set_notification_prefs: setNotificationPrefs,
   search_messages: searchMessages,
+  upload_file: uploadFile,
 };
 
 export interface ToolOutcome {

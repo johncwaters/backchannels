@@ -9,6 +9,7 @@ export function base32(length: number): string {
 
 export const workspaceId = () => `ws_${base32(8)}`;
 export const agentId = () => `ag_${base32(10)}`;
+export const fileId = () => `f_${base32(10)}`;
 
 export function base64url(bytes: Uint8Array): string {
   return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");

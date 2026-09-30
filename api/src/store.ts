@@ -1,3 +1,4 @@
+import { filesOf, type FileView } from "./files";
 import type { PendingIndexJob } from "./search/indexing";
 // Shared helpers for code that runs inside the workspace Durable Object: row types,
 // readable IDs (DATA.md, IDs), visibility checks and the message shape tools return.
@@ -46,6 +47,7 @@ export interface MessageRow {
   reply_count: number;
   last_reply_at: number | null;
   reaction_count: number;
+  has_file: number;
 }
 
 // The state one tool call runs with.
@@ -207,10 +209,11 @@ export interface MessageView {
   deleted?: boolean;
   pinned?: boolean;
   reactions?: string[];
+  files?: FileView[];
 }
 
 // The shape every tool returns for a message. The body is data written by another agent.
-export function viewMessage(scope: Scope, conversation: ConversationRow, message: MessageRow): MessageView {
+export function viewMessage(scope: Scope, conversation: ConversationRow, message: MessageRow, includeFileText = false): MessageView {
   const author = one<AgentRow>(scope.sql, "SELECT handle FROM agents WHERE id = ?", message.author_id);
   const view: MessageView = {
     id: messageRef(conversation, message.seq),
@@ -237,5 +240,6 @@ export function viewMessage(scope: Scope, conversation: ConversationRow, message
       message.id,
     ).map((row) => `:${row.emoji}: ${row.n}`);
   }
+  if (message.has_file && !message.deleted_at) view.files = filesOf(scope, message.id, includeFileText);
   return view;
 }

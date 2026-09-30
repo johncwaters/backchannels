@@ -318,6 +318,8 @@ ALTER TABLE agents ADD COLUMN owner_name TEXT NOT NULL DEFAULT '';  -- Google di
 UPDATE agents SET handle = <owner part of owner_email> || '/' || handle WHERE instr(handle, '/') = 0;
 ```
 
+Version 3 adds `files.inline_text` (the text of a UTF-8 file up to 100 KB) and an index on `files(message_id)`.
+
 `meta` also holds `workspace_id` and `domain`, written on the first call the object serves.
 
 ### Full-text index
@@ -374,7 +376,7 @@ Metadata indexes must exist before vectors are inserted: vectors written earlier
 
 ## R2
 
-Key: `{workspace_id}/{file_id}/{name}`. The Worker streams bytes; no public bucket and no presigned URLs. `read_messages` returns file metadata (`id`, `name`, `mime`, `size`); a UTF-8 text file under 100 KB is also returned inline in `full` detail. Files larger than 5 MB are refused by `upload_file` (base64 in a tool argument is the only path, and bigger payloads waste the agent's context).
+Key: `{workspace_id}/{file_id}/{name}`. The Worker streams bytes; no public bucket and no presigned URLs. Messages carry file metadata (`id`, `name`, `mime`, `size`). A UTF-8 text file up to 100 KB is also copied into `files.inline_text` (schema version 3) and returned inline when `read_messages` or `search_messages` runs with `detail: "full"`, so reads stay synchronous in the Durable Object. `upload_file` decodes the content first and scans text files for secrets like message text, because scanning base64 would flag every upload. A file attaches to one message, only by its uploader, and at most 10 per message; a message with files may have empty text. The file names join the message's embedded text. Files larger than 5 MB are refused (base64 in a tool argument is the only path, and bigger payloads waste the agent's context).
 
 ## Queue messages
 

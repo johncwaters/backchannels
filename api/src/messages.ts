@@ -1,4 +1,5 @@
 import { openChat } from "./conversations";
+import { attachFiles } from "./files";
 import { LIMITS } from "./limits";
 import { SIGNALS } from "./search/config";
 import { queueDelete, queueMessageUpsert, queueThreadUpsert } from "./search/indexing";
@@ -64,8 +65,8 @@ function derive(text: string): Derived {
   };
 }
 
-function checkText(text: string): string {
-  if (!text.trim()) throw new ToolError("text is empty");
+function checkText(text: string, hasFiles = false): string {
+  if (!text.trim() && !hasFiles) throw new ToolError("text is empty");
   if (text.length > LIMITS.messageLength) {
     throw new ToolError(`text has ${text.length} characters; the limit is ${LIMITS.messageLength}. Split it, or upload it as a file`);
   }
@@ -204,8 +205,12 @@ function resolveTarget(scope: Scope, to: string): ConversationRow {
   return findConversation(scope, ref);
 }
 
-export function sendMessage(scope: Scope, args: { to: string; text: string; reply_to?: string; also_send_to_channel?: boolean }) {
-  const text = checkText(args.text);
+export function sendMessage(
+  scope: Scope,
+  args: { to: string; text: string; reply_to?: string; also_send_to_channel?: boolean; file_ids?: string[] },
+) {
+  const fileIds = args.file_ids ?? [];
+  const text = checkText(args.text, fileIds.length > 0);
   let conversation = resolveTarget(scope, args.to);
   let root: MessageRow | null = null;
   if (args.reply_to) {
@@ -249,6 +254,7 @@ export function sendMessage(scope: Scope, args: { to: string; text: string; repl
   const message = one<MessageRow>(scope.sql, "SELECT * FROM messages WHERE conversation_id = ? AND seq = ?", conversation.id, seq)!;
   const mentioned = mentionedAgents(scope, derived.handles);
   writeMentions(scope, message.id, mentioned);
+  attachFiles(scope, message.id, fileIds);
   run(scope.sql, "UPDATE conversations SET last_seq = ?, last_message_at = ? WHERE id = ?", seq, scope.now, conversation.id);
   conversation = { ...conversation, last_seq: seq, last_message_at: scope.now };
 
@@ -270,7 +276,8 @@ export function sendMessage(scope: Scope, args: { to: string; text: string; repl
   recordPostSignals(scope, conversation, root, mentioned, text);
   queueMessageUpsert(scope, message, FIRST_VERSION);
   if (root) queueThreadUpsert(scope, root, threadVersionOf(scope, root.id));
-  const result: Record<string, unknown> = { message: viewMessage(scope, conversation, message) };
+  const sent = one<MessageRow>(scope.sql, "SELECT * FROM messages WHERE id = ?", message.id)!;
+  const result: Record<string, unknown> = { message: viewMessage(scope, conversation, sent) };
   if (notNotified.length) {
     result.not_notified = notNotified;
     result.hint = `these agents are not in ${label(conversation)}; invite_to_channel adds them`;
@@ -508,7 +515,10 @@ export function seqOf(ref: string | undefined): number | undefined {
   return parseMessageRef(ref).seq;
 }
 
-export function readMessages(scope: Scope, args: { conversation: string; before?: string; after?: string; limit?: number }) {
+export function readMessages(
+  scope: Scope,
+  args: { conversation: string; before?: string; after?: string; limit?: number; detail?: "concise" | "full" },
+) {
   const limit = Math.min(Math.max(args.limit ?? 20, 1), 100);
   const before = seqOf(args.before) ?? Number.MAX_SAFE_INTEGER;
   const after = seqOf(args.after) ?? 0;
@@ -562,7 +572,7 @@ export function readMessages(scope: Scope, args: { conversation: string; before?
   }
   return {
     conversation: root ? `${messageRef(conversation, root.seq)}/t` : label(conversation),
-    messages: page.map((message) => viewMessage(scope, conversation, message)),
+    messages: page.map((message) => viewMessage(scope, conversation, message, args.detail === "full")),
     has_more_before: page.length > 0 && exists(page[0].seq, "<"),
     has_more_after: page.length > 0 && exists(page.at(-1)!.seq, ">"),
   };
