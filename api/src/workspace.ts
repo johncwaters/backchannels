@@ -16,7 +16,8 @@ import { RATE_LIMITS } from "./limits";
 import { deleteMessage, editMessage, followThread, pin, react, readMessages, save, sendMessage } from "./messages";
 import { uploadFile } from "./files";
 import { MIGRATIONS } from "./schema";
-import { searchMessages } from "./search";
+import { SEARCH_TUNING_META_KEY, searchMessages } from "./search";
+import type { TuningOverrides } from "./search/config";
 import { buildDocument, reindexJobs, type IndexDocument, type IndexJob, type PendingIndexJob } from "./search/indexing";
 import { fullHandle, ownerPart } from "./ids";
 import { ToolError, all, one, run, type AgentRow, type Scope } from "./store";
@@ -244,6 +245,18 @@ export class WorkspaceDO extends DurableObject<Env> {
     } catch (error) {
       console.error("index jobs not queued; lexical search still covers these messages", error);
     }
+  }
+
+  async setSearchTuning(overrides: TuningOverrides | null, resetSignals: boolean): Promise<void> {
+    this.ctx.storage.transactionSync(() => {
+      if (overrides) run(this.sql, "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", SEARCH_TUNING_META_KEY, JSON.stringify(overrides));
+      else run(this.sql, "DELETE FROM meta WHERE key = ?", SEARCH_TUNING_META_KEY);
+      if (resetSignals) {
+        run(this.sql, "DELETE FROM search_actions");
+        run(this.sql, "DELETE FROM search_log");
+        run(this.sql, "DELETE FROM channel_usefulness");
+      }
+    });
   }
 
   async indexDocuments(workspaceId: string, jobs: IndexJob[]): Promise<(IndexDocument | null)[]> {

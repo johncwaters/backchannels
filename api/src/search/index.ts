@@ -1,5 +1,5 @@
 import { ToolError, all, label, messageRef, one, viewMessage, type ConversationRow, type MessageRow, type Scope } from "../store";
-import { SEARCH, SEMANTIC } from "./config";
+import { SEARCH, SEMANTIC, withOverrides, type Tuning, type TuningOverrides } from "./config";
 import { buildFilters, type Filters } from "./filters";
 import { ftsMatch, parseQuery, withoutStopWords, type FreeTerm, type ParsedQuery, type SortOrder } from "./query";
 import { fuse, lexicalCandidates, messageIdsForVectorHits, privateConversationIds, recheckVisible, rerank, type Ranked } from "./rank";
@@ -75,8 +75,8 @@ function minMax(values: number[]): number[] {
   return values.map((value) => (high === low ? 1 : (value - low) / (high - low)));
 }
 
-async function withCrossEncoder(scope: Scope, ranked: Ranked[], freeText: string, startedAt: number): Promise<Ranked[]> {
-  if (!wantsCrossEncoder(freeText) || ranked.length < 2 || Date.now() - startedAt > SEMANTIC.rerankBudgetMs) return ranked;
+async function withCrossEncoder(scope: Scope, ranked: Ranked[], freeText: string, startedAt: number, tuning: Tuning): Promise<Ranked[]> {
+  if (!wantsCrossEncoder(freeText) || ranked.length < 2 || Date.now() - startedAt > tuning.rerankBudgetMs) return ranked;
   const head = ranked.slice(0, SEMANTIC.rerankCandidates);
   const textById = new Map(
     all<{ id: number; text: string }>(scope.sql, "SELECT id, text FROM messages WHERE id IN (SELECT value FROM json_each(?))", JSON.stringify(head.map((item) => item.id))).map(
@@ -99,7 +99,7 @@ async function withCrossEncoder(scope: Scope, ranked: Ranked[], freeText: string
   }
 }
 
-async function orderedIds(scope: Scope, parsed: ParsedQuery, sort: SortOrder, visibleIds: number[]): Promise<number[]> {
+async function orderedIds(scope: Scope, parsed: ParsedQuery, sort: SortOrder, visibleIds: number[], tuning: Tuning): Promise<number[]> {
   const startedAt = Date.now();
   const filters = buildFilters(scope, parsed.modifiers);
   const excludeMatch = parsed.exclude.length ? ftsMatch(parsed.exclude, "OR") : null;
@@ -120,13 +120,13 @@ async function orderedIds(scope: Scope, parsed: ParsedQuery, sort: SortOrder, vi
     order: "bm25",
     limit: SEARCH.lexicalCandidates,
   });
-  const ranked = rerank(scope, fuse([lexical, await semantic]), parsed.freeText);
-  return (await withCrossEncoder(scope, ranked, parsed.freeText, startedAt)).map((item) => item.id);
+  const ranked = rerank(scope, fuse([lexical, await semantic]), parsed.freeText, tuning);
+  return (await withCrossEncoder(scope, ranked, parsed.freeText, startedAt, tuning)).map((item) => item.id);
 }
 
-async function topForRecent(scope: Scope, parsed: ParsedQuery, recent: number[], visibleIds: number[]): Promise<number[] | undefined> {
+async function topForRecent(scope: Scope, parsed: ParsedQuery, recent: number[], visibleIds: number[], tuning: Tuning): Promise<number[] | undefined> {
   if (!parsed.include.length) return undefined;
-  const top = (await orderedIds(scope, parsed, "relevant", visibleIds)).slice(0, SEARCH.topForRecent);
+  const top = (await orderedIds(scope, parsed, "relevant", visibleIds, tuning)).slice(0, SEARCH.topForRecent);
   const firstRecent = new Set(recent.slice(0, SEARCH.topHiddenWhenInFirstRecent));
   if (top.length < SEARCH.topForRecent || top.every((id) => firstRecent.has(id))) return undefined;
   return top;
@@ -234,6 +234,13 @@ function page(scope: Scope, searchId: number, ordered: number[], offset: number,
   };
 }
 
+export const SEARCH_TUNING_META_KEY = "search_tuning";
+
+function searchTuning(scope: Scope): Tuning {
+  const stored = one<{ value: string }>(scope.sql, "SELECT value FROM meta WHERE key = ?", SEARCH_TUNING_META_KEY);
+  return withOverrides(stored ? (JSON.parse(stored.value) as TuningOverrides) : null);
+}
+
 export async function searchMessages(scope: Scope, args: SearchArgs) {
   const limit = Math.min(Math.max(args.limit ?? SEARCH.defaultLimit, 1), SEARCH.maxLimit);
   const detail = args.detail ?? "concise";
@@ -259,7 +266,8 @@ export async function searchMessages(scope: Scope, args: SearchArgs) {
   }
   const sort = args.sort ?? "relevant";
   const visibleIds = privateConversationIds(scope);
-  const ordered = await orderedIds(scope, parsed, sort, visibleIds);
+  const tuning = searchTuning(scope);
+  const ordered = await orderedIds(scope, parsed, sort, visibleIds, tuning);
   const searchId = one<{ id: number }>(
     scope.sql,
     "INSERT INTO search_log (agent_id, query, sort, results, created_at) VALUES (?, ?, ?, ?, ?) RETURNING id",
@@ -271,7 +279,7 @@ export async function searchMessages(scope: Scope, args: SearchArgs) {
   )!.id;
 
   const firstPage = page(scope, searchId, ordered, 0, limit, parsed, detail);
-  const top = sort === "recent" ? await topForRecent(scope, parsed, ordered, visibleIds) : undefined;
+  const top = sort === "recent" ? await topForRecent(scope, parsed, ordered, visibleIds, tuning) : undefined;
   if (!top) return firstPage;
   const topRows = loadRows(scope, top);
   const topSnippets = snippets(scope, top, parsed.include);

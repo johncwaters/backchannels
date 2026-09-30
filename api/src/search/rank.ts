@@ -1,5 +1,5 @@
 import { all, type Scope } from "../store";
-import { FEATURES, SEARCH, WEIGHTS } from "./config";
+import { SEARCH, type Tuning } from "./config";
 import type { Filters } from "./filters";
 import { decayed } from "./signals";
 
@@ -126,7 +126,8 @@ function threadShape(row: CandidateRow): number {
   return 0;
 }
 
-export function rerank(scope: Scope, candidates: Ranked[], freeText: string): Ranked[] {
+export function rerank(scope: Scope, candidates: Ranked[], freeText: string, tuning: Tuning): Ranked[] {
+  const { weights, features: FEATURES } = tuning;
   if (!candidates.length) return [];
   const idsJson = JSON.stringify(candidates.map((candidate) => candidate.id));
   const rows = all<CandidateRow>(
@@ -153,6 +154,14 @@ export function rerank(scope: Scope, candidates: Ranked[], freeText: string): Ra
       me,
       conversationsJson,
     ).map((row) => [row.conversation_id, Math.min(1, decayed(row.score, row.updated_at, scope.now) / FEATURES.affinityScale)]),
+  );
+  const postedIn = new Set(
+    all<{ conversation_id: number }>(
+      scope.sql,
+      "SELECT DISTINCT conversation_id FROM messages WHERE author_id = ? AND conversation_id IN (SELECT value FROM json_each(?))",
+      me,
+      conversationsJson,
+    ).map((row) => row.conversation_id),
   );
   const memberOf = new Set(
     all<{ conversation_id: number }>(
@@ -207,7 +216,8 @@ export function rerank(scope: Scope, candidates: Ranked[], freeText: string): Ra
       const isChat = row.kind === "dm" || row.kind === "group";
       const effectiveLevel = levelOverrides.get(row.conversation_id) ?? (isChat ? "all" : defaultLevel);
       let channelPriority = channelAffinity.get(row.conversation_id) ?? 0;
-      if (memberOf.has(row.conversation_id)) channelPriority = Math.max(channelPriority, FEATURES.memberChannelPriority);
+      const earnsMemberPriority = memberOf.has(row.conversation_id) && (!FEATURES.memberPriorityRequiresPost || postedIn.has(row.conversation_id));
+      if (earnsMemberPriority) channelPriority = Math.max(channelPriority, FEATURES.memberChannelPriority);
       if (memberOf.has(row.conversation_id) && effectiveLevel === "all") channelPriority = 1;
 
       const weightedEngagement =
@@ -231,8 +241,8 @@ export function rerank(scope: Scope, candidates: Ranked[], freeText: string): Ra
         formBonus: row.has_code || row.has_link ? 1 : 0,
         shortPenalty: row.word_count < FEATURES.shortMessageWords && !row.has_file ? 1 : 0,
       };
-      const score = (Object.keys(WEIGHTS) as (keyof typeof WEIGHTS)[]).reduce(
-        (sum, name) => sum + WEIGHTS[name] * features[name],
+      const score = (Object.keys(weights) as (keyof typeof weights)[]).reduce(
+        (sum, name) => sum + weights[name] * features[name],
         0,
       );
       return { id: row.id, score };

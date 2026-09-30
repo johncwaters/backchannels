@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { MODERN, evalRequest, mcpClient } from "../lib/mcp.mjs";
+import { EXPERIMENTS } from "./experiments.mjs";
 import { AGENTS, PINS, PRIVATE_CHANNELS, PUBLIC_CHANNELS, PUBLIC_MEMBERS, QUERIES, REACTIONS, timeline } from "./corpus.mjs";
 
 const ROUTINE_POST_COUNT = 220;
@@ -139,7 +140,7 @@ const format = (value) => (value === null ? "   -  " : value.toFixed(3).padStart
 
 function summarize(evaluations) {
   const categories = [...new Set(evaluations.map((evaluation) => evaluation.category))];
-  const rows = [...categories, "all"].map((category) => {
+  return [...categories, "all"].map((category) => {
     const group = category === "all" ? evaluations : evaluations.filter((evaluation) => evaluation.category === category);
     return {
       category,
@@ -151,18 +152,47 @@ function summarize(evaluations) {
       p50LatencyMs: [...group.map((e) => e.latencyMs)].sort((a, b) => a - b)[Math.floor(group.length / 2)],
     };
   });
-  console.log("\ncategory   queries  recall@10   MRR    precision  leaks  p50 ms");
+}
+
+function printSummary(name, rows) {
+  console.log(`\n== ${name}`);
+  console.log("category   queries  recall@10   MRR    precision  leaks  p50 ms");
   for (const row of rows) {
     console.log(
       `${row.category.padEnd(10)} ${String(row.queries).padStart(7)}  ${format(row.recallAt10)}  ${format(row.mrr)}  ${format(row.precision)}  ${String(row.leaks).padStart(5)}  ${String(row.p50LatencyMs).padStart(6)}`,
     );
   }
+}
+
+function printMisses(evaluations) {
   const misses = evaluations.filter((e) => e.reciprocalRank !== undefined && e.reciprocalRank < 1);
-  if (misses.length) {
-    console.log("\nqueries whose first relevant result is not ranked first:");
-    for (const miss of misses) console.log(`  ${miss.reciprocalRank ? `rank ${Math.round(1 / miss.reciprocalRank)}` : "missed"}  ${miss.query}  -> ${miss.labels.slice(0, 5).join(", ")}`);
+  if (!misses.length) return;
+  console.log("queries whose first relevant result is not ranked first:");
+  for (const miss of misses) console.log(`  ${miss.reciprocalRank ? `rank ${Math.round(1 / miss.reciprocalRank)}` : "missed"}  ${miss.query}  -> ${miss.labels.slice(0, 5).join(", ")}`);
+}
+
+function printComparison(runs) {
+  const categories = runs[0].summary.map((row) => row.category);
+  console.log("\n== MRR by experiment (recall@10 in brackets)");
+  console.log(`${"experiment".padEnd(30)} ${categories.map((category) => category.padStart(16)).join("")}`);
+  for (const run of runs) {
+    const cells = run.summary.map((row) => (row.mrr === null ? "-" : `${row.mrr.toFixed(3)} (${row.recallAt10.toFixed(2)})`).padStart(16));
+    console.log(`${run.name.padEnd(30)} ${cells.join("")}`);
   }
-  return rows;
+}
+
+async function runExperiment(experiment) {
+  await fetch(`${process.env.EVAL_URL ?? "http://localhost:8791"}/eval/tuning?space=${space}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ tuning: experiment.tuning, resetSignals: true }),
+  });
+  const evaluations = [];
+  for (const query of QUERIES) evaluations.push(await evaluate(query));
+  const summary = summarize(evaluations);
+  printSummary(experiment.name, summary);
+  printMisses(evaluations);
+  return { name: experiment.name, tuning: experiment.tuning, summary, evaluations };
 }
 
 async function main() {
@@ -171,15 +201,16 @@ async function main() {
   console.log(`seeded ${postCount} posts; waiting for the semantic index`);
   const index = await waitForIndex();
   console.log(`index ready: ${index.present} vectors`);
-  const evaluations = [];
-  for (const query of QUERIES) evaluations.push(await evaluate(query));
-  const summary = summarize(evaluations);
+  const onlyBaseline = process.argv.includes("--baseline");
+  const runs = [];
+  for (const experiment of onlyBaseline ? EXPERIMENTS.slice(0, 1) : EXPERIMENTS) runs.push(await runExperiment(experiment));
+  printComparison(runs);
   mkdirSync(resultsDir, { recursive: true });
   const file = join(resultsDir, `${space}.json`);
-  writeFileSync(file, `${JSON.stringify({ space, postCount, summary, evaluations }, null, 2)}\n`);
+  writeFileSync(file, `${JSON.stringify({ space, postCount, runs }, null, 2)}\n`);
   console.log(`\nfull results: ${file}`);
   if (!keepVectors) console.log(`purged ${(await evalRequest(`/eval/purge-vectors?space=${space}`, "POST")).deleted} vectors`);
-  const leaks = evaluations.reduce((sum, evaluation) => sum + evaluation.leaks.length, 0);
+  const leaks = runs.flatMap((run) => run.evaluations).reduce((sum, evaluation) => sum + evaluation.leaks.length, 0);
   if (leaks) {
     console.error(`FAIL: ${leaks} private results leaked to agents that cannot see them`);
     process.exit(1);

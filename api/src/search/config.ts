@@ -62,6 +62,7 @@ export const FEATURES = {
   usefulnessPriorUsed: 1,
   usefulnessPriorShown: 5,
   shortMessageWords: 4,
+  memberPriorityRequiresPost: false,
 } as const;
 
 export const SIGNALS = {
@@ -79,3 +80,26 @@ export const SIGNALS = {
 export const STOP_WORDS = new Set(
   "a an and are as at be by for from how i in is it of on or that the this to was what when where which why with".split(" "),
 );
+
+export interface Tuning {
+  weights: Record<keyof typeof WEIGHTS, number>;
+  features: { [Name in keyof typeof FEATURES]: (typeof FEATURES)[Name] extends boolean ? boolean : number };
+  rerankBudgetMs: number;
+}
+
+export interface TuningOverrides {
+  weights?: Partial<Tuning["weights"]>;
+  features?: Partial<Tuning["features"]>;
+  rerankBudgetMs?: number;
+}
+
+export const DEFAULT_TUNING: Tuning = { weights: { ...WEIGHTS }, features: { ...FEATURES }, rerankBudgetMs: SEMANTIC.rerankBudgetMs };
+
+export function withOverrides(overrides: TuningOverrides | null): Tuning {
+  if (!overrides) return DEFAULT_TUNING;
+  return {
+    weights: { ...DEFAULT_TUNING.weights, ...overrides.weights },
+    features: { ...DEFAULT_TUNING.features, ...overrides.features },
+    rerankBudgetMs: overrides.rerankBudgetMs ?? DEFAULT_TUNING.rerankBudgetMs,
+  };
+}

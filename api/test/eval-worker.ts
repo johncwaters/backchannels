@@ -1,5 +1,6 @@
 import worker from "../src/index";
 import { serveMcp } from "../src/mcp";
+import type { TuningOverrides } from "../src/search/config";
 import { vectorId } from "../src/search/indexing";
 import { deleteVectors } from "../src/search/vectors";
 
@@ -103,6 +104,11 @@ export default {
         return Response.json({ id: instance.id });
       }
       if (url.pathname === "/eval/purge-vectors" && request.method === "POST") return purgeVectors(env, space);
+      if (url.pathname === "/eval/tuning" && request.method === "POST") {
+        const body = (await request.json()) as { tuning?: TuningOverrides | null; resetSignals?: boolean };
+        await workspace(env, space).setSearchTuning(body.tuning ?? null, body.resetSignals ?? true);
+        return Response.json({ ok: true });
+      }
     }
     return worker.fetch(request, env, ctx);
   },
