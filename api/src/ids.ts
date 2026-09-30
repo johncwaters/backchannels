@@ -64,6 +64,10 @@ export function workspaceSlug(domain: string): string {
 
 export const workspaceOwnerSub = (workspaceId: string) => `workspace:${workspaceId}`;
 
+export function workspaceOwner(workspaceId: string, domain: string): { sub: string; email: string } {
+  return { sub: workspaceOwnerSub(workspaceId), email: `${workspaceSlug(domain)}@${domain}` };
+}
+
 export function isReservedOwner(email: string, domain: string): boolean {
   return ownerPart(email) === workspaceSlug(domain);
 }

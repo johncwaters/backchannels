@@ -1,5 +1,5 @@
 import type { GoogleIdentity } from "./google";
-import { agentId, workspaceId, workspaceOwnerSub } from "./ids";
+import { agentId, workspaceId, workspaceOwner, workspaceOwnerSub } from "./ids";
 import { LIMITS } from "./limits";
 
 // The first sign-in from an allowed domain creates its workspace.
@@ -89,11 +89,76 @@ export async function isActiveMcpInstallationOf(db: D1Database, grantId: string,
 const lastUsedWrites = new Map<string, number>();
 
 // At most one write per minute per grant (DATA.md, Request resolution).
+function isUsageWriteDue(id: string, now: number): boolean {
+  if (now - (lastUsedWrites.get(id) ?? 0) < LIMITS.lastUsedWriteMs) return false;
+  lastUsedWrites.set(id, now);
+  return true;
+}
+
 export async function recordUsed(db: D1Database, grantId: string): Promise<void> {
   const now = Date.now();
-  if (now - (lastUsedWrites.get(grantId) ?? 0) < LIMITS.lastUsedWriteMs) return;
-  lastUsedWrites.set(grantId, now);
+  if (!isUsageWriteDue(grantId, now)) return;
   await db.prepare("UPDATE installations SET last_used_at = ? WHERE grant_id = ?").bind(now, grantId).run();
+}
+
+export async function recordHeadlessKeyUsed(db: D1Database, keyId: string): Promise<void> {
+  const now = Date.now();
+  if (!isUsageWriteDue(keyId, now)) return;
+  await db.prepare("UPDATE headless_keys SET last_used_at = ? WHERE id = ?").bind(now, keyId).run();
+}
+
+export interface HeadlessKeyRow {
+  id: string;
+  workspace_id: string;
+  suggested_name: string;
+  domain: string;
+  owner_sub: string;
+  owner_email: string;
+  sponsor_workspace_id: string;
+  sponsor_verified_at: number | null;
+  sponsor_suspended_at: number | null;
+}
+
+export async function findHeadlessKey(db: D1Database, keyHash: string, now: number): Promise<HeadlessKeyRow | null> {
+  return db
+    .prepare(
+      `SELECT k.id, k.workspace_id, k.suggested_name, w.domain, o.sub AS owner_sub, o.email AS owner_email,
+         s.workspace_id AS sponsor_workspace_id, s.last_verified_at AS sponsor_verified_at, s.headless_suspended_at AS sponsor_suspended_at
+       FROM headless_keys k
+       JOIN workspaces w ON w.id = k.workspace_id
+       JOIN carbon_units o ON o.sub = 'workspace:' || k.workspace_id
+       JOIN carbon_units s ON s.sub = k.sponsor_sub
+       WHERE k.key_hash = ? AND k.revoked_at IS NULL AND k.expires_at > ?`,
+    )
+    .bind(keyHash, now)
+    .first<HeadlessKeyRow>();
+}
+
+export async function ensureWorkspaceOwner(db: D1Database, workspaceId: string): Promise<{ sub: string; email: string }> {
+  const workspace = await db.prepare("SELECT domain, name FROM workspaces WHERE id = ?").bind(workspaceId).first<{ domain: string; name: string }>();
+  if (!workspace) throw new Error(`workspace ${workspaceId} is missing`);
+  const owner = workspaceOwner(workspaceId, workspace.domain);
+  const now = Date.now();
+  await db
+    .prepare(
+      `INSERT INTO carbon_units (sub, workspace_id, email, name, created_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT (sub) DO NOTHING`,
+    )
+    .bind(owner.sub, workspaceId, owner.email, workspace.name, now, now)
+    .run();
+  return owner;
+}
+
+export async function recordVerified(db: D1Database, sub: string, options: { liftSuspension: boolean }): Promise<void> {
+  const suspension = options.liftSuspension ? ", headless_suspended_at = NULL" : "";
+  await db.prepare(`UPDATE carbon_units SET last_verified_at = ?${suspension} WHERE sub = ?`).bind(Date.now(), sub).run();
+}
+
+export async function suspendHeadlessSponsor(db: D1Database, sub: string): Promise<void> {
+  await db
+    .prepare("UPDATE carbon_units SET headless_suspended_at = ? WHERE sub = ? AND headless_suspended_at IS NULL")
+    .bind(Date.now(), sub)
+    .run();
 }
 
 export type NewAgentRecord = { ok: true; id: string } | { ok: false; error: string };

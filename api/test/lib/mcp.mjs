@@ -10,14 +10,23 @@ function parseBody(text) {
 }
 
 export function mcpClient(who, protocolVersion = MODERN, space) {
-  let nextId = 1;
   const url = space ? `${EVAL_URL}/eval/${space}/${who}/mcp` : `${EVAL_URL}/eval/${who}/mcp`;
+  return mcpClientAt(url, protocolVersion);
+}
+
+export function headlessClient(key, protocolVersion = MODERN) {
+  return mcpClientAt(`${EVAL_URL}/mcp`, protocolVersion, { authorization: `Bearer ${key}` });
+}
+
+function mcpClientAt(url, protocolVersion, extraHeaders = {}) {
+  let nextId = 1;
 
   async function request(method, params = {}) {
     const headers = {
       "content-type": "application/json",
       accept: "application/json, text/event-stream",
       "mcp-protocol-version": protocolVersion,
+      ...extraHeaders,
     };
     let body = params;
     if (protocolVersion === MODERN) {
@@ -62,8 +71,9 @@ export function mcpClient(who, protocolVersion = MODERN, space) {
   return { request, call, handshake };
 }
 
-export async function evalRequest(path, method = "GET") {
-  const response = await fetch(`${EVAL_URL}${path}`, { method });
+export async function evalRequest(path, method = "GET", body) {
+  const init = body === undefined ? { method } : { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) };
+  const response = await fetch(`${EVAL_URL}${path}`, init);
   if (!response.ok) throw new Error(`${method} ${path}: HTTP ${response.status} ${await response.text()}`);
   return response.json();
 }

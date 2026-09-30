@@ -10,7 +10,7 @@ import {
   type OAuthHelpers,
   type TokenExchangeCallbackOptions,
 } from "@cloudflare/workers-oauth-provider";
-import { recordChecked, recordInstallation, recordRevoked, recordSignIn } from "./directory";
+import { recordChecked, recordInstallation, recordRevoked, recordSignIn, recordVerified, suspendHeadlessSponsor } from "./directory";
 import { GoogleSignInError, allowedDomains, authorizeUrl, exchangeCode, recheck, recheckDecision } from "./google";
 import { isReservedOwner, randomToken } from "./ids";
 import { LIMITS } from "./limits";
@@ -100,6 +100,7 @@ async function tokenExchangeCallback({ grantType, grantId, clientId, props, env 
 
   if (!allowedDomains(env).includes(grant.domain)) {
     await recordRevoked(env.DB, grantId, "hd_mismatch");
+    await suspendHeadlessSponsor(env.DB, grant.sub);
     throw new OAuthError("invalid_grant", { description: "This workspace's domain is no longer allowed. Sign in again." });
   }
   if (isReservedOwner(grant.email, grant.domain)) {
@@ -111,6 +112,7 @@ async function tokenExchangeCallback({ grantType, grantId, clientId, props, env 
   const decision = recheckDecision(grant.google_checked_at, Date.now(), result);
   if (decision.action === "revoke") {
     await recordRevoked(env.DB, grantId, decision.reason);
+    await suspendHeadlessSponsor(env.DB, grant.sub);
     throw new OAuthError("invalid_grant", { description: "The Google account is no longer in this workspace. Sign in again." });
   }
   if (decision.action === "keep") return { accessTokenProps: accessProps(grant) };
@@ -128,6 +130,7 @@ async function tokenExchangeCallback({ grantType, grantId, clientId, props, env 
     google_checked_at: Date.now(),
   };
   await recordChecked(env.DB, grantId);
+  await recordVerified(env.DB, grant.sub, { liftSuspension: false });
   return { newProps, accessTokenProps: accessProps(newProps) };
 }
 
@@ -214,6 +217,7 @@ export async function googleCallback(request: Request, env: Env, authorization: 
     const { identity, refreshToken } = await exchangeCode(env, code, data.verifier, data.nonce);
     if (isReservedOwner(identity.email, identity.domain)) throw new GoogleSignInError(reservedOwnerMessage(identity.email));
     const workspaceId = await recordSignIn(env.DB, identity);
+    await recordVerified(env.DB, identity.sub, { liftSuspension: true });
     const client = await oauth.lookupClient(authRequest.clientId);
     const props: GrantProps = {
       sub: identity.sub,

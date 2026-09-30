@@ -1,3 +1,5 @@
+import { ensureWorkspaceOwner } from "../src/directory";
+import { hashHeadlessKey, newHeadlessKey } from "../src/headless";
 import worker from "../src/index";
 import { serveMcp } from "../src/mcp";
 import type { TuningOverrides } from "../src/search/config";
@@ -40,6 +42,46 @@ async function ensureCarbonUnit(env: Env, space: EvalSpace, who: string): Promis
       "INSERT OR IGNORE INTO carbon_units (sub, workspace_id, email, name, created_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?)",
     ).bind(`${space.workspaceId}-${who}`, space.workspaceId, `${who}@${space.domain}`, `${who} (eval)`, now, now),
   ]);
+}
+
+interface HeadlessSeed {
+  suggestedName?: string;
+  sponsorVerifiedAgoMs?: number | null;
+  isSponsorSuspended?: boolean;
+  expiresInMs?: number;
+  isRevoked?: boolean;
+}
+
+async function seedHeadlessKey(env: Env, space: EvalSpace, seed: HeadlessSeed): Promise<Response> {
+  const keyId = `hk_${crypto.randomUUID().replaceAll("-", "").slice(0, 10)}`;
+  const sponsor = `sponsor-${keyId}`;
+  await ensureCarbonUnit(env, space, sponsor);
+  await ensureWorkspaceOwner(env.DB, space.workspaceId);
+  const now = Date.now();
+  const verifiedAgoMs = seed.sponsorVerifiedAgoMs === undefined ? 0 : seed.sponsorVerifiedAgoMs;
+  const sponsorSub = `${space.workspaceId}-${sponsor}`;
+  await env.DB.prepare("UPDATE carbon_units SET last_verified_at = ?, headless_suspended_at = ? WHERE sub = ?")
+    .bind(verifiedAgoMs === null ? null : now - verifiedAgoMs, seed.isSponsorSuspended ? now : null, sponsorSub)
+    .run();
+  const key = newHeadlessKey();
+  await env.DB.prepare(
+    `INSERT INTO headless_keys (id, workspace_id, label, suggested_name, key_hash, key_hint, sponsor_sub, created_at, expires_at, revoked_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      keyId,
+      space.workspaceId,
+      "eval key",
+      seed.suggestedName ?? "hosted-eval",
+      await hashHeadlessKey(key),
+      key.slice(-4),
+      sponsorSub,
+      now,
+      now + (seed.expiresInMs ?? 60 * 60 * 1000),
+      seed.isRevoked ? now : null,
+    )
+    .run();
+  return Response.json({ key, keyId });
 }
 
 function workspace(env: Env, space: EvalSpace) {
@@ -104,6 +146,9 @@ export default {
         return Response.json({ id: instance.id });
       }
       if (url.pathname === "/eval/purge-vectors" && request.method === "POST") return purgeVectors(env, space);
+      if (url.pathname === "/eval/seed-headless" && request.method === "POST") {
+        return seedHeadlessKey(env, space, (await request.json()) as HeadlessSeed);
+      }
       if (url.pathname === "/eval/tuning" && request.method === "POST") {
         const body = (await request.json()) as { tuning?: TuningOverrides | null; resetSignals?: boolean };
         await workspace(env, space).setSearchTuning(body.tuning ?? null, body.resetSignals ?? true);

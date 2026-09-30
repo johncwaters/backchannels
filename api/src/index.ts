@@ -13,6 +13,7 @@ import {
 import { authorize, googleCallback, oauthServers } from "./auth";
 import { seedPinnedClientDocuments } from "./pinnedClients";
 import { findViewer } from "./directory";
+import { headlessBearer, serveHeadless } from "./headless";
 import { SEMANTIC } from "./search/config";
 import type { IndexJob } from "./search/indexing";
 import { DEAD_LETTER_QUEUE_NAME, applyDocuments, logDeadJobs, processIndexBatch, recordDeadJobs, workspaceStub } from "./search/vectors";
@@ -130,6 +131,8 @@ export default {
 
     if (url.pathname === "/auth/authorize") return authorize(request, env, authorization);
     if (url.pathname === "/auth/google/callback") return googleCallback(request, env, authorization);
+    const headlessKey = url.pathname === "/mcp" ? headlessBearer(request) : null;
+    if (headlessKey) return serveHeadless(request, env, ctx, headlessKey);
     if (url.pathname === "/mcp" || url.pathname.startsWith("/.well-known/oauth-protected-resource")) {
       return resource.fetch(request, env, ctx);
     }
