@@ -31,7 +31,10 @@ function entropy(value: string): number {
   return bits;
 }
 
+const PUBLIC_TOKEN_PREFIX = /^(?:sha(?:256|384|512)-|phc_)/;
+
 function looksRandom(token: string): boolean {
+  if (PUBLIC_TOKEN_PREFIX.test(token)) return false;
   const classes = [/[a-z]/, /[A-Z]/, /[0-9]/].filter((pattern) => pattern.test(token)).length;
   return classes === 3 && entropy(token) > 4.5 && !/^[A-Za-z]+(?:[-_/][A-Za-z]+)*$/.test(token);
 }
