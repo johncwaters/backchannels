@@ -1,15 +1,16 @@
 import {
+  conversationOrThread,
   defaultLevel,
   effectivePrefs,
   markConversationRead,
   markThreadRead,
   seqOf,
-  threadRoot,
 } from "./messages";
 import {
   ToolError,
   all,
   findConversation,
+  findMessage,
   isMember,
   label,
   messageRef,
@@ -142,11 +143,49 @@ function markUnreadFrom(scope: Scope, conversation: ConversationRow, rootId: num
   );
 }
 
-export function markRead(scope: Scope, args: { conversation: string; up_to?: string; unread?: boolean }) {
-  const isThread = args.conversation.includes("/");
-  const { conversation, root } = isThread
-    ? threadRoot(scope, args.conversation)
-    : { conversation: findConversation(scope, args.conversation), root: null };
+function markEverythingRead(scope: Scope) {
+  const behindMarker = `FROM read_markers r JOIN conversations c ON c.id = r.conversation_id
+    WHERE r.agent_id = ? AND r.last_read_seq < c.last_seq`;
+  const inboxItems = one<{ n: number }>(scope.sql, "SELECT count(*) AS n FROM inbox WHERE agent_id = ? AND read_at IS NULL", scope.agent.id)!.n;
+  const conversations = one<{ n: number }>(scope.sql, `SELECT count(*) AS n ${behindMarker}`, scope.agent.id)!.n;
+  run(scope.sql, "UPDATE inbox SET read_at = ? WHERE agent_id = ? AND read_at IS NULL", scope.now, scope.agent.id);
+  run(
+    scope.sql,
+    `UPDATE read_markers SET last_read_seq = (SELECT last_seq FROM conversations c WHERE c.id = read_markers.conversation_id)
+     WHERE agent_id = ?`,
+    scope.agent.id,
+  );
+  return { marked_read: { inbox_items: inboxItems, conversations } };
+}
+
+function markInboxItemsRead(scope: Scope, messageIds: string[]) {
+  const cleared: string[] = [];
+  const notInInbox: string[] = [];
+  for (const ref of messageIds) {
+    const { conversation, message } = findMessage(scope, ref);
+    const id = messageRef(conversation, message.seq);
+    const updated = run(
+      scope.sql,
+      "UPDATE inbox SET read_at = ? WHERE agent_id = ? AND message_id = ? AND read_at IS NULL",
+      scope.now,
+      scope.agent.id,
+      message.id,
+    );
+    (updated ? cleared : notInInbox).push(id);
+  }
+  return { marked_read: { messages: cleared }, not_in_inbox: notInInbox };
+}
+
+export function markRead(
+  scope: Scope,
+  args: { conversation?: string; up_to?: string; unread?: boolean; all?: boolean; messages?: string[] },
+) {
+  const modes = [args.conversation !== undefined, !!args.all, !!args.messages?.length].filter(Boolean).length;
+  if (modes !== 1) throw new ToolError("pass exactly one of: conversation, all: true, or messages");
+  if (args.all) return markEverythingRead(scope);
+  if (args.messages?.length) return markInboxItemsRead(scope, args.messages);
+
+  const { conversation, root } = conversationOrThread(scope, args.conversation!);
   const target = root ? `${messageRef(conversation, root.seq)}/t` : label(conversation);
   const upTo = seqOf(args.up_to);
 

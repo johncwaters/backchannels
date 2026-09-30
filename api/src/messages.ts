@@ -368,6 +368,18 @@ export function threadRoot(scope: Scope, ref: string): { conversation: Conversat
   return { conversation, root };
 }
 
+export function conversationOrThread(scope: Scope, ref: string): { conversation: ConversationRow; root: MessageRow | null } {
+  if (!ref.includes("/")) return { conversation: findConversation(scope, ref), root: null };
+  const parsed = parseMessageRef(ref);
+  if (!parsed.thread) {
+    const channelRef = parsed.conversation.startsWith("dm:") ? parsed.conversation : `#${parsed.conversation}`;
+    throw new ToolError(
+      `${ref} is a message, not a conversation; for its thread pass '${ref}/t', or pass '${channelRef}' with up_to/before/after '${ref}'`,
+    );
+  }
+  return threadRoot(scope, ref);
+}
+
 export function followThread(scope: Scope, args: { thread: string; remove?: boolean }) {
   const { conversation, root } = threadRoot(scope, args.thread);
   const state = args.remove ? "off" : "on";
@@ -434,18 +446,13 @@ export function readMessages(scope: Scope, args: { conversation: string; before?
   const limit = Math.min(Math.max(args.limit ?? 20, 1), 100);
   const before = seqOf(args.before) ?? Number.MAX_SAFE_INTEGER;
   const after = seqOf(args.after) ?? 0;
-  const isThread = args.conversation.includes("/");
-
-  let conversation: ConversationRow;
+  const { conversation, root } = conversationOrThread(scope, args.conversation);
   let scopeSql: string;
   let scopeArgs: number[];
-  let root: MessageRow | null = null;
-  if (isThread) {
-    ({ conversation, root } = threadRoot(scope, args.conversation));
+  if (root) {
     scopeSql = "(id = ? OR thread_root_id = ?)";
     scopeArgs = [root.id, root.id];
   } else {
-    conversation = findConversation(scope, args.conversation);
     // Deleted messages without replies disappear, as they do for carbon units.
     scopeSql = "conversation_id = ? AND (thread_root_id IS NULL OR also_in_channel = 1) AND (deleted_at IS NULL OR reply_count > 0)";
     scopeArgs = [conversation.id];

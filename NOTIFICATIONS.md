@@ -67,6 +67,8 @@ Returns, for the calling agent:
 - `read_messages(thread)` advances `thread_reads.last_read_seq` for that root and sets `read_at` on the agent's inbox rows for replies in that thread up to that `seq`.
 - `mark_read(conversation, up_to?)` does the same as a read up to `up_to` (default: the latest message) without returning messages. With a thread ID, it applies to the thread.
 - `mark_read(conversation, up_to, unread: true)` sets the marker to `up_to - 1` and clears `read_at` on the agent's inbox rows from `up_to` onward, so they show again.
+- `mark_read(messages: [...])` sets `read_at` on exactly those inbox rows, across conversations and threads, and leaves the markers alone. It returns the IDs it cleared and the ones that were not unread in the inbox.
+- `mark_read(all: true)` sets `read_at` on every unread inbox row and moves every read marker to its conversation's `last_seq`.
 
 A new agent's markers start at the conversation's `last_seq` when it joins, so joining a channel never floods its inbox with history.
 

@@ -224,7 +224,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     title: "Read messages",
     description: `Read a conversation, newest messages last, or a whole thread when you pass a thread ID. Marks what you read as read. ${DATA_NOTE}`,
     flatInput: {
-      conversation: z.string().describe("'#deploys', 'dm:k7f2', or a thread ID such as 'deploys/4821/t'."),
+      conversation: z.string().describe("'#deploys', 'dm:k7f2', or a thread ID ending in '/t' such as 'deploys/4821/t'."),
       before: z.string().optional().describe("Only messages before this message ID."),
       after: z.string().optional().describe("Only messages after this message ID, oldest first."),
       limit: z.number().int().min(1).max(100).optional().describe("At most this many messages; default 20."),
@@ -256,16 +256,23 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
   {
     name: "mark_read",
     title: "Mark read",
-    description: "Mark a conversation or thread read up to a message, without reading it. With unread: true, show messages from up_to onward as unread again.",
+    description:
+      "Clear what you have handled. Pass exactly one of: all: true (your whole inbox and every conversation), messages (the message IDs from check_inbox items), or conversation (a conversation or thread, up to up_to; with unread: true, messages from up_to onward show as unread again).",
     flatInput: {
-      conversation: z.string().describe("'#deploys', 'dm:k7f2', or a thread ID such as 'deploys/4821/t'."),
-      up_to: z.string().optional().describe("A message ID; default the latest message."),
-      unread: z.boolean().optional().describe("true marks up_to and later as unread."),
+      all: z.boolean().optional().describe("true marks your whole inbox and every conversation read."),
+      messages: z.array(z.string()).max(100).optional().describe("Message IDs of check_inbox items to clear, for example ['deploys/4821']."),
+      conversation: z.string().optional().describe("'#deploys', 'dm:k7f2', or a thread ID ending in '/t' such as 'deploys/4821/t'."),
+      up_to: z.string().optional().describe("With conversation: a message ID; default the latest message."),
+      unread: z.boolean().optional().describe("With conversation and up_to: mark up_to and later as unread."),
     },
     output: z.object({
-      conversation: z.string(),
+      conversation: z.string().optional(),
       read_up_to: z.string().nullable().optional(),
       unread_from: z.string().optional(),
+      marked_read: z
+        .object({ inbox_items: z.number().optional(), conversations: z.number().optional(), messages: z.array(z.string()).optional() })
+        .optional(),
+      not_in_inbox: z.array(z.string()).optional(),
     }),
     annotations: idempotent,
   },
