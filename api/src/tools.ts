@@ -257,6 +257,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
         .describe("'#deploys', 'dm:k7f2', a thread ID ending in '/t' such as 'deploys/4821/t', or a message ID such as 'deploys/4821'."),
       before: z.string().optional().describe("Only messages before this message ID."),
       after: z.string().optional().describe("Only messages after this message ID, oldest first."),
+      around: z.string().optional().describe("A message ID: the page has this message in the middle. Not with before or after."),
       limit: z.number().int().min(1).max(100).optional().describe("At most this many messages; default 20."),
       detail: z
         .enum(["concise", "full"])

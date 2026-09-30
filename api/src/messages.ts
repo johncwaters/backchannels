@@ -543,13 +543,26 @@ export function seqOf(ref: string | undefined): number | undefined {
   return parseMessageRef(ref).seq;
 }
 
-type ReadMessagesArgs = { conversation: string; before?: string; after?: string; limit?: number; detail?: "concise" | "full" };
+type ReadMessagesArgs = {
+  conversation: string;
+  before?: string;
+  after?: string;
+  around?: string;
+  limit?: number;
+  detail?: "concise" | "full";
+};
 
 function isSingleMessageRef(ref: string): boolean {
   return ref.includes("/") && !parseMessageRef(ref).thread;
 }
 
-function listingFilter(conversation: ConversationRow, root: MessageRow | null): { scopeSql: string; scopeArgs: number[] } {
+type ListingFilter = { scopeSql: string; scopeArgs: number[] };
+
+function listingRef(conversation: ConversationRow, root: MessageRow | null): string {
+  return root ? `${messageRef(conversation, root.seq)}/t` : label(conversation);
+}
+
+function listingFilter(conversation: ConversationRow, root: MessageRow | null): ListingFilter {
   if (root) return { scopeSql: "(id = ? OR thread_root_id = ?)", scopeArgs: [root.id, root.id] };
   // Deleted messages without replies disappear, as they do for carbon units.
   return {
@@ -559,8 +572,8 @@ function listingFilter(conversation: ConversationRow, root: MessageRow | null): 
 }
 
 function readSingleMessage(scope: Scope, args: ReadMessagesArgs) {
-  if (args.before !== undefined || args.after !== undefined) {
-    throw new ToolError(`before and after page a conversation or thread, not the message ${args.conversation}; pass its conversation instead`);
+  if (args.before !== undefined || args.after !== undefined || args.around !== undefined) {
+    throw new ToolError(`before, after and around page a conversation or thread, not the message ${args.conversation}; pass its conversation instead`);
   }
   const { conversation, message } = findReadableMessage(scope, args.conversation);
   const root = message.thread_root_id ? one<MessageRow>(scope.sql, "SELECT * FROM messages WHERE id = ?", message.thread_root_id)! : null;
@@ -568,23 +581,49 @@ function readSingleMessage(scope: Scope, args: ReadMessagesArgs) {
   const exists = (direction: "<" | ">") =>
     !!one(scope.sql, `SELECT 1 FROM messages WHERE ${scopeSql} AND seq ${direction} ? LIMIT 1`, ...scopeArgs, message.seq);
   recordSearchActions(scope, "open", (result) => result.id === message.id);
+  const listing = listingRef(conversation, root);
+  const has_more_before = exists("<");
+  const has_more_after = exists(">");
   return {
-    conversation: root ? `${messageRef(conversation, root.seq)}/t` : label(conversation),
+    conversation: listing,
     messages: [viewMessage(scope, conversation, message, args.detail === "full")],
-    has_more_before: exists("<"),
-    has_more_after: exists(">"),
+    has_more_before,
+    has_more_after,
+    ...(has_more_before || has_more_after
+      ? { hint: `for the messages around it, pass conversation '${listing}' with around '${args.conversation}'` }
+      : {}),
   };
 }
 
-export function readMessages(scope: Scope, args: ReadMessagesArgs) {
-  if (isSingleMessageRef(args.conversation)) return readSingleMessage(scope, args);
-  const limit = Math.min(Math.max(args.limit ?? 20, 1), 100);
+function pageAround(scope: Scope, filter: ListingFilter, conversation: ConversationRow, root: MessageRow | null, ref: string, limit: number) {
+  const { scopeSql, scopeArgs } = filter;
+  const { message: target } = findReadableMessage(scope, ref);
+  const inListing =
+    target.conversation_id === conversation.id &&
+    !!one(scope.sql, `SELECT 1 FROM messages WHERE ${scopeSql} AND id = ?`, ...scopeArgs, target.id);
+  if (!inListing) {
+    throw new ToolError(`${ref} is not in ${listingRef(conversation, root)}; read_messages with conversation '${ref}' shows where it is`);
+  }
+  const neighbours = (direction: "<" | ">") =>
+    all<MessageRow>(
+      scope.sql,
+      `SELECT * FROM messages WHERE ${scopeSql} AND seq ${direction} ? ORDER BY seq ${direction === "<" ? "DESC" : "ASC"} LIMIT ?`,
+      ...scopeArgs,
+      target.seq,
+      limit - 1,
+    );
+  const older = neighbours("<");
+  const newer = neighbours(">");
+  const room = limit - 1;
+  const olderCount = Math.min(older.length, Math.max(Math.floor(room / 2), room - newer.length));
+  const newerCount = Math.min(newer.length, room - olderCount);
+  return [...older.slice(0, olderCount).reverse(), target, ...newer.slice(0, newerCount)];
+}
+
+function pageBetween(scope: Scope, filter: ListingFilter, args: ReadMessagesArgs, limit: number) {
+  const { scopeSql, scopeArgs } = filter;
   const before = seqOf(args.before) ?? Number.MAX_SAFE_INTEGER;
   const after = seqOf(args.after) ?? 0;
-  const { conversation, root } = conversationOrThread(scope, args.conversation);
-  const { scopeSql, scopeArgs } = listingFilter(conversation, root);
-  if (!canSee(scope, conversation)) throw new ToolError(`${args.conversation} not found`);
-
   // Newest first unless the caller pages forward with `after`.
   const forward = args.after !== undefined && args.before === undefined;
   const rows = all<MessageRow>(
@@ -595,10 +634,26 @@ export function readMessages(scope: Scope, args: ReadMessagesArgs) {
     before,
     limit,
   );
-  const page = rows.slice(0, limit);
+  return forward ? rows : rows.reverse();
+}
+
+export function readMessages(scope: Scope, args: ReadMessagesArgs) {
+  if (isSingleMessageRef(args.conversation)) return readSingleMessage(scope, args);
+  if (args.around !== undefined && (args.before !== undefined || args.after !== undefined)) {
+    throw new ToolError("around picks the page by itself; pass around, or before and after, not both");
+  }
+  const limit = Math.min(Math.max(args.limit ?? 20, 1), 100);
+  const { conversation, root } = conversationOrThread(scope, args.conversation);
+  const filter = listingFilter(conversation, root);
+  const { scopeSql, scopeArgs } = filter;
+  if (!canSee(scope, conversation)) throw new ToolError(`${args.conversation} not found`);
+
+  const page =
+    args.around !== undefined
+      ? pageAround(scope, filter, conversation, root, args.around, limit)
+      : pageBetween(scope, filter, args, limit);
   const exists = (seq: number, direction: "<" | ">") =>
     !!one(scope.sql, `SELECT 1 FROM messages WHERE ${scopeSql} AND seq ${direction} ? LIMIT 1`, ...scopeArgs, seq);
-  if (!forward) page.reverse();
 
   const newest = page.at(-1)?.seq;
   if (newest !== undefined) {
@@ -621,7 +676,7 @@ export function readMessages(scope: Scope, args: ReadMessagesArgs) {
     );
   }
   return {
-    conversation: root ? `${messageRef(conversation, root.seq)}/t` : label(conversation),
+    conversation: listingRef(conversation, root),
     messages: page.map((message) => viewMessage(scope, conversation, message, args.detail === "full")),
     has_more_before: page.length > 0 && exists(page[0].seq, "<"),
     has_more_after: page.length > 0 && exists(page.at(-1)!.seq, ">"),
