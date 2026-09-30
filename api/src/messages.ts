@@ -82,6 +82,21 @@ function mentionedAgents(scope: Scope, handles: string[]): AgentRow[] {
   );
 }
 
+function findUnknownMentions(scope: Scope, handles: string[], mentioned: AgentRow[]): string[] {
+  const knownHandles = new Set(mentioned.map((agent) => agent.handle));
+  const unmatchedHandles = handles.filter((handle) => !knownHandles.has(handle));
+  if (!unmatchedHandles.length) return [];
+  const unmatchedOwners = new Set(unmatchedHandles.map((handle) => handle.slice(0, handle.indexOf("/"))));
+  const knownOwners = new Set(
+    [...unmatchedOwners].filter((owner) => one(scope.sql, "SELECT 1 FROM agents WHERE handle GLOB ? LIMIT 1", `${owner}/*`)),
+  );
+  return unmatchedHandles
+    .filter((handle) => knownOwners.has(handle.slice(0, handle.indexOf("/"))))
+    .map((handle) => `@${handle}`);
+}
+
+const UNKNOWN_MENTIONS_HINT = "no agent has these handles, so nobody was notified; lookup finds the right one";
+
 function writeMentions(scope: Scope, messageId: number, agents: AgentRow[]): void {
   run(scope.sql, "DELETE FROM mentions WHERE message_id = ?", messageId);
   for (const agent of agents) {
@@ -278,10 +293,17 @@ export function sendMessage(
   if (root) queueThreadUpsert(scope, root, threadVersionOf(scope, root.id));
   const result: Record<string, unknown> = { message: messageRef(conversation, seq), conversation: label(conversation) };
   if (root) result.thread = `${messageRef(conversation, root.seq)}/t`;
+  const hints: string[] = [];
   if (notNotified.length) {
     result.not_notified = notNotified;
-    result.hint = `these agents are not in ${label(conversation)}; invite_to_channel adds them`;
+    hints.push(`these agents are not in ${label(conversation)}; invite_to_channel adds them`);
   }
+  const unknownMentions = findUnknownMentions(scope, derived.handles, mentioned);
+  if (unknownMentions.length) {
+    result.unknown_mentions = unknownMentions;
+    hints.push(UNKNOWN_MENTIONS_HINT);
+  }
+  if (hints.length) result.hint = hints.join(". ");
   return result;
 }
 
@@ -334,10 +356,14 @@ export function editMessage(scope: Scope, args: { message: string; text: string 
     derived.word_count,
     message.id,
   );
-  writeMentions(scope, message.id, mentionedAgents(scope, derived.handles));
+  const mentioned = mentionedAgents(scope, derived.handles);
+  writeMentions(scope, message.id, mentioned);
   queueMessageUpsert(scope, message, messageVersionOf(scope, message.id));
   queueAffectedThread(scope, message);
-  return { message: messageRef(conversation, message.seq), edited: true };
+  const result: Record<string, unknown> = { message: messageRef(conversation, message.seq), edited: true };
+  const unknownMentions = findUnknownMentions(scope, derived.handles, mentioned);
+  if (!unknownMentions.length) return result;
+  return { ...result, unknown_mentions: unknownMentions, hint: UNKNOWN_MENTIONS_HINT };
 }
 
 const FIRST_VERSION = 1;

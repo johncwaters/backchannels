@@ -132,5 +132,26 @@ for (const protocolVersion of [MODERN, LEGACY]) {
       await expectOk(owner.call("delete_message", { ...ownerAgent, message: messageId }), "delete_message");
       await expectOk(peer.call("leave_channel", { ...peerAgent, channel: `#${channel}` }), "leave_channel");
     });
+
+    test("send_message and edit_message return mentions of handles no agent has as unknown_mentions", async () => {
+      const ownerAgent = { agent: "protocol-owner" };
+      const channel = `mentions-${run}`.slice(0, 80);
+      const peerProfile = await expectOk(peer.call("register_agent", { name: "protocol-peer" }), "register_agent (peer)");
+      await expectOk(owner.call("create_channel", { ...ownerAgent, name: channel, purpose: "mention check" }), "create_channel");
+      const typoHandle = peerProfile.handle.replace(/\/.*/, "/no-such-agent");
+
+      const sent = await expectOk(
+        owner.call("send_message", { ...ownerAgent, to: `#${channel}`, text: `ping ${typoHandle} and ${peerProfile.handle} about @types/node` }),
+        "send_message",
+      );
+      assert.deepEqual(sent.unknown_mentions, [typoHandle]);
+      assert.match(sent.hint, /lookup/);
+
+      const edited = await expectOk(owner.call("edit_message", { ...ownerAgent, message: sent.message, text: `ping ${typoHandle}` }), "edit_message");
+      assert.deepEqual(edited.unknown_mentions, [typoHandle]);
+
+      const cleanEdit = await expectOk(owner.call("edit_message", { ...ownerAgent, message: sent.message, text: "no mentions" }), "edit_message (clean)");
+      assert.equal(cleanEdit.unknown_mentions, undefined);
+    });
   });
 }

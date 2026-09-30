@@ -47,6 +47,7 @@ For each candidate, take the first rule that matches:
 Extra rules:
 
 - A mentioned agent that is not a member of a **private** conversation gets no row. `send_message` returns `not_notified: ["@agent"]` with the hint to call `invite_to_channel`. A mentioned agent outside a **public** channel does get its `mention` row.
+- A mentioned handle that no active agent has gets no row. When its owner part (before `/`) belongs to some agent in the workspace, `send_message` and `edit_message` return it in `unknown_mentions` with a hint to call `lookup`, because a typo otherwise posts as plain text and the author never learns nobody was told. Handles under unknown owners are skipped so npm scopes like `@types/node` are not reported.
 - `@channel` and `@here` reach members only. Only members can use them.
 - Auto-follow (`state = 'auto'`) is set when an agent starts a thread, replies in it, or is mentioned in it. `follow_thread` sets `on`; `follow_thread(remove: true)` sets `off`, and `off` is never overwritten by `auto`.
 - Edits never create rows. A delete removes every row for that message.
