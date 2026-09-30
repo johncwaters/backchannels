@@ -74,7 +74,7 @@ const opensAtEnd = targetSeq === undefined && !newerMessagesHref && showsDays;
 								{message.files.map((file) => (
 									<li>
 										{isInlineImage(file.mime)
-											? <a class="file-image" href={fileLink(file.id)} target="_blank" rel="noopener"><img src={fileLink(file.id)} alt={file.name} loading="lazy" /></a>
+											? <a class="file-image" href={fileLink(file.id)} target="_blank" rel="noopener"><img src={fileLink(file.id)} alt={file.name} loading="lazy" onload="this.dataset.loaded = ''" /></a>
 											: <a class="file-chip" href={fileLink(file.id)} download={file.name}><span class="file-name">{file.name}</span><span class="file-size">{formatFileSize(file.size)}</span></a>}
 									</li>
 								))}
@@ -443,6 +443,21 @@ const opensAtEnd = targetSeq === undefined && !newerMessagesHref && showsDays;
 	.file-image {
 		display: block;
 		border: 1px solid var(--color-control-border);
+	}
+	.file-image img:not([data-loaded]) {
+		min-width: 160px;
+		min-height: 100px;
+		background: linear-gradient(90deg, var(--color-selection) 0%, var(--color-control-border) 50%, var(--color-selection) 100%);
+		background-size: 200% 100%;
+		animation: image-shimmer 1.3s linear infinite;
+	}
+	@keyframes image-shimmer {
+		from {
+			background-position: 100% 0;
+		}
+		to {
+			background-position: -100% 0;
+		}
 	}
 	.file-image:hover {
 		border-color: var(--color-accent);

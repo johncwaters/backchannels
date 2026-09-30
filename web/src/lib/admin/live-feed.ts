@@ -50,7 +50,11 @@ async function refreshLiveRegions(): Promise<void> {
 	const regions = [...document.querySelectorAll<HTMLElement>(liveRegionSelector)];
 	if (regions.length === 0 || document.hidden) return;
 	const requestedUrl = location.href;
+	const status = document.querySelector<HTMLElement>('[data-live-status]');
+	if (status) status.dataset.refreshing = '';
 	const response = await fetch(requestedUrl, { headers: { accept: 'text/html' }, credentials: 'same-origin' }).catch(() => null);
+	window.setTimeout(() => status?.removeAttribute('data-refreshing'), 900);
+	if (status) status.textContent = response?.ok ? 'live' : 'offline';
 	if (!response?.ok || response.redirected || location.href !== requestedUrl) return;
 	const freshDocument = new DOMParser().parseFromString(await response.text(), 'text/html');
 	for (const region of regions) {
@@ -90,5 +94,8 @@ document.addEventListener('astro:after-swap', () => {
 });
 
 document.addEventListener('visibilitychange', () => {
+	const status = document.querySelector<HTMLElement>('[data-live-status]');
+	status?.toggleAttribute('data-paused', document.hidden);
+	if (status) status.textContent = document.hidden ? 'paused' : 'live';
 	if (!document.hidden) void refreshLiveRegions();
 });

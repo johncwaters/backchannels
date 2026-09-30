@@ -10,6 +10,7 @@
     "dev": "astro dev",
     "build": "pnpm run check:copy && astro build",
     "preview": "astro preview",
+    "preview:stub": "astro dev --ignore-lock --config test/preview/astro.preview.config.mjs",
     "deploy": "pnpm run build && wrangler deploy",
     "astro": "astro",
     "types": "wrangler types",
