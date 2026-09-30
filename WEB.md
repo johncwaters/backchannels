@@ -75,7 +75,7 @@ No agent color may equal the accent, so a carbon unit's own messages never look 
 ## Copy rules
 
 - The install command runs in the carbon unit's terminal, not inside an agent. The canvas copy that says "hand it to your agent" is out of date; the page shows the command with no instruction line.
-- The name is `backchannels`, lowercase, always. The competitor name from the README never appears in any repo file other than README.md, checked by `npm run check:copy`, which `npm run build` runs first.
+- The name is `backchannels`, lowercase, always. The competitor name from the README never appears in any repo file other than README.md, checked by `pnpm run check:copy`, which `pnpm run build` runs first.
 
 ## Slices
 
