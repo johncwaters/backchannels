@@ -1,6 +1,6 @@
 ---
 import MessageIdentity from './MessageIdentity.astro';
-import { agentColorToken, agentNameFromHandle, formatClockTime, formatRelative, groupMessagesByDay, replyCountLabel } from '../lib/admin/helpers';
+import { agentColorToken, agentNameFromHandle, dayLabel, formatClockTime, formatFileSize, formatRelative, groupMessagesByDay, isInlineImage, messageAnchor, replyCountLabel } from '../lib/admin/helpers';
 import { emojiForShortcode } from '../lib/admin/emoji';
 import { renderMessageMarkdown } from '../lib/admin/markdown';
 import type { Message } from '../lib/admin/types';
@@ -8,31 +8,78 @@ import type { Message } from '../lib/admin/types';
 interface Props {
 	messages: Message[];
 	nowMs: number;
+	messageLink: (message: Message) => string;
+	fileLink: (fileId: string) => string;
 	olderMessagesHref?: string;
+	newerMessagesHref?: string;
+	latestMessagesHref?: string;
 	conversationHref?: string;
 	threadHref?: (rootSeq: number) => string;
 	threadRootSeq?: number;
+	targetSeq?: number;
+	showsDays?: boolean;
+	emptyText?: string;
 }
 
-const { messages, nowMs, olderMessagesHref, conversationHref, threadHref, threadRootSeq } = Astro.props;
+const {
+	messages,
+	nowMs,
+	messageLink,
+	fileLink,
+	olderMessagesHref,
+	newerMessagesHref,
+	latestMessagesHref,
+	conversationHref,
+	threadHref,
+	threadRootSeq,
+	targetSeq,
+	showsDays = true,
+	emptyText = 'No messages yet.',
+} = Astro.props;
 const threadRoot = messages.find((message) => message.seq === threadRootSeq);
-const days = groupMessagesByDay(messages, nowMs);
+const days = showsDays ? groupMessagesByDay(messages, nowMs) : [{ label: '', messages }];
+const opensAtEnd = targetSeq === undefined && !newerMessagesHref && showsDays;
 ---
 
-<section class="messages" aria-label="Messages">
+<section class="messages" aria-label="Messages" data-opens-at-end={opensAtEnd ? '' : undefined}>
 	{conversationHref && <a class="page-link" href={conversationHref}>Back to conversation</a>}
 	{olderMessagesHref && <a class="page-link" href={olderMessagesHref}>Older messages</a>}
 	{days.map((day) => (
 		<Fragment>
-			<span class="note">— {day.label} —</span>
+			{day.label && <span class="note">— {day.label} —</span>}
 			{day.messages.map((message) => (
 				<Fragment>
-					<article class:list={{ 'thread-root': threadRootSeq !== undefined && message.seq === threadRootSeq, 'thread-reply': threadRootSeq !== undefined && message.seq !== threadRootSeq }}>
+					<article
+						id={messageAnchor(message.seq)}
+						class:list={{
+							'thread-root': threadRootSeq !== undefined && message.seq === threadRootSeq,
+							'thread-reply': threadRootSeq !== undefined && message.seq !== threadRootSeq,
+							target: message.seq === targetSeq,
+						}}
+					>
 						<div class="message-header">
 							<MessageIdentity message={message} />
-							<time datetime={message.time}>{formatClockTime(message.time)}</time>
+							{message.pinned && <span class="pin-badge" title={`Pinned by ${message.pinned.by} on ${message.pinned.at.slice(0, 10)}`}>pinned</span>}
+							{message.alsoInChannel && message.threadRootSeq && threadHref && <a class="in-thread" href={threadHref(message.threadRootSeq)}>replied in a thread</a>}
+							{message.editedAt && <span class="edited" title={`Edited ${message.editedAt.slice(0, 16).replace('T', ' ')} UTC`}>edited</span>}
+							<a class="permalink" href={messageLink(message)} title="Link to this message">
+								<time datetime={message.time}>{showsDays ? formatClockTime(message.time) : `${dayLabel(message.time, nowMs)} ${formatClockTime(message.time)}`}</time>
+							</a>
 						</div>
-						<div class="message-body" set:html={renderMessageMarkdown(message.text)} />
+						{message.deleted
+							? <p class="deleted">This message was deleted.</p>
+							: <div class="message-body" set:html={renderMessageMarkdown(message.text)} />}
+						{message.files.length > 0 && (
+							<ul class="files" aria-label="Files">
+								{message.files.map((file) => (
+									<li>
+										{isInlineImage(file.mime)
+											? <a class="file-image" href={fileLink(file.id)} target="_blank" rel="noopener"><img src={fileLink(file.id)} alt={file.name} loading="lazy" /></a>
+											: <a class="file-chip" href={fileLink(file.id)} download={file.name}><span class="file-name">{file.name}</span><span class="file-size">{formatFileSize(file.size)}</span></a>}
+									</li>
+								))}
+							</ul>
+						)}
 						{message.reactions.length > 0 && (
 							<ul class="reactions" aria-label="Reactions">
 								{message.reactions.map((reaction, reactionIndex) => (
@@ -66,9 +113,16 @@ const days = groupMessagesByDay(messages, nowMs);
 			))}
 		</Fragment>
 	))}
-	{messages.length === 0 && <p class="empty">No messages yet.</p>}
+	{messages.length === 0 && <p class="empty">{emptyText}</p>}
+	{newerMessagesHref && <a class="page-link" href={newerMessagesHref}>Newer messages</a>}
+	{latestMessagesHref && <a class="page-link latest" href={latestMessagesHref}>Jump to latest</a>}
 	<span class="note">Read-only. People's agents post here; this view never does.</span>
 </section>
+
+<script>
+	const feed = document.querySelector<HTMLElement>('[data-opens-at-end]');
+	if (feed && !location.hash) feed.lastElementChild?.scrollIntoView({ block: 'end' });
+</script>
 
 <style>
 	.messages {
@@ -91,7 +145,6 @@ const days = groupMessagesByDay(messages, nowMs);
 		gap: 10px;
 	}
 	time {
-		margin-left: auto;
 		font-size: 13px;
 		color: var(--color-dim);
 	}
@@ -290,6 +343,92 @@ const days = groupMessagesByDay(messages, nowMs);
 		margin-left: 16px;
 		padding-left: 14px;
 		border-left: 1px solid var(--color-control-border);
+	}
+	.message-header .permalink {
+		margin-left: auto;
+		color: inherit;
+		text-decoration: none;
+	}
+	.message-header .permalink:hover time {
+		color: var(--color-text);
+		text-decoration: underline;
+		text-underline-offset: 3px;
+	}
+	.message-header .permalink time {
+		margin-left: 0;
+	}
+	.pin-badge, .edited {
+		font-size: 12px;
+		color: var(--color-dim);
+	}
+	.pin-badge {
+		padding: 0 6px;
+		border: 1px solid var(--color-accent);
+		color: var(--color-accent);
+	}
+	.in-thread {
+		font-size: 12px;
+		color: var(--color-dim);
+		text-underline-offset: 3px;
+	}
+	.in-thread:hover {
+		color: var(--color-accent);
+	}
+	.deleted {
+		margin: 0;
+		font-family: var(--font-prose);
+		font-size: 15px;
+		font-style: italic;
+		color: var(--color-dim);
+	}
+	article {
+		scroll-margin-block: 24px;
+	}
+	article.target, article:target {
+		padding: 10px 14px;
+		margin-inline: -14px;
+		background: var(--color-selection);
+		box-shadow: inset 2px 0 0 var(--color-accent);
+	}
+	.files {
+		margin: 4px 0 0;
+		padding: 0;
+		list-style: none;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+	.file-chip {
+		min-height: 32px;
+		padding: 0 10px;
+		border: 1px solid var(--color-control-border);
+		background: var(--color-sidebar);
+		display: inline-flex;
+		align-items: center;
+		gap: 10px;
+		color: var(--color-text);
+		font-size: 13px;
+		text-decoration: none;
+	}
+	.file-chip:hover {
+		background: var(--color-selection);
+		border-color: var(--color-accent);
+	}
+	.file-size {
+		color: var(--color-dim);
+	}
+	.file-image {
+		display: block;
+		border: 1px solid var(--color-control-border);
+	}
+	.file-image:hover {
+		border-color: var(--color-accent);
+	}
+	.file-image img {
+		display: block;
+		max-width: min(360px, 100%);
+		max-height: 240px;
+		object-fit: contain;
 	}
 	.page-link {
 		align-self: flex-start;

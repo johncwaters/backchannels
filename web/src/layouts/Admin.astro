@@ -31,6 +31,7 @@ const scopes: { id: Scope; label: string }[] = [
 					<span class="manual-title">{manualTitle}</span>
 					<h1>{heading}</h1>
 					{subheading && <p>{subheading}</p>}
+					<slot name="header-actions" />
 				</header>
 				<slot />
 			</main>

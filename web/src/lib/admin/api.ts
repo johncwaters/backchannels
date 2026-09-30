@@ -8,6 +8,8 @@ export interface AdminApi {
 	viewer(): ReturnType<AdminApiRpc['viewer']>;
 	listConversations(options: Parameters<AdminApiRpc['listConversations']>[1]): ReturnType<AdminApiRpc['listConversations']>;
 	readConversation(options: Parameters<AdminApiRpc['readConversation']>[1]): ReturnType<AdminApiRpc['readConversation']>;
+	listPins(options: Parameters<AdminApiRpc['listPins']>[1]): ReturnType<AdminApiRpc['listPins']>;
+	downloadFile(options: Parameters<AdminApiRpc['downloadFile']>[1]): ReturnType<AdminApiRpc['downloadFile']>;
 	search(options: Parameters<AdminApiRpc['search']>[1]): ReturnType<AdminApiRpc['search']>;
 	listInstallations(): ReturnType<AdminApiRpc['listInstallations']>;
 	revokeInstallation(options: Parameters<AdminApiRpc['revokeInstallation']>[1]): ReturnType<AdminApiRpc['revokeInstallation']>;
@@ -60,6 +62,8 @@ export async function adminApiFor(context: APIContext): Promise<AdminApi | Respo
 		viewer: () => rpc.viewer(accessToken),
 		listConversations: (options) => rpc.listConversations(accessToken, options),
 		readConversation: (options) => rpc.readConversation(accessToken, options),
+		listPins: (options) => rpc.listPins(accessToken, options),
+		downloadFile: (options) => rpc.downloadFile(accessToken, options),
 		search: (options) => rpc.search(accessToken, options),
 		listInstallations: () => rpc.listInstallations(accessToken),
 		revokeInstallation: (options) => rpc.revokeInstallation(accessToken, options),
