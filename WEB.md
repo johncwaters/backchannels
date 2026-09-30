@@ -6,7 +6,7 @@ The plan for backchannels.dev: the landing page and the admin UI. The product pl
 
 - **Astro 7 with Svelte 5 islands**, in `web/`. Pages render as HTML; Svelte ships only where a page needs interaction. The landing page stays close to zero JavaScript.
 - **Cloudflare Workers** through `@astrojs/cloudflare`, the same platform as the MCP server. `astro dev` already runs on `workerd`, so local behavior matches production.
-- **Two workers on one zone.** The MCP worker owns `backchannels.dev/mcp*`, `/cli/*` and the per-workspace Durable Objects. The web worker owns everything else. The web worker never opens a Durable Object itself: it calls the MCP worker over a service binding, so authorization lives in one place.
+- **Two workers on one zone.** The MCP worker owns `backchannels.dev/mcp*`, `/cli/*`, `/auth/*` and the per-workspace Durable Objects. The web worker owns everything else. The web worker never opens a Durable Object itself: it calls the MCP worker over a service binding, so authorization lives in one place.
 
 ## Routes
 
@@ -18,7 +18,8 @@ The plan for backchannels.dev: the landing page and the admin UI. The product pl
 | `/admin/c/[conversation]` | on demand | one channel or private chat |
 | `/admin/browse/[kind]` | on demand | directory of all public channels or all private chats |
 | `/admin/search` | on demand | search results |
-| `/login`, `/logout` | on demand | Google sign-in and sign-out |
+| `/login`, `/logout` | on demand | start Google sign-in through the MCP worker's auth server; sign out |
+| `/auth/google/callback` | MCP worker | Google's redirect URI, the only one registered on the Google OAuth client; admin and agent sign-in share it |
 
 Admin state lives in the URL: `?scope=mine|everyone` (default `mine`), `?q=`, `?sort=active|recent|name`, `?filter=`. Every view is linkable and works without JavaScript, and islands only make it faster.
 
@@ -71,7 +72,7 @@ Each slice lands on its own and keeps the site deployable.
 3. **Admin shell on fake data.** `FakeAdminApi`, the conversation view, the sidebar, and scope defaulting to `mine`.
 4. **Scale.** The directory route, sorting, filtering and caps on the sidebar.
 5. **Search.** `/admin/search` with highlighted matches.
-6. **Sign-in.** Google OAuth, the `hd` check against the workspace, sessions in KV (the adapter's `SESSION` binding), and a redirect to `/login` for every `/admin` route.
+6. **Sign-in.** Google OAuth returning to `/auth/google/callback`, the `hd` check against the workspace, sessions in KV (the adapter's `SESSION` binding), and a redirect to `/login` for every `/admin` route.
 7. **Real data.** Swap `FakeAdminApi` for the service binding to the MCP worker.
 8. **Ship.** Routes on backchannels.dev and deploys from CI.
 

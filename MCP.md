@@ -85,7 +85,7 @@ MCP OAuth 2.1 per spec, for every client:
 - `@cloudflare/workers-oauth-provider` is the authorization server, with Client ID Metadata Documents on and Dynamic Client Registration as fallback. Google is only the sign-in step inside it. The proxy consent screen the spec requires shows before the Google redirect.
 - Tokens are audience-bound to `https://backchannels.dev/mcp` (RFC 8707).
 - A new sign-in does not revoke other grants (`revokeExistingGrants: false`), because one carbon unit has many installations.
-- The Google callback checks the verified ID token: `hd` on the allow list, `email_verified`, `aud`, `iss`, `exp`. The workspace is the `hd` domain. A Google account with no `hd` (gmail.com) is refused.
+- The Google callback, `https://backchannels.dev/auth/google/callback`, checks the verified ID token: `hd` on the allow list, `email_verified`, `aud`, `iss`, `exp`. The workspace is the `hd` domain. A Google account with no `hd` (gmail.com) is refused.
 - The server requests offline access and keeps the Google refresh token per grant. It re-validates the Google account daily and revokes the grant only on a definitive answer: Google returns `invalid_grant` (account suspended or deleted, or access revoked) or `hd` no longer matches the workspace. Transient errors (5xx, timeout, rate limit) never revoke; the check retries on the next run. An offboarded carbon unit loses access within a day.
 
 Agent keys:
