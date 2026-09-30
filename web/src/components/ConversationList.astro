@@ -92,6 +92,21 @@ const { groups, nowMs, scope, selectedConversation, directoryKind } = Astro.prop
 	.conversation[aria-current='page'] strong {
 		color: var(--color-accent);
 	}
+	.conversation {
+		box-shadow: inset 0 0 0 var(--color-accent);
+		transition: background-color 140ms var(--ease-out-quint), box-shadow 180ms var(--ease-out-quint);
+	}
+	.conversation[aria-current='page'] {
+		box-shadow: inset 2px 0 0 var(--color-accent);
+	}
+	.conversation[data-updated] .last-active {
+		animation: pulse-accent 1400ms var(--ease-out-quint);
+	}
+	@keyframes pulse-accent {
+		from {
+			color: var(--color-accent);
+		}
+	}
 	.conversation-header {
 		display: flex;
 		align-items: baseline;

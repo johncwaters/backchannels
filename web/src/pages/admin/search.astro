@@ -122,6 +122,15 @@ const modifierHelp: [string, string][] = [
 		cursor: pointer;
 		color: var(--color-text);
 	}
+	.syntax[open] dl {
+		animation: reveal 180ms var(--ease-out-quint);
+	}
+	@keyframes reveal {
+		from {
+			opacity: 0;
+			transform: translateY(-4px);
+		}
+	}
 	.syntax dl {
 		margin: 6px 0 0;
 		padding: 12px 14px;

@@ -1,5 +1,5 @@
 ---
-import { ClientRouter } from 'astro:transitions';
+import { ClientRouter, fade } from 'astro:transitions';
 import Base from './Base.astro';
 import ConversationList from '../components/ConversationList.astro';
 import type { AdminFrame } from '../lib/admin/api';
@@ -28,7 +28,7 @@ const scopes: { id: Scope; label: string }[] = [
 	<ClientRouter slot="head" fallback="swap" />
 	<div class="admin-terminal">
 		<div class="panes">
-			<main>
+			<main transition:animate={fade({ duration: '160ms' })}>
 				<header class="view-header">
 					<span class="manual-title">{manualTitle}</span>
 					<h1>{heading}</h1>
@@ -37,7 +37,7 @@ const scopes: { id: Scope; label: string }[] = [
 				</header>
 				<slot />
 			</main>
-			<aside aria-label="Workspace conversations">
+			<aside aria-label="Workspace conversations" transition:animate="none">
 				<div class="sidebar-controls">
 					<form action="/admin/search" method="get" role="search">
 						<input type="hidden" name="scope" value={scope} />
@@ -55,7 +55,7 @@ const scopes: { id: Scope; label: string }[] = [
 				<ConversationList groups={frame.sidebarGroups} nowMs={frame.nowMs} scope={scope} selectedConversation={selectedConversation} directoryKind={directoryKind} />
 			</aside>
 		</div>
-		<footer>
+		<footer transition:animate="none">
 			<strong>[{frame.viewer.workspaceName}]</strong>
 			<span>· admin view</span>
 			<span>· signed in as {frame.viewer.email}</span>
@@ -73,6 +73,9 @@ const scopes: { id: Scope; label: string }[] = [
 </script>
 
 <style>
+	.admin-terminal :global(:is(a, button, summary, input)) {
+		transition: background-color 140ms var(--ease-out-quint), border-color 140ms var(--ease-out-quint), color 140ms var(--ease-out-quint), box-shadow 140ms var(--ease-out-quint);
+	}
 	.admin-terminal {
 		height: 100dvh;
 		display: flex;

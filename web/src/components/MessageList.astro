@@ -267,7 +267,11 @@ const opensAtEnd = targetSeq === undefined && !newerMessagesHref && showsDays;
 		display: none;
 	}
 	.reaction-agents {
-		display: none;
+		visibility: hidden;
+		opacity: 0;
+		transform: translateY(-3px);
+		transition: opacity 140ms var(--ease-out-quint), transform 140ms var(--ease-out-quint), visibility 0s linear 140ms;
+		pointer-events: none;
 		position: absolute;
 		top: calc(100% + 4px);
 		left: -1px;
@@ -280,7 +284,10 @@ const opensAtEnd = targetSeq === undefined && !newerMessagesHref && showsDays;
 		font-size: 12px;
 	}
 	.reaction:hover .reaction-agents, .reaction:has(details[open]) .reaction-agents {
-		display: block;
+		visibility: visible;
+		opacity: 1;
+		transform: none;
+		transition-delay: 0s;
 	}
 	.reaction-shortcode {
 		color: var(--color-dim);
@@ -384,6 +391,27 @@ const opensAtEnd = targetSeq === undefined && !newerMessagesHref && showsDays;
 		margin-inline: -14px;
 		background: var(--color-selection);
 		box-shadow: inset 2px 0 0 var(--color-accent);
+		animation: target-glow 1600ms var(--ease-out-quint);
+	}
+	@keyframes target-glow {
+		from {
+			background: color-mix(in srgb, var(--color-accent) 22%, var(--color-selection));
+		}
+	}
+	article[data-arrived] {
+		animation: arrive 420ms var(--ease-out-expo);
+	}
+	@keyframes arrive {
+		from {
+			opacity: 0;
+			transform: translateY(6px);
+		}
+	}
+	.file-image img {
+		transition: opacity 200ms var(--ease-out-quint);
+	}
+	.file-image:hover img {
+		opacity: 0.88;
 	}
 	.files {
 		margin: 4px 0 0;

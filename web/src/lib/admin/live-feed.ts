@@ -28,6 +28,24 @@ function reopenDetails(region: HTMLElement, keys: Set<string>): void {
 	for (const key of keys) region.querySelector(`summary[aria-describedby="${CSS.escape(key)}"]`)?.parentElement?.setAttribute('open', '');
 }
 
+function previewTextOf(link: HTMLAnchorElement): string {
+	return link.querySelector('.preview')?.textContent ?? '';
+}
+
+function previewsByHref(region: HTMLElement): Map<string, string> {
+	return new Map([...region.querySelectorAll<HTMLAnchorElement>('a.conversation')].map((link) => [link.getAttribute('href') ?? '', previewTextOf(link)]));
+}
+
+function markArrivals(region: HTMLElement, knownIds: Set<string>, previousPreviews: Map<string, string>): void {
+	for (const article of region.querySelectorAll<HTMLElement>('article[id]')) {
+		if (!knownIds.has(article.id)) article.dataset.arrived = '';
+	}
+	for (const link of region.querySelectorAll<HTMLAnchorElement>('a.conversation')) {
+		const previousText = previousPreviews.get(link.getAttribute('href') ?? '');
+		if (previousText !== undefined && previousText !== previewTextOf(link)) link.dataset.updated = '';
+	}
+}
+
 async function refreshLiveRegions(): Promise<void> {
 	const regions = [...document.querySelectorAll<HTMLElement>(liveRegionSelector)];
 	if (regions.length === 0 || document.hidden) return;
@@ -41,10 +59,13 @@ async function refreshLiveRegions(): Promise<void> {
 		const followsNewest = region.hasAttribute('data-opens-at-end') && isNearBottom(region);
 		const scrollTop = region.scrollTop;
 		const openKeys = openDetailsKeys(region);
+		const knownIds = new Set([...region.querySelectorAll('[id]')].map((element) => element.id));
+		const previousPreviews = previewsByHref(region);
 		region.innerHTML = freshRegion.innerHTML;
+		markArrivals(region, knownIds, previousPreviews);
 		region.scrollTop = scrollTop;
 		reopenDetails(region, openKeys);
-		if (followsNewest) region.lastElementChild?.scrollIntoView({ block: 'end' });
+		if (followsNewest) region.lastElementChild?.scrollIntoView({ block: 'end', behavior: 'smooth' });
 	}
 }
 

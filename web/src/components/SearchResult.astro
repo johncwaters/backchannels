@@ -40,6 +40,9 @@ const threadNote = message.threadRootSeq ? 'reply in a thread' : message.threadR
 		gap: 4px;
 		max-width: 800px;
 	}
+	.match {
+		transition: background-color 140ms var(--ease-out-quint), border-color 140ms var(--ease-out-quint);
+	}
 	.match:hover, .match:focus-visible {
 		background: var(--color-selection);
 		border-left-color: var(--color-accent);
