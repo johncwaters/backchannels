@@ -61,6 +61,30 @@ const displayName = (conversation: StoredConversation) =>
 const liveReplies = (conversation: StoredConversation, root: StoredMessage) =>
 	conversation.messages.filter((message) => message.threadRootSeq === root.seq && message.deletedAt === null);
 
+const PREVIEW_READ_UNTIL_AGO_MS = 3 * 60 * 60 * 1000;
+const previewStartedAt = Date.now();
+const channelReads = new Map<string, number>();
+const threadReads = new Map<string, number>();
+const isChannelStream = (message: StoredMessage) => message.threadRootSeq === null || message.alsoInChannel;
+const isUnreadBy = (lastReadSeq: number) => (message: StoredMessage) =>
+	message.seq > lastReadSeq && message.deletedAt === null && !isOwnHandle(message.author.handle);
+
+function channelLastReadSeq(conversation: StoredConversation): number {
+	const marker = channelReads.get(conversation.slug);
+	if (marker !== undefined) return marker;
+	const readUntil = previewStartedAt - PREVIEW_READ_UNTIL_AGO_MS;
+	return conversation.messages.filter((message) => message.createdAt <= readUntil).at(-1)?.seq ?? 0;
+}
+
+function threadLastReadSeq(conversation: StoredConversation, rootSeq: number): number {
+	return threadReads.get(`${conversation.slug}/${rootSeq}`) ?? channelLastReadSeq(conversation);
+}
+
+function unreadCount(conversation: StoredConversation): number {
+	if (!isMine(conversation) && !channelReads.has(conversation.slug)) return 0;
+	return conversation.messages.filter(isChannelStream).filter(isUnreadBy(channelLastReadSeq(conversation))).length;
+}
+
 const lastMessageAt = (conversation: StoredConversation) => conversation.messages.at(-1)?.createdAt ?? null;
 
 function viewConversation(conversation: StoredConversation): Conversation {
@@ -81,6 +105,8 @@ function viewConversation(conversation: StoredConversation): Conversation {
 		lastActivity: isoTime(lastAt),
 		isMine: isMine(conversation),
 		pins: live.filter((message) => message.pinned).length,
+		unread: unreadCount(conversation),
+		lastReadSeq: channelLastReadSeq(conversation),
 		preview: latest ? `${latest.author.handle}: ${latest.text}` : topic,
 	};
 }
@@ -103,6 +129,7 @@ function viewMessage(conversation: StoredConversation, message: StoredMessage): 
 		editedAt: isoTime(message.editedAt),
 		deleted: isDeleted,
 		pinned: message.pinned ? { by: message.pinned.by, at: new Date(message.pinned.at).toISOString() } : null,
+		unreadReplies: message.threadRootSeq === null ? replies.filter(isUnreadBy(threadLastReadSeq(conversation, message.seq))).length : 0,
 		reactions: isDeleted ? [] : message.reactions.map((reaction) => ({ emoji: reaction.emoji, agents: [...reaction.agents] })),
 		files: isDeleted ? [] : message.files.map((file) => ({ ...file })),
 	};
@@ -166,10 +193,15 @@ function readConversation(options: AdminReadOptions): AdminResult<ConversationPa
 		? (message: StoredMessage) => message.seq === threadRoot.seq || message.threadRootSeq === threadRoot.seq
 		: (message: StoredMessage) => message.threadRootSeq === null || message.alsoInChannel;
 	const stream = conversation.messages.filter((message) => inScope(message) && isStreamable(message));
-	const { rows, hasOlder, hasNewer } = readStream(stream, options, limit);
+	const lastReadSeq = threadRoot ? threadLastReadSeq(conversation, threadRoot.seq) : channelLastReadSeq(conversation);
+	const firstUnreadSeq = conversation.messages.filter(inScope).find(isUnreadBy(lastReadSeq))?.seq;
+	const opensAtFirstUnread = positions.length === 0 && firstUnreadSeq !== undefined && stream.filter((message) => message.seq >= firstUnreadSeq).length > limit;
+	const { rows, hasOlder, hasNewer } = readStream(stream, opensAtFirstUnread ? { around: firstUnreadSeq } : options, limit);
 	return ok({
 		conversation: viewConversation(conversation),
 		messages: rows.map((message) => viewMessage(conversation, message)),
+		lastReadSeq,
+		...(firstUnreadSeq !== undefined ? { firstUnreadSeq } : {}),
 		...(hasOlder && rows.length ? { nextBefore: rows[0].seq } : {}),
 		...(hasNewer && rows.length ? { nextAfter: rows.at(-1)!.seq } : {}),
 	});
@@ -364,6 +396,20 @@ export class AdminApi extends WorkerEntrypoint implements AdminApiRpc {
 	async readConversation(token: string, options: AdminReadOptions): Promise<AdminResult<ConversationPage>> {
 		if (!isPreviewToken(token)) return unauthorized;
 		return readConversation(options);
+	}
+
+	async markRead(token: string, options: { conversation: string; thread?: number; upToSeq: number }): ReturnType<AdminApiRpc['markRead']> {
+		if (!isPreviewToken(token)) return unauthorized;
+		if (!isPositiveInteger(options?.upToSeq)) return invalid;
+		const conversation = findVisible(options.conversation);
+		if (!conversation) return notFound;
+		const upToSeq = Math.min(options.upToSeq, conversation.messages.at(-1)?.seq ?? 0);
+		if (options.thread === undefined) channelReads.set(conversation.slug, Math.max(channelLastReadSeq(conversation), upToSeq));
+		else {
+			const threadKey = `${conversation.slug}/${options.thread}`;
+			threadReads.set(threadKey, Math.max(threadLastReadSeq(conversation, options.thread), upToSeq));
+		}
+		return ok({ unread: unreadCount(conversation) });
 	}
 
 	async listPins(token: string, options: { conversation: string }): ReturnType<AdminApiRpc['listPins']> {

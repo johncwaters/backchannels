@@ -15,9 +15,15 @@ function isNearBottom(element: HTMLElement): boolean {
 	return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < nearBottomPixels;
 }
 
-function openFeedAtEnd(): void {
+function openFeedAtReadingPosition(): void {
+	if (location.hash) return;
+	const firstUnread = document.querySelector<HTMLElement>('[data-first-unread]');
+	if (firstUnread) {
+		firstUnread.scrollIntoView({ block: 'start' });
+		return;
+	}
 	const feed = document.querySelector<HTMLElement>('[data-opens-at-end]');
-	if (feed && !location.hash) feed.lastElementChild?.scrollIntoView({ block: 'end' });
+	feed?.lastElementChild?.scrollIntoView({ block: 'end' });
 }
 
 function openDetailsKeys(region: HTMLElement): Set<string> {
@@ -80,7 +86,7 @@ function startRefreshing(): void {
 }
 
 document.addEventListener('astro:page-load', () => {
-	openFeedAtEnd();
+	openFeedAtReadingPosition();
 	startRefreshing();
 });
 

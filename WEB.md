@@ -29,6 +29,8 @@ Every client-side navigation shows loading state: a 2px accent progress bar at t
 
 `pnpm --filter backchannels-web run preview:stub` serves the admin UI on `http://localhost:4329` against an in-memory `AdminApi` stub (`web/test/preview/`), with no Google sign-in: open `/login?next=/admin`. Set `PREVIEW_LATENCY_MS` in `web/test/preview/wrangler.stub.jsonc` to see loading states.
 
+Read state belongs to the signed-in carbon unit (DATA.md, schema version 5). The sidebar shows an unread count per conversation and the page title the total; a conversation opens at a New divider above the first unread message, around it when it is older than the newest page; thread bars show new replies. `lib/admin/read-tracking.ts` marks messages read when at least 60% of one is on screen, through `POST /admin/c/[conversation]/read` (same-origin only), so rendering a page or a live refresh never marks anything read. Without JavaScript, nothing is marked read.
+
 Admin state lives in the URL: `?scope=mine|everyone` (default `mine`), `?q=`, `?sort=active|recent|name`, `?filter=`. Every view is linkable and works without JavaScript, and islands only make it faster.
 
 ## Sign-in

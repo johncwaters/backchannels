@@ -25,6 +25,7 @@ interface Props {
 	showsDays?: boolean;
 	showsPinDetails?: boolean;
 	emptyText?: string;
+	readState?: { conversationId: string; thread?: number; lastReadSeq: number; firstUnreadSeq?: number };
 }
 
 const {
@@ -42,7 +43,10 @@ const {
 	showsDays = true,
 	showsPinDetails = false,
 	emptyText = 'No messages yet.',
+	readState,
 } = Astro.props;
+const firstUnreadSeq = readState?.firstUnreadSeq;
+const unreadDividerShown = firstUnreadSeq !== undefined && messages.some((message) => message.seq === firstUnreadSeq);
 const threadRoot = messages.find((message) => message.seq === threadRootSeq);
 const days = showsDays ? groupMessagesByDay(messages, nowMs) : [{ label: '', messages }];
 const opensAtEnd = targetSeq === undefined && !newerMessagesHref && showsDays;
@@ -62,6 +66,9 @@ const revealedWithMessage = 'opacity-0 group-hover/message:opacity-100 group-foc
 		aria-label="Messages"
 		data-opens-at-end={opensAtEnd ? '' : undefined}
 		data-live={opensAtEnd ? 'messages' : undefined}
+		data-read-conversation={readState?.conversationId}
+		data-read-thread={readState?.thread}
+		data-last-read={readState?.lastReadSeq}
 	>
 		{backLink && <PageLink href={backLink.href}>← {backLink.label}</PageLink>}
 		{olderMessagesHref && <PageLink href={olderMessagesHref}>↑ Older messages</PageLink>}
@@ -75,11 +82,18 @@ const revealedWithMessage = 'opacity-0 group-hover/message:opacity-100 group-foc
 					</h2>
 				)}
 				{day.messages.map((message, index) => {
-					const continues = isContinuation(day.messages, index);
+					const startsUnread = unreadDividerShown && message.seq === firstUnreadSeq;
+					const continues = !startsUnread && isContinuation(day.messages, index);
 					const isThreadRoot = threadRootSeq !== undefined && message.seq === threadRootSeq;
 					const isThreadReply = threadRootSeq !== undefined && !isThreadRoot;
 					return (
 						<Fragment>
+							{startsUnread && (
+								<div data-first-unread class="flex scroll-mt-10 items-center gap-3 text-[12px] font-semibold tracking-[0.08em] text-amber uppercase" role="separator" aria-label="New messages">
+									<span aria-hidden="true" class="h-px flex-1 bg-amber/60"></span>
+									<span>New</span>
+								</div>
+							)}
 							<article
 								id={messageAnchor(message.seq)}
 								class:list={[
@@ -167,6 +181,7 @@ const revealedWithMessage = 'opacity-0 group-hover/message:opacity-100 group-foc
 								{threadHref && message.threadReplies > 0 && (
 									<div class="group/thread relative mt-1 flex flex-wrap items-baseline gap-x-3 self-start border-l-2 border-amber bg-search-match px-3 py-1.5 text-[13px] hover:bg-secondary has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-offset-2 has-[a:focus-visible]:outline-amber">
 										<span class="font-semibold text-amber">{replyCountLabel(message.threadReplies)}</span>
+										{message.unreadReplies > 0 && <Badge class="rounded-none bg-amber px-1.5 py-0 text-[11px] text-ground">{message.unreadReplies} new</Badge>}
 										{message.lastReplyAt && <span class="text-dim">last reply {formatRelative(message.lastReplyAt, nowMs)} ago</span>}
 										<a class="text-foreground no-underline underline-offset-3 group-hover/thread:underline after:absolute after:inset-0 after:content-[''] focus-visible:outline-none" href={threadHref(message.seq)}>View thread</a>
 									</div>

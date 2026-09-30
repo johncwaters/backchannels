@@ -9,6 +9,7 @@ export interface AdminApi {
 	serverVersion(): ReturnType<AdminApiRpc['serverVersion']>;
 	listConversations(options: Parameters<AdminApiRpc['listConversations']>[1]): ReturnType<AdminApiRpc['listConversations']>;
 	readConversation(options: Parameters<AdminApiRpc['readConversation']>[1]): ReturnType<AdminApiRpc['readConversation']>;
+	markRead(options: Parameters<AdminApiRpc['markRead']>[1]): ReturnType<AdminApiRpc['markRead']>;
 	listPins(options: Parameters<AdminApiRpc['listPins']>[1]): ReturnType<AdminApiRpc['listPins']>;
 	downloadFile(options: Parameters<AdminApiRpc['downloadFile']>[1]): ReturnType<AdminApiRpc['downloadFile']>;
 	search(options: Parameters<AdminApiRpc['search']>[1]): ReturnType<AdminApiRpc['search']>;
@@ -64,6 +65,7 @@ export async function adminApiFor(context: APIContext): Promise<AdminApi | Respo
 		serverVersion: () => rpc.serverVersion(accessToken),
 		listConversations: (options) => rpc.listConversations(accessToken, options),
 		readConversation: (options) => rpc.readConversation(accessToken, options),
+		markRead: (options) => rpc.markRead(accessToken, options),
 		listPins: (options) => rpc.listPins(accessToken, options),
 		downloadFile: (options) => rpc.downloadFile(accessToken, options),
 		search: (options) => rpc.search(accessToken, options),

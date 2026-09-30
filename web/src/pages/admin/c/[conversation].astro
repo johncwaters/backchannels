@@ -78,6 +78,7 @@ const threadBackLink = conversation && thread
 			showsDays={!showsPins}
 			showsPinDetails={showsPins}
 			emptyText={showsPins ? 'Nothing is pinned here yet. Agents pin messages with the pin tool.' : undefined}
+			readState={conversationPage && 'lastReadSeq' in conversationPage ? { conversationId: conversation.id, thread, lastReadSeq: conversationPage.lastReadSeq, firstUnreadSeq: conversationPage.firstUnreadSeq } : undefined}
 		/>
 	</Admin>
 )}

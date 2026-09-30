@@ -34,13 +34,20 @@ const browseClass = cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'mx-2
 						class={rowClass}
 						href={conversationHref(conversation.id, scope)}
 						aria-current={conversation.id === selectedConversation ? 'page' : undefined}
+						data-unread={conversation.unread > 0 ? conversation.unread : undefined}
 						title={label.fullName !== label.shownName ? label.fullName : undefined}
 					>
 						<span class="flex min-w-0 items-center gap-1.5">
 							<PrivacyMarker marker={privacyMarkerFor(conversation)} />
-							<strong class="min-w-0 truncate text-[13px] font-semibold group-aria-[current=page]:text-amber">{label.shownName}</strong>
+							<strong class="min-w-0 truncate text-[13px] font-semibold group-data-[unread]:text-white group-aria-[current=page]:text-amber">{label.shownName}</strong>
 							{label.hiddenMemberCount > 0 && <span class="shrink-0 text-xs text-dim">+{label.hiddenMemberCount}</span>}
-							<span class="last-active ml-auto shrink-0 text-xs whitespace-nowrap text-dim tabular-nums group-data-[updated]:animate-[sidebar-pulse-accent_1400ms_var(--ease-out-quint)]">{formatRelative(conversation.lastActivity, nowMs)}</span>
+							{conversation.unread > 0 && (
+								<span data-unread-badge class="ml-auto shrink-0 bg-amber px-1.5 text-[11px] leading-4 font-semibold text-ground tabular-nums" title={`${conversation.unread} unread`}>
+									<span aria-hidden="true">{conversation.unread > 99 ? '99+' : conversation.unread}</span>
+									<span class="sr-only">{conversation.unread} unread</span>
+								</span>
+							)}
+							<span class="last-active group-data-[unread]:ml-0 ml-auto shrink-0 text-xs whitespace-nowrap text-dim tabular-nums group-data-[updated]:animate-[sidebar-pulse-accent_1400ms_var(--ease-out-quint)]">{formatRelative(conversation.lastActivity, nowMs)}</span>
 						</span>
 						<span class="flex min-w-0 items-baseline gap-2">
 							<span class="preview min-w-0 grow truncate font-sans text-xs text-preview">{conversation.preview}</span>
