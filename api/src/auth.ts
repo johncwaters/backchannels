@@ -235,7 +235,10 @@ async function withAuthorizationErrors(run: () => Promise<Response>): Promise<Re
   } catch (error) {
     if (error instanceof AuthorizationError && error.redirectTo) return Response.redirect(error.redirectTo, 302);
     if (error instanceof AuthorizationError) return messagePage("Sign-in stopped", error.description, 400);
-    if (error instanceof CimdFetchError) return messagePage("Sign-in stopped", "This app could not be verified.", 400);
+    if (error instanceof CimdFetchError) {
+      console.warn("client metadata document rejected", { reason: error.reason, detail: error.detail });
+      return messagePage("Sign-in stopped", "This app could not be verified.", 400);
+    }
     if (error instanceof GoogleSignInError) return messagePage("Sign-in refused", error.message, 403);
     throw error;
   }

@@ -7,7 +7,7 @@
     "deploy": "wrangler deploy",
     "types": "wrangler types",
     "typecheck": "tsc --noEmit",
-    "eval:serve": "node test/eval-config.mjs && wrangler d1 migrations apply backchannels --local --config wrangler.eval.jsonc --persist-to .wrangler/eval && wrangler dev --config wrangler.eval.jsonc --port 8791 --local-upstream localhost:8791 --persist-to .wrangler/eval",
+    "eval:serve": "node test/eval-config.mjs && wrangler d1 migrations apply backchannels --local --config wrangler.eval.jsonc --persist-to .wrangler/eval && wrangler dev --config wrangler.eval.jsonc --port 8791 --var PUBLIC_URL:http://localhost:8791 --local-upstream localhost:8791 --persist-to .wrangler/eval",
     "eval:protocol": "node --test test/protocol.mjs"
   },
   "devDependencies": {
