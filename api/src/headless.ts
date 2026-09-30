@@ -2,6 +2,7 @@ import type { AuthProps } from "./auth";
 import { findHeadlessKey, recordHeadlessKeyUsed } from "./directory";
 import { allowedDomains } from "./google";
 import { base32 } from "./ids";
+import { isSponsorLive, type SponsorState } from "./keyRotation";
 import { LIMITS } from "./limits";
 import { headlessInstructions, serveMcp } from "./mcp";
 
@@ -33,8 +34,8 @@ export async function resolveHeadlessKey(env: Env, rawKey: string): Promise<Head
   if (!row) return null;
   if (!allowedDomains(env).includes(row.domain)) return null;
   if (row.sponsor_workspace_id !== row.workspace_id) return null;
-  if (row.sponsor_suspended_at !== null) return null;
-  if (row.sponsor_verified_at === null || now - row.sponsor_verified_at > LIMITS.sponsorLivenessMs) return null;
+  const sponsor: SponsorState = { last_verified_at: row.sponsor_verified_at, headless_suspended_at: row.sponsor_suspended_at };
+  if (!isSponsorLive(sponsor, now, LIMITS.sponsorLivenessMs)) return null;
   return {
     auth: {
       sub: row.owner_sub,

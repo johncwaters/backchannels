@@ -3,6 +3,7 @@ import type { AdminIdentity } from "./adminSession";
 import {
   ensureWorkspaceOwner,
   findLiveHeadlessKey,
+  findSponsorState,
   findWorkspaceDomain,
   insertHeadlessKey,
   isWorkspaceAdmin,
@@ -15,7 +16,7 @@ import {
 } from "./directory";
 import { hashHeadlessKey, newHeadlessKey } from "./headless";
 import { base32, checkAgentName, isReservedOwner, workspaceOwnerSub } from "./ids";
-import { expiresAtFor, expiryDaysFrom, overlapExpiry, successorExpiry } from "./keyRotation";
+import { expiresAtFor, expiryDaysFrom, isSponsorLive, overlapExpiry, successorExpiry } from "./keyRotation";
 import { LIMITS } from "./limits";
 
 const unauthorized = { ok: false, error: "unauthorized" } as const;
@@ -32,6 +33,13 @@ function workspaceStub(env: Env, identity: AdminIdentity) {
 async function isAdmin(env: Env, identity: AdminIdentity): Promise<boolean> {
   return isWorkspaceAdmin(env.DB, identity.sub, identity.workspaceId);
 }
+
+async function canSponsorKeys(env: Env, identity: AdminIdentity, now: number): Promise<boolean> {
+  const sponsor = await findSponsorState(env.DB, identity.sub);
+  return sponsor !== null && isSponsorLive(sponsor, now, LIMITS.sponsorLivenessMs);
+}
+
+const sponsorNotVerified = { ok: false, error: "sponsor_not_verified" } as const;
 
 async function newKeyRow(
   identity: AdminIdentity,
@@ -99,8 +107,9 @@ export async function createHeadlessKeyFor(
   const owner = workspaceOwnerSub(identity.workspaceId);
   const emails = await listWorkspaceEmails(env.DB, identity.workspaceId, owner);
   if (emails.some((email) => isReservedOwner(email, domain))) return { ok: false, error: "reserved_owner_taken" };
-  await ensureWorkspaceOwner(env.DB, identity.workspaceId);
   const now = Date.now();
+  if (!(await canSponsorKeys(env, identity, now))) return sponsorNotVerified;
+  await ensureWorkspaceOwner(env.DB, identity.workspaceId);
   const { row, key } = await newKeyRow(identity, {
     label,
     suggestedName: checkedName.name,
@@ -116,6 +125,7 @@ export async function rotateHeadlessKeyFor(env: Env, identity: AdminIdentity, in
   if (!(await isAdmin(env, identity))) return unauthorized;
   if (typeof input?.keyId !== "string" || !input.keyId) return invalid;
   const now = Date.now();
+  if (!(await canSponsorKeys(env, identity, now))) return sponsorNotVerified;
   const rotated = await findLiveHeadlessKey(env.DB, input.keyId, identity.workspaceId, now);
   if (!rotated) return notFound;
   if (rotated.has_successor === 1) return { ok: false, error: "already_rotated" };

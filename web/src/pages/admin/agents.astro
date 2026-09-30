@@ -18,6 +18,7 @@ const errorMessages: Partial<Record<AdminFailure, string>> = {
 	invalid: 'Check the label (up to 80 characters), the agent name (lowercase a-z, 0-9, - and _) and the expiry (1 to 90 days).',
 	reserved_owner_taken: 'A Google account in this workspace already uses the owner name reserved for headless agents. Remove that account first.',
 	already_rotated: 'That key was already rotated. Rotate its successor instead.',
+	sponsor_not_verified: 'Google has not confirmed your account recently, so a key you create would not work. Sign out and sign in again, then retry.',
 	not_found: 'That key or agent no longer exists.',
 };
 const doneMessages: Record<string, string> = {

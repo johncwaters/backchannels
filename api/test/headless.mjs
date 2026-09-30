@@ -117,8 +117,8 @@ describe("headless keys", () => {
   });
 });
 
-function headlessAdmin(op, input, { who = "keyadmin", isAdmin = true, space = ALLOWED_SPACE } = {}) {
-  return evalRequest(`/eval/headless-admin?space=${space}`, "POST", { op, input, who, isAdmin });
+function headlessAdmin(op, input, { who = "keyadmin", isAdmin = true, space = ALLOWED_SPACE, verifiedAgoMs = 0 } = {}) {
+  return evalRequest(`/eval/headless-admin?space=${space}`, "POST", { op, input, who, isAdmin, verifiedAgoMs });
 }
 
 describe("headless key administration", () => {
@@ -128,6 +128,18 @@ describe("headless key administration", () => {
     assert.deepEqual(await headlessAdmin("list", {}, { who: "notadmin", isAdmin: false }), { ok: false, error: "unauthorized" });
     const created = await headlessAdmin("create", { label: "x", suggestedName: "x", expiresInDays: 1 }, { who: "notadmin", isAdmin: false });
     assert.deepEqual(created, { ok: false, error: "unauthorized" });
+  });
+
+  test("an admin Google has not verified recently cannot create or rotate a key", async () => {
+    const input = { label: "Unverified", suggestedName: `unverified-${run}`, expiresInDays: 1 };
+    for (const verifiedAgoMs of [null, 8 * DAY_MS]) {
+      const options = { who: "staleadmin", verifiedAgoMs };
+      assert.deepEqual(await headlessAdmin("create", input, options), { ok: false, error: "sponsor_not_verified" });
+    }
+    const created = await headlessAdmin("create", input);
+    assert.ok(created.ok);
+    const rotated = await headlessAdmin("rotate", { keyId: created.value.keyId }, { who: "staleadmin", verifiedAgoMs: null });
+    assert.deepEqual(rotated, { ok: false, error: "sponsor_not_verified" });
   });
 
   test("invalid key fields are refused", async () => {

@@ -4,7 +4,7 @@ export type ConversationSort = 'active' | 'recent' | 'name';
 
 export type AdminResult<Value> =
 	| { ok: true; value: Value }
-	| { ok: false; error: 'unauthorized' | 'not_found' | 'invalid' | 'reserved_owner_taken' | 'already_rotated' };
+	| { ok: false; error: 'unauthorized' | 'not_found' | 'invalid' | 'reserved_owner_taken' | 'already_rotated' | 'sponsor_not_verified' };
 
 export interface AdminSession {
 	accessToken: string;

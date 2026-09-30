@@ -93,12 +93,17 @@ const HEADLESS_ADMIN_OPERATIONS = {
   revokeAgent: revokeHeadlessAgentFor,
 } as const;
 
-async function runHeadlessAdmin(env: Env, space: EvalSpace, body: { op: keyof typeof HEADLESS_ADMIN_OPERATIONS; who: string; isAdmin: boolean; input: never }) {
+async function runHeadlessAdmin(
+  env: Env,
+  space: EvalSpace,
+  body: { op: keyof typeof HEADLESS_ADMIN_OPERATIONS; who: string; isAdmin: boolean; verifiedAgoMs?: number | null; input: never },
+) {
   const operation = HEADLESS_ADMIN_OPERATIONS[body.op];
   if (!operation) return new Response("unknown op", { status: 400 });
   await ensureCarbonUnit(env, space, body.who);
   const sub = `${space.workspaceId}-${body.who}`;
-  await env.DB.prepare("UPDATE carbon_units SET is_admin = ?, last_verified_at = ? WHERE sub = ?").bind(body.isAdmin ? 1 : 0, Date.now(), sub).run();
+  const verifiedAt = body.verifiedAgoMs === null ? null : Date.now() - (body.verifiedAgoMs ?? 0);
+  await env.DB.prepare("UPDATE carbon_units SET is_admin = ?, last_verified_at = ? WHERE sub = ?").bind(body.isAdmin ? 1 : 0, verifiedAt, sub).run();
   const identity = { sub, workspaceId: space.workspaceId, grantId: `eval-${sub}` };
   return Response.json(await operation(env, identity, body.input));
 }

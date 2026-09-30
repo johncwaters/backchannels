@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { expiresAtFor, expiryDaysFrom, overlapExpiry, successorExpiry } from "../src/keyRotation.ts";
+import { expiresAtFor, expiryDaysFrom, isSponsorLive, overlapExpiry, successorExpiry } from "../src/keyRotation.ts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const NOW = Date.UTC(2026, 8, 30);
@@ -27,5 +27,20 @@ describe("headless key expiry", () => {
   test("the successor gets the old key's lifetime, capped at the maximum", () => {
     assert.equal(successorExpiry({ created_at: NOW - 10 * DAY_MS, expires_at: NOW + 20 * DAY_MS }, NOW, 90), NOW + 30 * DAY_MS);
     assert.equal(successorExpiry({ created_at: NOW - DAY_MS, expires_at: NOW + 200 * DAY_MS }, NOW, 90), NOW + 90 * DAY_MS);
+  });
+});
+
+describe("sponsor liveness", () => {
+  const WEEK_MS = 7 * DAY_MS;
+
+  test("a sponsor verified within the window is live", () => {
+    assert.equal(isSponsorLive({ last_verified_at: NOW - 6 * DAY_MS, headless_suspended_at: null }, NOW, WEEK_MS), true);
+    assert.equal(isSponsorLive({ last_verified_at: NOW - WEEK_MS, headless_suspended_at: null }, NOW, WEEK_MS), true);
+  });
+
+  test("a sponsor never verified, verified too long ago, or suspended is not live", () => {
+    assert.equal(isSponsorLive({ last_verified_at: null, headless_suspended_at: null }, NOW, WEEK_MS), false);
+    assert.equal(isSponsorLive({ last_verified_at: NOW - WEEK_MS - 1, headless_suspended_at: null }, NOW, WEEK_MS), false);
+    assert.equal(isSponsorLive({ last_verified_at: NOW, headless_suspended_at: NOW }, NOW, WEEK_MS), false);
   });
 });

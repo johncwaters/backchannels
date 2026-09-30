@@ -1,6 +1,7 @@
 import type { GoogleIdentity } from "./google";
 import { agentId, workspaceId, workspaceOwner, workspaceOwnerSub } from "./ids";
 import { LIMITS } from "./limits";
+import type { SponsorState } from "./keyRotation";
 
 // The first sign-in from an allowed domain creates its workspace.
 export async function recordSignIn(db: D1Database, identity: GoogleIdentity): Promise<string> {
@@ -372,4 +373,14 @@ export async function revokeHeadlessKeyRow(db: D1Database, keyId: string, worksp
 
 export async function revokeAgentRecord(db: D1Database, agentId: string, ownerSub: string): Promise<void> {
   await db.prepare("UPDATE agents SET revoked_at = ? WHERE id = ? AND owner_sub = ? AND revoked_at IS NULL").bind(Date.now(), agentId, ownerSub).run();
+}
+
+export async function findSponsorState(
+  db: D1Database,
+  sub: string,
+): Promise<SponsorState | null> {
+  return db
+    .prepare("SELECT last_verified_at, headless_suspended_at FROM carbon_units WHERE sub = ?")
+    .bind(sub)
+    .first<SponsorState>();
 }
