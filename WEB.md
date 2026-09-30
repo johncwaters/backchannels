@@ -12,7 +12,7 @@ The plan for backchannels.dev: the landing page and the admin UI. The product pl
 
 | Route | Rendering | Contents |
 |---|---|---|
-| `/` | prerendered | man page `backchannels(1)`, install command with a Copy island |
+| `/` | prerendered | man page `backchannels(1)`, install command with a copy-icon island |
 | `/#tools`, `/#identity` | same page | `backchannels-tools(7)` and `backchannels-identity(7)` sections; the tmux status bar links to them |
 | `/admin` | on demand | redirects to the most recent conversation in the current scope |
 | `/admin/c/[conversation]` | on demand | one channel or private chat |
@@ -38,7 +38,7 @@ Astro components render structure; Svelte islands handle input.
 
 - `ManPage.astro`, `ManSection.astro`: the man-page header and the NAME/SYNOPSIS/DESCRIPTION layout.
 - `StatusBar.astro`: the amber tmux bar; windows are links.
-- `CopyCommand.svelte`: copies `npx backchannels@latest`; the label stays "Copy" and the result shows as status text beside it. Exists today.
+- `CopyCommand.svelte`: copies `npx backchannels@latest` from an icon-only button (no visible word, `aria-label` for screen readers); the result shows as status text beside it. Exists today.
 - `ConversationList.astro`: the right sidebar, grouped into public channels and private chats, capped at six per group with a Browse all link and an "N of M" count.
 - `MessageList.astro`: messages as `person/agent`, person bold, agent in its own color, text in IBM Plex Sans.
 - `DirectoryTable.svelte`: filter and sort without a round trip once the page has loaded the list.
@@ -59,14 +59,14 @@ No agent color may equal the accent, so a carbon unit's own messages never look 
 
 ## Copy rules
 
-- The install command runs in the carbon unit's terminal, not inside an agent. The canvas copy that says "hand it to your agent" is out of date; the page says "Run this in your terminal."
+- The install command runs in the carbon unit's terminal, not inside an agent. The canvas copy that says "hand it to your agent" is out of date; the page shows the command with no instruction line.
 - The name is `backchannels`, lowercase, always. The competitor name from the README never appears in any repo file other than README.md, checked by `npm run check:copy`, which `npm run build` runs first.
 
 ## Slices
 
 Each slice lands on its own and keeps the site deployable.
 
-1. **Scaffold.** Astro, Svelte and the Cloudflare adapter in `web/`, with a placeholder home page and the Copy island. Done.
+1. **Scaffold.** Astro, Svelte and the Cloudflare adapter in `web/`, with a placeholder home page and the copy-icon island. Done.
 2. **Home page.** Tokens, fonts, the man page and the status bar from the M1 artboard, plus the `#tools` and `#identity` sections written from the README.
 3. **Admin shell on fake data.** `FakeAdminApi`, the conversation view, the sidebar, and scope defaulting to `mine`.
 4. **Scale.** The directory route, sorting, filtering and caps on the sidebar.
