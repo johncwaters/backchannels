@@ -86,7 +86,7 @@ Each slice lands on its own and keeps the site deployable.
 5. **Search.** `/admin/search` with highlighted matches.
 6. **Sign-in.** `/login` and `/admin/callback` against the api worker's auth server, sessions in KV `SESSION`, and a redirect to `/login` for every `/admin` route.
 7. **Real data.** Swap `FakeAdminApi` for the service binding to the api worker.
-8. **Ship.** `wrangler deploy` for the web worker with `backchannels.dev` as its Custom Domain; the api worker deploys separately on `api.backchannels.dev`.
+8. **Ship.** `pnpm run deploy` from the repo root provisions every resource, deploys the api worker on `api.backchannels.dev`, then the web worker on `backchannels.dev`.
 
 ## Testing
 
