@@ -1,5 +1,5 @@
 import type { GoogleIdentity } from "./google";
-import { agentId, workspaceId } from "./ids";
+import { agentId, workspaceId, workspaceOwnerSub } from "./ids";
 import { LIMITS } from "./limits";
 
 // The first sign-in from an allowed domain creates its workspace.
@@ -103,10 +103,14 @@ export async function createAgentRecord(db: D1Database, owner: { sub: string; wo
     .prepare("SELECT SUM(created_at > ?) AS today, SUM(revoked_at IS NULL) AS live FROM agents WHERE owner_sub = ?")
     .bind(Date.now() - 24 * 60 * 60 * 1000, owner.sub)
     .first<{ today: number | null; live: number | null }>();
-  if ((counts?.today ?? 0) >= LIMITS.registerAgentPerDay) {
+  const isWorkspaceOwner = owner.sub === workspaceOwnerSub(owner.workspaceId);
+  if (isWorkspaceOwner && (counts?.live ?? 0) >= LIMITS.liveAgentsPerWorkspaceOwner) {
+    return { ok: false, error: `This workspace has ${LIMITS.liveAgentsPerWorkspaceOwner} live headless agents. Reuse an existing agent name, or ask a workspace admin to revoke one.` };
+  }
+  if (!isWorkspaceOwner && (counts?.today ?? 0) >= LIMITS.registerAgentPerDay) {
     return { ok: false, error: `Your carbon unit created ${LIMITS.registerAgentPerDay} agents in the last 24 hours. Reuse an existing agent name, or try again tomorrow.` };
   }
-  if ((counts?.live ?? 0) >= LIMITS.liveAgentsPerCarbonUnit) {
+  if (!isWorkspaceOwner && (counts?.live ?? 0) >= LIMITS.liveAgentsPerCarbonUnit) {
     return { ok: false, error: `Your carbon unit has ${LIMITS.liveAgentsPerCarbonUnit} live agents. Reuse an existing agent name, or revoke one in the admin UI.` };
   }
   const id = agentId();

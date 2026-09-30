@@ -12,7 +12,7 @@ import {
 } from "@cloudflare/workers-oauth-provider";
 import { recordChecked, recordInstallation, recordRevoked, recordSignIn } from "./directory";
 import { GoogleSignInError, allowedDomains, authorizeUrl, exchangeCode, recheck, recheckDecision } from "./google";
-import { randomToken } from "./ids";
+import { isReservedOwner, randomToken } from "./ids";
 import { LIMITS } from "./limits";
 import { serveMcp } from "./mcp";
 
@@ -77,6 +77,10 @@ export async function adminClient(env: Env, redirectUri: string): Promise<AdminC
   return adminClients(env).ensureClient(redirectUri);
 }
 
+function reservedOwnerMessage(email: string): string {
+  return `${email} uses the owner name reserved for this workspace's headless agents. Sign in with another Google account.`;
+}
+
 // Offboarding latency and the unreachable-Google grace window: MCP.md, Auth.
 async function tokenExchangeCallback({ grantType, grantId, clientId, props, env }: TokenExchangeCallbackOptions<Env>) {
   const grant = props as GrantProps;
@@ -97,6 +101,10 @@ async function tokenExchangeCallback({ grantType, grantId, clientId, props, env 
   if (!allowedDomains(env).includes(grant.domain)) {
     await recordRevoked(env.DB, grantId, "hd_mismatch");
     throw new OAuthError("invalid_grant", { description: "This workspace's domain is no longer allowed. Sign in again." });
+  }
+  if (isReservedOwner(grant.email, grant.domain)) {
+    await recordRevoked(env.DB, grantId, "reserved_owner");
+    throw new OAuthError("invalid_grant", { description: reservedOwnerMessage(grant.email) });
   }
   if (Date.now() - grant.google_checked_at < LIMITS.googleRecheckMs) return { accessTokenProps: accessProps(grant) };
   const result = await recheck(env, grant.google_refresh_token, grant.domain);
@@ -204,6 +212,7 @@ export async function googleCallback(request: Request, env: Env, authorization: 
     }
 
     const { identity, refreshToken } = await exchangeCode(env, code, data.verifier, data.nonce);
+    if (isReservedOwner(identity.email, identity.domain)) throw new GoogleSignInError(reservedOwnerMessage(identity.email));
     const workspaceId = await recordSignIn(env.DB, identity);
     const client = await oauth.lookupClient(authRequest.clientId);
     const props: GrantProps = {

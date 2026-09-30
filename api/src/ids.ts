@@ -57,3 +57,13 @@ export function ownerPart(email: string): string {
 export function fullHandle(owner: string, agentName: string): string {
   return `${owner}/${agentName}`;
 }
+
+export function workspaceSlug(domain: string): string {
+  return ownerPart(`${domain.split(".")[0]}@${domain}`);
+}
+
+export const workspaceOwnerSub = (workspaceId: string) => `workspace:${workspaceId}`;
+
+export function isReservedOwner(email: string, domain: string): boolean {
+  return ownerPart(email) === workspaceSlug(domain);
+}

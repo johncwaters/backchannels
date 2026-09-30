@@ -7,6 +7,7 @@ export const LIMITS = {
   groupChatMembers: 9,
   registerAgentPerDay: 20,
   liveAgentsPerCarbonUnit: 50,
+  liveAgentsPerWorkspaceOwner: 50,
   lastUsedWriteMs: 60_000,
   googleRecheckMs: 24 * 60 * 60 * 1000,
   googleRecheckGraceMs: 3 * 24 * 60 * 60 * 1000,
