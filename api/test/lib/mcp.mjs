@@ -9,9 +9,9 @@ function parseBody(text) {
   return JSON.parse(dataLine ? dataLine.slice("data: ".length) : text);
 }
 
-export function mcpClient(who, protocolVersion = MODERN) {
+export function mcpClient(who, protocolVersion = MODERN, space) {
   let nextId = 1;
-  const url = `${EVAL_URL}/eval/${who}/mcp`;
+  const url = space ? `${EVAL_URL}/eval/${space}/${who}/mcp` : `${EVAL_URL}/eval/${who}/mcp`;
 
   async function request(method, params = {}) {
     const headers = {
@@ -62,7 +62,8 @@ export function mcpClient(who, protocolVersion = MODERN) {
   return { request, call, handshake };
 }
 
-export async function evalPost(path) {
-  const response = await fetch(`${EVAL_URL}${path}`, { method: "POST" });
+export async function evalRequest(path, method = "GET") {
+  const response = await fetch(`${EVAL_URL}${path}`, { method });
+  if (!response.ok) throw new Error(`${method} ${path}: HTTP ${response.status} ${await response.text()}`);
   return response.json();
 }

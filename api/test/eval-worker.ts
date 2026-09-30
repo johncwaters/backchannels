@@ -4,36 +4,72 @@ import { vectorId } from "../src/search/indexing";
 
 export { AdminApi, AdminClientsDO, ReindexWorkflow, WorkspaceDO } from "../src/index";
 
-const EVAL_WORKSPACE_ID = "ws_evalsuite";
+const DEFAULT_SPACE = "suite";
 const EVAL_DOMAIN = "eval.example";
 const REINDEX_PAGE = 1000;
-const MCP_ROUTE = /^\/eval\/([a-z0-9][a-z0-9-]{0,39})\/mcp$/;
+const VECTOR_LOOKUP_BATCH = 20;
+const MCP_ROUTE = /^\/eval\/(?:([a-z0-9]{1,16})\/)?([a-z0-9][a-z0-9-]{0,39})\/mcp$/;
+const SPACE_PARAM = /^[a-z0-9]{1,16}$/;
 
-async function ensureCarbonUnit(env: Env, who: string): Promise<void> {
+interface EvalSpace {
+  workspaceId: string;
+  domain: string;
+}
+
+function evalSpace(space: string): EvalSpace {
+  return { workspaceId: `ws_e${space}`, domain: `${space}.${EVAL_DOMAIN}` };
+}
+
+function spaceFromQuery(url: URL): EvalSpace | null {
+  const space = url.searchParams.get("space") ?? DEFAULT_SPACE;
+  return SPACE_PARAM.test(space) ? evalSpace(space) : null;
+}
+
+async function ensureCarbonUnit(env: Env, space: EvalSpace, who: string): Promise<void> {
   const now = Date.now();
   await env.DB.batch([
     env.DB.prepare("INSERT OR IGNORE INTO workspaces (id, domain, name, created_at) VALUES (?, ?, ?, ?)").bind(
-      EVAL_WORKSPACE_ID,
-      EVAL_DOMAIN,
-      EVAL_DOMAIN,
+      space.workspaceId,
+      space.domain,
+      space.domain,
       now,
     ),
     env.DB.prepare(
       "INSERT OR IGNORE INTO carbon_units (sub, workspace_id, email, name, created_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?)",
-    ).bind(`eval-${who}`, EVAL_WORKSPACE_ID, `${who}@${EVAL_DOMAIN}`, `${who} (eval)`, now, now),
+    ).bind(`${space.workspaceId}-${who}`, space.workspaceId, `${who}@${space.domain}`, `${who} (eval)`, now, now),
   ]);
 }
 
-function workspace(env: Env) {
-  return env.WORKSPACE.get(env.WORKSPACE.idFromName(EVAL_WORKSPACE_ID));
+function workspace(env: Env, space: EvalSpace) {
+  return env.WORKSPACE.get(env.WORKSPACE.idFromName(space.workspaceId));
 }
 
-async function purgeVectors(env: Env): Promise<Response> {
+async function allVectorIds(env: Env, space: EvalSpace): Promise<string[]> {
+  const ids: string[] = [];
+  let afterMessageId = 0;
+  for (;;) {
+    const batch = await workspace(env, space).reindexBatch(afterMessageId, REINDEX_PAGE);
+    for (const job of batch.jobs) if (job.op === "upsert") ids.push(vectorId(space.workspaceId, job.conv, job.seq, job.kind));
+    if (batch.lastId === null) return ids;
+    afterMessageId = batch.lastId;
+  }
+}
+
+async function indexStatus(env: Env, space: EvalSpace): Promise<Response> {
+  const expected = (await allVectorIds(env, space)).filter((id) => !id.endsWith(":t"));
+  let present = 0;
+  for (let start = 0; start < expected.length; start += VECTOR_LOOKUP_BATCH) {
+    present += (await env.VECTORS.getByIds(expected.slice(start, start + VECTOR_LOOKUP_BATCH))).length;
+  }
+  return Response.json({ expected: expected.length, present, missing: expected.length - present });
+}
+
+async function purgeVectors(env: Env, space: EvalSpace): Promise<Response> {
   let afterMessageId = 0;
   let deleted = 0;
   for (;;) {
-    const batch = await workspace(env).reindexBatch(afterMessageId, REINDEX_PAGE);
-    const ids = batch.jobs.map((job) => vectorId(EVAL_WORKSPACE_ID, job.conv, job.seq, job.kind));
+    const batch = await workspace(env, space).reindexBatch(afterMessageId, REINDEX_PAGE);
+    const ids = batch.jobs.map((job) => vectorId(space.workspaceId, job.conv, job.seq, job.kind));
     if (ids.length) await env.VECTORS.deleteByIds(ids);
     deleted += ids.length;
     if (batch.lastId === null) return Response.json({ deleted });
@@ -46,16 +82,27 @@ export default {
     const url = new URL(request.url);
     const mcp = MCP_ROUTE.exec(url.pathname);
     if (mcp) {
-      const who = mcp[1];
-      await ensureCarbonUnit(env, who);
-      const auth = { sub: `eval-${who}`, email: `${who}@${EVAL_DOMAIN}`, workspace_id: EVAL_WORKSPACE_ID, grant_id: `eval-${who}` };
+      const space = evalSpace(mcp[1] ?? DEFAULT_SPACE);
+      const who = mcp[2];
+      await ensureCarbonUnit(env, space, who);
+      const auth = {
+        sub: `${space.workspaceId}-${who}`,
+        email: `${who}@${space.domain}`,
+        workspace_id: space.workspaceId,
+        grant_id: `eval-${space.workspaceId}-${who}`,
+      };
       return serveMcp(new Request(new URL("/mcp", request.url), request), env, ctx, auth);
     }
-    if (url.pathname === "/eval/reindex" && request.method === "POST") {
-      const instance = await env.REINDEX.create({ params: { workspace: EVAL_WORKSPACE_ID } });
-      return Response.json({ id: instance.id });
+    if (url.pathname.startsWith("/eval/")) {
+      const space = spaceFromQuery(url);
+      if (!space) return new Response("space must be 1-16 lowercase letters or digits", { status: 400 });
+      if (url.pathname === "/eval/index-status") return indexStatus(env, space);
+      if (url.pathname === "/eval/reindex" && request.method === "POST") {
+        const instance = await env.REINDEX.create({ params: { workspace: space.workspaceId } });
+        return Response.json({ id: instance.id });
+      }
+      if (url.pathname === "/eval/purge-vectors" && request.method === "POST") return purgeVectors(env, space);
     }
-    if (url.pathname === "/eval/purge-vectors" && request.method === "POST") return purgeVectors(env);
     return worker.fetch(request, env, ctx);
   },
   queue: worker.queue,
