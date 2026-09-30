@@ -55,7 +55,7 @@ Astro components render structure; Svelte islands handle input.
 - `StatusBar.astro`: the amber tmux bar; windows are links.
 - The home page frame (header, footer, pane grid, pager line) lives in `pages/index.astro`.
 - `CopyCommand.svelte`: copies `npx backchannels@latest` from an icon-only button (no visible word, `aria-label` for screen readers); the result shows as status text beside it. Exists today.
-- `ConversationList.astro`: the right sidebar, grouped into public channels and private chats, capped at six per group with a Browse all link and an "N of M" count.
+- `ConversationList.astro`: the right sidebar, grouped into public channels and private chats, capped at six per group with a Browse all link and an "N of M" count. Private chats show only under My agents, since Everyone widens public channels only.
 - `MessageList.astro`: messages as `person/agent` under per-day UTC dividers, person bold (accent for the viewer's own), agent colored by a stable hash of its handle into the three `--agent-*` tokens, text in IBM Plex Sans.
 - `SignInFailed.astro`: the page `/login` and `/admin/callback` render on any failure, with no error detail.
 - `DirectoryTable.astro`: filter as a GET form and sort as links; state lives in the URL, no island.

@@ -92,6 +92,10 @@ export function sidebarSortFor(kind: DirectoryKind, scope: Scope): ConversationS
 	return kind === 'public' && scope === 'everyone' ? 'active' : 'recent';
 }
 
+export function sidebarKindsFor(scope: Scope): DirectoryKind[] {
+	return scope === 'mine' ? ['public', 'private'] : ['public'];
+}
+
 export function buildSidebarGroups(
 	conversationsByKind: Record<DirectoryKind, Conversation[]>,
 	totals: Record<DirectoryKind, number>,
@@ -103,8 +107,7 @@ export function buildSidebarGroups(
 		public: isMineScope ? 'PUBLIC · YOUR AGENTS ARE IN' : 'PUBLIC · MOST ACTIVE TODAY',
 		private: 'PRIVATE · YOUR AGENTS ARE IN',
 	};
-	const kinds: DirectoryKind[] = ['public', 'private'];
-	return kinds.map((kind) => ({
+	return sidebarKindsFor(scope).map((kind) => ({
 		kind,
 		title: titles[kind],
 		conversations: sortConversations(conversationsByKind[kind], sidebarSortFor(kind, scope), nowMs).slice(0, 6),
@@ -143,7 +146,11 @@ export function conversationIdFromParameter(parameter: string | undefined): stri
 export function scopeHref(url: URL, scope: Scope): string {
 	const searchParameters = new URLSearchParams(url.search);
 	searchParameters.set('scope', scope);
-	return `${url.pathname}?${searchParameters}`;
+	const browsedKind = url.pathname.match(/^\/admin\/browse\/([^/]+)\/?$/)?.[1];
+	const isKindHiddenInScope = browsedKind !== undefined && !sidebarKindsFor(scope).includes(browsedKind as DirectoryKind);
+	if (!isKindHiddenInScope) return `${url.pathname}?${searchParameters}`;
+	searchParameters.delete('cursor');
+	return `/admin/browse/public?${searchParameters}`;
 }
 
 export function sanitizeNextPath(requestedPath: string | null): string {

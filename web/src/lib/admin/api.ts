@@ -1,6 +1,6 @@
 import type { APIContext } from 'astro';
 import { env } from 'cloudflare:workers';
-import { buildSidebarGroups, loginHref, sidebarSortFor } from './helpers';
+import { buildSidebarGroups, loginHref, sidebarKindsFor, sidebarSortFor } from './helpers';
 import type { AdminApiRpc, AdminResult, AdminSession, Conversation, DirectoryKind, Scope } from './types';
 
 type AdminFailure = Extract<AdminResult<unknown>, { ok: false }>['error'];
@@ -65,18 +65,19 @@ export async function loadAdminFrame(context: APIContext, scope: Scope) {
 	const adminApi = await adminApiFor(context);
 	if (adminApi instanceof Response) return adminApi;
 	const listSidebarKind = (kind: DirectoryKind) => adminApi.listConversations({ scope, kind, sort: sidebarSortFor(kind, scope) });
+	const showsPrivateChats = sidebarKindsFor(scope).includes('private');
 	const [viewer, publicListing, privateListing] = await Promise.all([
 		adminApi.viewer(),
 		listSidebarKind('public'),
-		listSidebarKind('private'),
+		showsPrivateChats ? listSidebarKind('private') : undefined,
 	]);
 	if (!viewer.ok) return failureResponse(context, viewer.error);
 	if (!publicListing.ok) return failureResponse(context, publicListing.error);
-	if (!privateListing.ok) return failureResponse(context, privateListing.error);
+	if (privateListing && !privateListing.ok) return failureResponse(context, privateListing.error);
 	const nowMs = Date.now();
 	const conversationsByKind: Record<DirectoryKind, Conversation[]> = {
 		public: publicListing.value.conversations,
-		private: privateListing.value.conversations,
+		private: privateListing?.value.conversations ?? [],
 	};
 	return {
 		adminApi,

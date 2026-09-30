@@ -13,6 +13,7 @@ import {
 	loginHref,
 	normalizePathname,
 	sanitizeNextPath,
+	scopeHref,
 	searchSummary,
 	sortConversations,
 } from './helpers';
@@ -153,7 +154,7 @@ describe('buildSidebarGroups', () => {
 	const privateConversations = [conversationNamed('dm-a', 0, isoMinutesAgo(30), { kind: 'dm', isPrivate: true })];
 
 	it('caps each group at six and reports the workspace totals as the count', () => {
-		const [publicGroup, privateGroup] = buildSidebarGroups({ public: publicConversations, private: privateConversations }, { public: 40, private: 3 }, 'everyone', nowMs);
+		const [publicGroup, privateGroup] = buildSidebarGroups({ public: publicConversations, private: privateConversations }, { public: 40, private: 3 }, 'mine', nowMs);
 		expect(publicGroup.conversations).toHaveLength(6);
 		expect(publicGroup.total).toBe(40);
 		expect(privateGroup.conversations).toHaveLength(1);
@@ -168,11 +169,34 @@ describe('buildSidebarGroups', () => {
 		expect(minePublic.title).toBe('PUBLIC · YOUR AGENTS ARE IN');
 	});
 
-	it('titles the private group as your agents\' chats in both scopes because private visibility never widens', () => {
-		const [, everyonePrivate] = buildSidebarGroups({ public: [], private: [] }, { public: 0, private: 0 }, 'everyone', nowMs);
-		const [, minePrivate] = buildSidebarGroups({ public: [], private: [] }, { public: 0, private: 0 }, 'mine', nowMs);
-		expect(everyonePrivate.title).toBe('PRIVATE · YOUR AGENTS ARE IN');
-		expect(minePrivate.title).toBe('PRIVATE · YOUR AGENTS ARE IN');
+	it('shows private chats only under my agents because private visibility never widens', () => {
+		const everyoneGroups = buildSidebarGroups({ public: [], private: privateConversations }, { public: 0, private: 1 }, 'everyone', nowMs);
+		const mineGroups = buildSidebarGroups({ public: [], private: privateConversations }, { public: 0, private: 1 }, 'mine', nowMs);
+		expect(everyoneGroups.map((group) => group.kind)).toEqual(['public']);
+		expect(mineGroups.map((group) => group.kind)).toEqual(['public', 'private']);
+		expect(mineGroups[1].title).toBe('PRIVATE · YOUR AGENTS ARE IN');
+	});
+});
+
+describe('scopeHref', () => {
+	it('sends the private directory to the public directory when switching to everyone', () => {
+		expect(scopeHref(new URL('https://x.test/admin/browse/private?scope=mine'), 'everyone')).toBe('/admin/browse/public?scope=everyone');
+	});
+
+	it('drops the cursor when the directory changes because it offsets into the old listing', () => {
+		expect(scopeHref(new URL('https://x.test/admin/browse/private?scope=mine&cursor=50'), 'everyone')).toBe('/admin/browse/public?scope=everyone');
+	});
+
+	it('keeps the cursor when the directory stays the same', () => {
+		expect(scopeHref(new URL('https://x.test/admin/browse/private?scope=everyone&cursor=50'), 'mine')).toBe('/admin/browse/private?scope=mine&cursor=50');
+	});
+
+	it('keeps the private directory when switching to mine', () => {
+		expect(scopeHref(new URL('https://x.test/admin/browse/private?scope=everyone'), 'mine')).toBe('/admin/browse/private?scope=mine');
+	});
+
+	it('keeps conversation pages on the same path', () => {
+		expect(scopeHref(new URL('https://x.test/admin/c/abc?scope=mine'), 'everyone')).toBe('/admin/c/abc?scope=everyone');
 	});
 });
 
