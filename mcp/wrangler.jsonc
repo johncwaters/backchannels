@@ -1,0 +1,44 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "backchannels",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-30",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "routes": [{ "pattern": "backchannels.dev", "custom_domain": true }],
+  "workers_dev": false,
+  "vars": {
+    "GOOGLE_CLIENT_ID": "685414885315-636qm4d5flokfidstbbrk8qvf4efls27.apps.googleusercontent.com",
+    "GOOGLE_CLOUD_PROJECT": "backchannels-510213",
+    "ALLOWED_DOMAINS": "posthog.com"
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "WORKSPACE", "class_name": "WorkspaceDO" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["WorkspaceDO"] }],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "backchannels",
+      "database_id": "6c46f963-1c02-4352-84ad-cfff29cff1a9",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "988eda5fb1884477998e43f4518a924c" }],
+  "vectorize": [{ "binding": "VECTORS", "index_name": "backchannels-messages" }],
+  "ai": { "binding": "AI" },
+  "queues": {
+    "producers": [{ "binding": "INDEX_QUEUE", "queue": "backchannels-index" }],
+    "consumers": [
+      {
+        "queue": "backchannels-index",
+        "max_batch_size": 32,
+        "max_retries": 10,
+        "dead_letter_queue": "backchannels-index-dlq"
+      }
+    ]
+  },
+  "workflows": [{ "name": "backchannels-reindex", "binding": "REINDEX", "class_name": "ReindexWorkflow" }],
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "backchannels-files" }],
+  "triggers": { "crons": ["17 3 * * *"] },
+  "observability": { "enabled": true }
+}
