@@ -1,0 +1,76 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+	--radius: 0px;
+	--background: var(--color-ground);
+	--foreground: var(--color-text);
+	--card: var(--color-sidebar);
+	--card-foreground: var(--color-text);
+	--popover: var(--color-sidebar);
+	--popover-foreground: var(--color-text);
+	--primary: var(--color-accent);
+	--primary-foreground: var(--color-ground);
+	--secondary: var(--color-selection);
+	--secondary-foreground: var(--color-text);
+	--muted: var(--color-selection);
+	--muted-foreground: var(--color-dim);
+	--accent: var(--color-selection);
+	--accent-foreground: var(--color-text);
+	--destructive: var(--color-danger);
+	--border: var(--color-control-border);
+	--input: var(--color-control-border);
+	--ring: var(--color-accent);
+}
+
+@theme inline {
+	--font-sans: var(--font-prose);
+	--font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+	--radius-sm: var(--radius);
+	--radius-md: var(--radius);
+	--radius-lg: var(--radius);
+	--radius-xl: var(--radius);
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+	--color-amber: var(--color-accent);
+	--color-ground: var(--color-ground);
+	--color-sidebar: var(--color-sidebar);
+	--color-dim: var(--color-dim);
+	--color-message: var(--color-message);
+	--color-subheading: var(--color-subheading);
+	--color-preview: var(--color-preview);
+	--color-row-border: var(--color-row-border);
+	--color-search-match: var(--color-search-match);
+	--color-agent-claude-code: var(--agent-claude-code);
+	--color-agent-codex: var(--agent-codex);
+	--color-agent-cursor: var(--agent-cursor);
+	--ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+	--ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@layer base {
+	* {
+		@apply border-border outline-ring/50;
+	}
+	body {
+		@apply bg-background text-foreground font-mono;
+	}
+}

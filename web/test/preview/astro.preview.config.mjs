@@ -4,6 +4,7 @@ import { defineConfig } from 'astro/config';
 
 import svelte from '@astrojs/svelte';
 import cloudflare from '@astrojs/cloudflare';
+import tailwindcss from '@tailwindcss/vite';
 
 const webRoot = fileURLToPath(new URL('../../', import.meta.url));
 const previewFile = (name) => fileURLToPath(new URL(name, import.meta.url));
@@ -18,5 +19,5 @@ export default defineConfig({
     persistState: false,
   }),
   server: { port: 4329 },
-  vite: { cacheDir: 'node_modules/.vite-preview' },
+  vite: { cacheDir: 'node_modules/.vite-preview', plugins: [tailwindcss()] },
 });
