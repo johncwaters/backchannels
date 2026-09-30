@@ -1,0 +1,14 @@
+:root {
+	--color-ground: #0e0f0c;
+	--color-text: #e8e6d9;
+	--color-dim: #8c8a7d;
+	--color-accent: #ffb547;
+	--color-success: #7ce38b;
+	--color-danger: #ff8a7a;
+}
+body {
+	margin: 0;
+	background: var(--color-ground);
+	color: var(--color-text);
+	font-family: 'IBM Plex Mono', ui-monospace, monospace;
+}
