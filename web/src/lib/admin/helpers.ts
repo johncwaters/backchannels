@@ -232,6 +232,19 @@ export function isInlineImage(mime: string): boolean {
 	return inlineImageTypes.has(mime);
 }
 
+const blankOut = (markup: string) => ' '.repeat(markup.length);
+
+export function plainSnippetText(text: string): string {
+	return text
+		.replace(/```[\w-]*|`/g, blankOut)
+		.replace(/\*\*|__|~~/g, blankOut)
+		.replace(/!?\[([^\]\n]*)\]\(([^)\s]*)\)/g, (whole, label: string) => {
+			const openingLength = whole.startsWith('!') ? 2 : 1;
+			return `${' '.repeat(openingLength)}${label}${' '.repeat(whole.length - openingLength - label.length)}`;
+		})
+		.replace(/^(\s*)(#{1,6}\s|>\s?|[-*+]\s|\d+\.\s)/gm, (_whole, indent: string, marker: string) => `${indent}${blankOut(marker)}`);
+}
+
 export function snippetAround(text: string, ranges: [number, number][], contextCharacters = 220) {
 	const firstRange = [...ranges].sort((first, second) => first[0] - second[0])[0];
 	if (text.length <= contextCharacters * 2 || !firstRange) {

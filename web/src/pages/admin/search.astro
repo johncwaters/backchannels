@@ -54,8 +54,8 @@ const modifierHelp: [string, string][] = [
 				<a href={adminHref('/admin/search', scope, { q: query, sort: option.id })} class:list={{ active: sort === option.id }} aria-current={sort === option.id ? 'true' : undefined}>{option.label}</a>
 			))}
 		</div>
-		<details class="syntax">
-			<summary>Search syntax</summary>
+		<button type="button" class="syntax-toggle" popovertarget="search-syntax" aria-haspopup="dialog">Search syntax</button>
+		<div id="search-syntax" class="syntax" popover role="dialog" aria-label="Search syntax">
 			<dl>
 				{modifierHelp.map(([syntax, meaning]) => (
 					<Fragment>
@@ -64,7 +64,8 @@ const modifierHelp: [string, string][] = [
 					</Fragment>
 				))}
 			</dl>
-		</details>
+			<p class="syntax-hint">Combine them freely: <code>in:#deploys from:me has:link rollback</code></p>
+		</div>
 	</div>
 	<section class="search-results" aria-label="Search results">
 		{problem && <p class="problem" role="alert">{problem}</p>}
@@ -111,42 +112,76 @@ const modifierHelp: [string, string][] = [
 		background: var(--color-accent);
 		color: var(--color-ground);
 	}
-	.syntax {
-		font-size: 13px;
-		color: var(--color-muted);
-	}
-	.syntax summary {
+	.syntax-toggle {
 		min-height: 32px;
-		display: inline-flex;
-		align-items: center;
-		cursor: pointer;
+		padding: 0 12px;
+		border: 1px solid var(--color-control-border);
+		background: transparent;
 		color: var(--color-text);
+		font: inherit;
+		font-size: 13px;
+		cursor: pointer;
+		anchor-name: --search-syntax;
 	}
-	.syntax[open] dl {
-		animation: reveal 180ms var(--ease-out-quint);
+	.syntax-toggle:hover, .syntax-toggle:has(+ .syntax:popover-open) {
+		background: var(--color-selection);
+		border-color: var(--color-accent);
 	}
-	@keyframes reveal {
-		from {
+	.syntax {
+		inset: auto;
+		top: 72px;
+		right: 360px;
+		margin: 0;
+		width: min(560px, calc(100vw - 32px));
+		padding: 12px 14px;
+		background: var(--color-sidebar);
+		border: 1px solid var(--color-control-border);
+		box-shadow: 0 16px 40px rgb(0 0 0 / 0.45);
+		color: var(--color-muted);
+		font-size: 13px;
+		opacity: 0;
+		transform: translateY(-4px);
+		transition: opacity 160ms var(--ease-out-quint), transform 160ms var(--ease-out-quint), display 160ms allow-discrete, overlay 160ms allow-discrete;
+	}
+	@supports (position-anchor: --search-syntax) {
+		.syntax {
+			position-anchor: --search-syntax;
+			top: calc(anchor(bottom) + 6px);
+			left: anchor(left);
+			right: auto;
+			position-try-fallbacks: flip-inline;
+		}
+	}
+	.syntax:popover-open {
+		opacity: 1;
+		transform: none;
+	}
+	@starting-style {
+		.syntax:popover-open {
 			opacity: 0;
 			transform: translateY(-4px);
 		}
 	}
 	.syntax dl {
-		margin: 6px 0 0;
-		padding: 12px 14px;
+		margin: 0;
 		display: grid;
 		grid-template-columns: max-content minmax(0, 1fr);
 		gap: 4px 16px;
-		background: var(--color-sidebar);
-		border: 1px solid var(--color-row-border);
 	}
-	.syntax dt code {
+	.syntax dt code, .syntax-hint code {
 		color: var(--color-accent);
 		font-family: var(--font-mono);
 	}
 	.syntax dd {
 		margin: 0;
 		font-family: var(--font-prose);
+	}
+	.syntax-hint {
+		margin: 10px 0 0;
+		padding-top: 8px;
+		border-top: 1px solid var(--color-row-border);
+		font-family: var(--font-prose);
+		color: var(--color-dim);
 	}
 	.search-results {
 		flex-grow: 1;

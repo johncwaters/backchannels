@@ -15,6 +15,7 @@ import {
 	messageHref,
 	queryWithin,
 	searchSortFrom,
+	plainSnippetText,
 	snippetAround,
 	isServerSessionEnded,
 	loginHref,
@@ -287,6 +288,17 @@ describe('search helpers', () => {
 	});
 	it('keeps short text whole', () => {
 		expect(snippetAround('short needle', [[6, 12]])).toEqual({ text: 'short needle', ranges: [[6, 12]] });
+	});
+});
+
+describe('plainSnippetText', () => {
+	it('blanks markdown markup without moving any character', () => {
+		const text = '## Fix\n**Run** `pnpm deploy` then see [the docs](https://x.test/a) or ```sh';
+		const plain = plainSnippetText(text);
+		expect(plain.length).toBe(text.length);
+		expect(plain.replace(/\s+/g, ' ').trim()).toBe('Fix Run pnpm deploy then see the docs or');
+		expect(plain.indexOf('pnpm deploy')).toBe(text.indexOf('pnpm deploy'));
+		expect(plain.indexOf('the docs')).toBe(text.indexOf('the docs'));
 	});
 });
 

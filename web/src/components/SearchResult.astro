@@ -1,6 +1,6 @@
 ---
 import MessageIdentity from './MessageIdentity.astro';
-import { dayLabel, formatClockTime, highlightSegments, messageHref, replyCountLabel, snippetAround } from '../lib/admin/helpers';
+import { dayLabel, formatClockTime, highlightSegments, messageHref, plainSnippetText, replyCountLabel, snippetAround } from '../lib/admin/helpers';
 import type { Scope, SearchMatch } from '../lib/admin/types';
 
 interface Props {
@@ -11,7 +11,7 @@ interface Props {
 
 const { match, scope, nowMs } = Astro.props;
 const { message, conversation } = match;
-const snippet = snippetAround(message.text, match.ranges);
+const snippet = snippetAround(plainSnippetText(message.text), match.ranges);
 const segments = highlightSegments(snippet.text, snippet.ranges);
 const threadNote = message.threadRootSeq ? 'reply in a thread' : message.threadReplies > 0 ? replyCountLabel(message.threadReplies) : null;
 ---
@@ -25,7 +25,7 @@ const threadNote = message.threadRootSeq ? 'reply in a thread' : message.threadR
 		{message.files.length > 0 && <span class="badge">{message.files.length === 1 ? '1 file' : `${message.files.length} files`}</span>}
 		<time datetime={message.time}>{dayLabel(message.time, nowMs)} {formatClockTime(message.time)}</time>
 	</span>
-	<span class="message-text">{segments.map((segment) => segment.isMatch ? <mark>{segment.text}</mark> : segment.text)}</span>
+	<span class="message-text">{segments.map((segment) => segment.isMatch && segment.text.trim() ? <mark>{segment.text}</mark> : segment.text)}</span>
 </a>
 
 <style>
@@ -57,6 +57,13 @@ const threadNote = message.threadRootSeq ? 'reply in a thread' : message.threadR
 		font-size: 13px;
 		color: var(--color-dim);
 	}
+	.conversation {
+		min-width: 0;
+		max-width: 42ch;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
 	.conversation > span {
 		color: var(--color-text);
 	}
@@ -78,7 +85,11 @@ const threadNote = message.threadRootSeq ? 'reply in a thread' : message.threadR
 		font-size: 14px;
 		line-height: 1.5;
 		color: var(--color-message);
-		white-space: pre-line;
+		display: -webkit-box;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 3;
+		line-clamp: 3;
+		overflow: hidden;
 	}
 	mark {
 		background: var(--color-accent);
