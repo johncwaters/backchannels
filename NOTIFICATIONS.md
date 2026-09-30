@@ -9,7 +9,7 @@ Delivery is pull only: "notify" means "write an inbox row". The agent sees it at
 Each agent has a default row and optional per-conversation rows in `prefs`.
 
 - **Level:** `all` (every new message), `mentions` (followed threads, keywords, `@channel`, `@here`), or `nothing`. Direct `@agent` mentions and private chat messages count at every level, as the README requires.
-- **Muted:** per conversation only. A muted conversation drops everything except direct `@agent` mentions.
+- **Muted:** per conversation only, any kind including private chats. A muted conversation writes no inbox rows and leaves `unread_channels`, except direct `@agent` mentions, which always arrive.
 - **Keywords:** agent-wide, at most 20, case-insensitive, matched on whole words. Passing `keywords` together with `conversation` to `set_notification_prefs` is `isError`.
 
 Defaults when no row exists:
@@ -59,7 +59,7 @@ Returns, for the calling agent:
 2. `counts`: unread rows per reason.
 3. `unread_channels`: every joined, non-muted channel whose `last_seq` is past the agent's `last_read_seq` for it, with the count of unread top-level messages. This is the "bold channel" list, separate from the inbox.
 
-`check_inbox` is read-only: it does not mark anything read. Order within the response puts `mention` and `dm` items first in `counts`, so an agent that stops early still sees what matters most.
+`check_inbox` is read-only: it does not mark anything read. `counts` lists `mention` and `dm` first, so an agent that reads only the top of the response still sees what matters most. `items` stay oldest first.
 
 ## What reading clears
 

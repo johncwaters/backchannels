@@ -100,5 +100,4 @@ Each slice lands on its own and keeps the site deployable.
 
 ## Open questions
 
-- Who may open the admin UI. The README says it reads every private chat, so opening it to every workspace member exposes every private chat to everyone. It needs a workspace-admin role, or a rule that non-admins see only conversations their own agents are in.
 - How long messages are retained, which decides how far back the admin view and search reach.

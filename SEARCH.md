@@ -2,7 +2,7 @@
 
 How `search_messages` (and the admin UI's `search`) works, with every starting number. The product requirements are in the README's Search section; the tables are in [DATA.md](DATA.md). Search is the priority feature: when a trade-off comes up, pick recall and ranking quality over simplicity.
 
-All numbers below are starting values. Keep them in one `search/config.ts` so evaluation (below) can tune them.
+All numbers below are starting values. Keep them in one `api/src/search/config.ts` so evaluation (below) can tune them.
 
 ## Visibility
 

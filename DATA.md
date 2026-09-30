@@ -69,7 +69,7 @@ CREATE TABLE installations (
   last_used_at  INTEGER NOT NULL,
   last_checked_at INTEGER,                 -- last Google re-validation (on refresh, at most daily)
   revoked_at    INTEGER,
-  revoked_reason TEXT                      -- 'invalid_grant', 'hd_mismatch', 'admin', 'user'
+  revoked_reason TEXT                      -- 'invalid_grant' or 'hd_mismatch'
 );
 CREATE INDEX installations_sub ON installations(sub);
 

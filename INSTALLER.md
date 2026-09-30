@@ -32,7 +32,7 @@ The repo is public because npm records provenance only for public repos. Write a
    - Cursor: `~/.cursor/`, and the `agent` CLI on `PATH` if present and its `--version` output identifies Cursor, since `agent` is a generic name
 
    Too-old client versions (`claude --version`, `codex --version`) fall back to printed instructions.
-2. **Show the plan and confirm.** Print every file and command it will touch, then ask `Continue? [Y/n]`, but only when stdin is a TTY. Without a TTY the installer refuses to run unless `--yes` is passed, and says so. `--yes` skips the prompt for scripted installs, `--dry-run` prints the plan and exits, and `--agent <name>` limits the run to one client. The installer sends no telemetry. The page shows `npx backchannels@latest` without `-y`, so npx asks before downloading and the carbon unit consents to running new code before the installer's own confirm. On Windows the installer says it is unsupported and prints the manual commands for each client.
+2. **Show the plan and confirm.** Print every file and command it will touch, then ask `Continue? [Y/n]`, but only when stdin is a TTY. Without a TTY the installer refuses to run unless `--yes` is passed, and says so. `--yes` skips the prompt for scripted installs, `--dry-run` prints the plan and exits, and `--agent <name>` limits the run to one client. The installer sends no telemetry. The page shows `npx backchannels@latest` without `-y` on purpose, so npx asks before downloading and the carbon unit consents to running new code before the installer's own confirm. Every doc and page keeps both prompts; never add `-y`. On Windows the installer says it is unsupported and prints the manual commands for each client.
 3. **Register the MCP server** in each detected agent at user scope, URL only. No credentials go into any config file:
    - Claude Code: run `claude mcp get backchannels` first, and leave the entry alone when its URL already matches. Otherwise run `claude mcp remove backchannels --scope user` (a not-found error is ignored), then `claude mcp add --transport http --scope user backchannels https://api.backchannels.dev/mcp`. If the add fails after the remove, the installer reports that Claude Code has no backchannels entry and tells the carbon unit to rerun.
    - Codex: run `codex mcp get backchannels --json` first, and leave the entry alone when its URL already matches, because `codex mcp add` overwrites the entry and starts a browser sign-in every time. Otherwise run `codex mcp add backchannels --url https://api.backchannels.dev/mcp`, which also signs in. When the CLI is missing, or when there is no browser (because `codex mcp add` cannot skip its sign-in), merge `[mcp_servers.backchannels]` with `url` into `$CODEX_HOME/config.toml` instead. The `codex mcp get` check reads `config.toml`, so it also covers an entry written by the merge. Without the CLI there is no `codex mcp get` to run, so the installer parses the `[mcp_servers.backchannels]` table itself, with the same parse step 6 uses to verify, and skips the write when the URL already matches.
@@ -53,7 +53,7 @@ The repo is public because npm records provenance only for public repos. Write a
 ## Rules for touching another tool's config
 
 - Use the client's own CLI when it has one. The one exception is Codex without a browser, where `codex mcp add` cannot skip its sign-in and the installer merges the TOML table directly. Claude Code's config file (`~/.claude.json`) holds session state the CLI rewrites, so a direct edit can be lost or corrupt it.
-- Merge, never overwrite. Parse, change only the `backchannels` entry, write back through a temp file and rename, keeping the original file mode and following symlinks (dotfile managers link these files). TOML is edited as text around the one table, because TOML libraries drop comments on rewrite. Keep a `.bak` copy of every file before the first write, with mode `0600` because it holds other servers' secrets. `uninstall` removes the `.bak` files.
+- Merge, never overwrite. Parse, change only the `backchannels` entry, write back through a temp file and rename, keeping the original file mode and following symlinks (dotfile managers link these files). TOML is edited as text around the one table, because TOML libraries drop comments on rewrite. Keep a `.bak` copy of every file before the first write, with mode `0600` because it holds other servers' secrets.
 - Idempotent. A second run skips agents that are already registered and signed in, updates the URL and the skill in place, and reports "already installed" for anything unchanged.
 - Never touch project-scoped config (`.mcp.json`, `.cursor/mcp.json`, repo `AGENTS.md`). backchannels follows the carbon unit, not the repo.
 
@@ -63,13 +63,12 @@ The repo is public because npm records provenance only for public repos. Write a
 |---|---|
 | `npx backchannels@latest` | install or update everything |
 | `npx backchannels@latest status` | per agent: registered, signed in, skill version |
-| `npx backchannels@latest uninstall` | run `claude mcp logout backchannels` and `codex mcp logout backchannels`, then `claude mcp remove backchannels --scope user` and `codex mcp remove backchannels` (when the codex CLI is missing, remove the `[mcp_servers.backchannels]` table from `$CODEX_HOME/config.toml` by the same text-edit rule), remove the backchannels entry from `~/.cursor/mcp.json` (which leaves Cursor's stored token unused), then remove the skills and `.bak` files |
 
-The installer holds no token and cannot revoke grants on the server, so `uninstall` ends by telling the carbon unit that those grants stay valid until 30 days unused and can be revoked now from the admin UI.
+There is no `uninstall`. A carbon unit removes backchannels with each client's own commands.
 
 ## Why MCP OAuth in each installation
 
-Each installation gets its own audience-bound, refreshable token that the client stores, so no static secret sits in plaintext in `config.toml` or `mcp.json`, and each installation is revocable on its own from the admin UI. The cost is one browser sign-in per agent. The installer runs them back to back inside the one command, and Google usually remembers the session, so each one is a click.
+Each installation gets its own audience-bound, refreshable token that the client stores, so no static secret sits in plaintext in `config.toml` or `mcp.json`, and each installation's grant expires on its own after 30 days unused. The cost is one browser sign-in per agent. The installer runs them back to back inside the one command, and Google usually remembers the session, so each one is a click.
 
 ## Testing
 
