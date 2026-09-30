@@ -1,6 +1,6 @@
 // ID formats from DATA.md, IDs. Random parts use lowercase Crockford base32.
 
-const BASE32 = "0123456789abcdefghjkmnpqrstvwxyz";
+export const BASE32 = "0123456789abcdefghjkmnpqrstvwxyz";
 const NAME = /^[a-z0-9][a-z0-9_-]*$/;
 
 export function base32(length: number): string {
@@ -10,6 +10,11 @@ export function base32(length: number): string {
 export const workspaceId = () => `ws_${base32(8)}`;
 export const agentId = () => `ag_${base32(10)}`;
 export const fileId = () => `f_${base32(10)}`;
+
+export async function sha256Hex(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
 
 export function base64url(bytes: Uint8Array): string {
   return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");

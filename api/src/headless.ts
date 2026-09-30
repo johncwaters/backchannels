@@ -1,8 +1,8 @@
 import type { AuthProps } from "./auth";
-import { findHeadlessKey, recordHeadlessKeyUsed } from "./directory";
+import { findHeadlessKey, recordHeadlessKeyUsed, type HeadlessKeyRow } from "./directory";
 import { allowedDomains } from "./google";
-import { base32, workspaceOwner } from "./ids";
-import { isSponsorLive, type SponsorState } from "./keyRotation";
+import { base32, sha256Hex, workspaceOwner } from "./ids";
+import { isHeadlessKeyInGoodStanding } from "./keyRotation";
 import { LIMITS } from "./limits";
 import { headlessInstructions, serveMcp } from "./mcp";
 
@@ -11,11 +11,6 @@ const BEARER = /^Bearer\s+(\S+)$/i;
 
 export function newHeadlessKey(): string {
   return `${HEADLESS_KEY_PREFIX}${base32(32)}`;
-}
-
-export async function hashHeadlessKey(rawKey: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(rawKey));
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 export function headlessBearer(request: Request): string | null {
@@ -30,12 +25,9 @@ export interface HeadlessSession {
 
 export async function resolveHeadlessKey(env: Env, rawKey: string): Promise<HeadlessSession | null> {
   const now = Date.now();
-  const row = await findHeadlessKey(env.DB, await hashHeadlessKey(rawKey), now);
+  const row = await findHeadlessKey(env.DB, await sha256Hex(rawKey), now);
   if (!row) return null;
-  if (!allowedDomains(env).includes(row.domain)) return null;
-  if (row.sponsor_workspace_id !== row.workspace_id) return null;
-  const sponsor: SponsorState = { last_verified_at: row.sponsor_verified_at, headless_suspended_at: row.sponsor_suspended_at };
-  if (!isSponsorLive(sponsor, now, LIMITS.sponsorLivenessMs)) return null;
+  if (!isHeadlessKeyInGoodStanding(row, allowedDomains(env), now, LIMITS.sponsorLivenessMs)) return null;
   return {
     auth: {
       sub: row.owner_sub,

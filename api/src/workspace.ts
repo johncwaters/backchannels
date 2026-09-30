@@ -12,8 +12,8 @@ import {
 } from "./conversations";
 import type { AdminReadOptions, AdminResult, AdminSearchOptions, ConversationSort, FileDownload, DirectoryKind, Scope as AdminScope } from "./admin";
 import { adminFile, adminList, adminMarkRead, adminPins, adminRead, adminSearch, type AdminContext } from "./adminData";
-import { checkInbox, getNotificationPrefs, markRead, setNotificationPrefs } from "./inbox";
-import { RATE_LIMITS } from "./limits";
+import { checkInbox, getNotificationPrefs, markRead, setNotificationPrefs, watchInbox } from "./inbox";
+import { LIMITS, RATE_LIMITS } from "./limits";
 import { deleteMessage, editMessage, followThread, pin, react, readMessages, save, sendMessage } from "./messages";
 import { uploadFile } from "./files";
 import { MIGRATIONS } from "./schema";
@@ -21,14 +21,28 @@ import { SEARCH_TUNING_META_KEY, searchMessages } from "./search";
 import type { TuningOverrides } from "./search/config";
 import { buildDocument, reindexJobs, type IndexDocument, type IndexJob, type PendingIndexJob } from "./search/indexing";
 import { findWorkspaceDomain } from "./directory";
-import { fullHandle, handleOwner } from "./ids";
-import { ToolError, all, one, run, type AgentRow, type Scope } from "./store";
+import { fullHandle, handleOwner, sha256Hex } from "./ids";
+import { ToolError, all, label, messageRef, one, run, type AgentRow, type ConversationRow, type MessageRow, type Scope } from "./store";
+import { STREAM_PROTOCOL, STREAM_ROUTE, isStreamGrantLive, isWebSocketUpgrade, streamTicketFrom, unauthorizedStream } from "./stream";
 import { buildBrief, type Brief } from "./brief";
 
-// Tools served by the workspace object. Each runs in one transaction.
-const ASYNC_TOOLS = new Set(["search_messages", "upload_file"]);
+// RFC 6455 section 7.4.1: these codes describe a close but must never be sent in a close frame.
+const UNSENDABLE_CLOSE_CODES = new Set([1005, 1006, 1015]);
+const NORMAL_CLOSURE = 1000;
+const POLICY_VIOLATION = 1008;
 
-const TOOLS: Record<string, (scope: Scope, args: never) => unknown> = {
+interface StreamAttachment {
+  openedAt?: number;
+  grantId?: string;
+}
+
+const streamAttachment = (socket: WebSocket): StreamAttachment => (socket.deserializeAttachment() as StreamAttachment | null) ?? {};
+const openedAt = (socket: WebSocket): number => streamAttachment(socket).openedAt ?? 0;
+
+// Tools served by the workspace object. Each runs in one transaction.
+const ASYNC_TOOLS = new Set(["search_messages", "upload_file", "watch_inbox"]);
+
+const TOOLS: Record<string, (scope: Scope, args: never, grantId: string) => unknown> = {
   update_profile: updateProfile,
   lookup,
   list_channels: listChannels,
@@ -47,6 +61,7 @@ const TOOLS: Record<string, (scope: Scope, args: never) => unknown> = {
   follow_thread: followThread,
   read_messages: readMessages,
   check_inbox: checkInbox,
+  watch_inbox: watchInbox,
   mark_read: markRead,
   get_notification_prefs: getNotificationPrefs,
   set_notification_prefs: setNotificationPrefs,
@@ -206,15 +221,106 @@ export class WorkspaceDO extends DurableObject<Env> {
     const limited = this.takeTokens(name, agent.id, caller, now);
     if (limited) return { error: limited };
     const scope = this.scopeFor(agent, caller.workspaceId, now);
-    const invoke = () => handler(scope, args as never);
+    const invoke = () => handler(scope, args as never, caller.grantId);
     try {
       const output = ASYNC_TOOLS.has(name) ? await invoke() : this.ctx.storage.transactionSync(invoke);
       await this.sendIndexJobs(caller.workspaceId, scope.indexJobs);
+      if (name === "send_message") this.flushWatchers();
       return { output: output as Record<string, unknown> };
     } catch (error) {
       if (error instanceof ToolError) return { error: error.message };
       throw error;
     }
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    if (!isWebSocketUpgrade(request)) return new Response("expected a WebSocket upgrade\n", { status: 426 });
+    const ticket = streamTicketFrom(request);
+    const workspaceId = STREAM_ROUTE.exec(new URL(request.url).pathname)?.[1];
+    if (!ticket || !workspaceId) return unauthorizedStream();
+    const ticketHash = await sha256Hex(ticket);
+    const holder = this.streamTicketHolder(ticketHash);
+    if (!holder) return unauthorizedStream();
+    const grant = { grantId: holder.grant_id, ownerSub: holder.owner_sub, workspaceId };
+    if (!(await isStreamGrantLive(this.env, grant, Date.now()))) return unauthorizedStream();
+    if (!this.streamTicketHolder(ticketHash)) return unauthorizedStream();
+    const agentId = holder.agent_id;
+    this.closeOldestSocketsBeyondCap(agentId);
+    const [client, server] = Object.values(new WebSocketPair());
+    server.serializeAttachment({ openedAt: Date.now(), grantId: holder.grant_id } satisfies StreamAttachment);
+    this.ctx.acceptWebSocket(server, [agentId]);
+    this.flushPending(agentId);
+    return new Response(null, { status: 101, webSocket: client, headers: { "Sec-WebSocket-Protocol": STREAM_PROTOCOL } });
+  }
+
+  webSocketMessage(): void {}
+
+  webSocketClose(socket: WebSocket, code: number, reason: string): void {
+    socket.close(UNSENDABLE_CLOSE_CODES.has(code) ? NORMAL_CLOSURE : code, reason);
+  }
+
+  private closeOldestSocketsBeyondCap(agentId: string): void {
+    const openSocketsOldestFirst = this.ctx
+      .getWebSockets(agentId)
+      .filter((socket) => socket.readyState === WebSocket.OPEN)
+      .sort((first, second) => openedAt(first) - openedAt(second));
+    const socketsToClose = openSocketsOldestFirst.length - (LIMITS.openStreamSocketsPerAgent - 1);
+    for (const socket of openSocketsOldestFirst.slice(0, Math.max(socketsToClose, 0))) {
+      socket.close(POLICY_VIOLATION, "too many open streams for this agent");
+    }
+  }
+
+  private streamTicketHolder(ticketHash: string): { agent_id: string; grant_id: string; owner_sub: string } | undefined {
+    return one<{ agent_id: string; grant_id: string; owner_sub: string }>(
+      this.sql,
+      `SELECT t.agent_id, t.grant_id, a.owner_sub FROM stream_tickets t JOIN agents a ON a.id = t.agent_id
+       WHERE t.ticket_hash = ? AND t.expires_at > ? AND a.revoked_at IS NULL`,
+      ticketHash,
+      Date.now(),
+    );
+  }
+
+  async revokeGrantStreams(grantId: string): Promise<void> {
+    run(this.sql, "DELETE FROM stream_tickets WHERE grant_id = ?", grantId);
+    const grantSockets = this.ctx.getWebSockets().filter((socket) => streamAttachment(socket).grantId === grantId);
+    for (const socket of grantSockets) socket.close(POLICY_VIOLATION, "credential revoked");
+  }
+
+  private flushWatchers(): void {
+    const watchedAgentIds = new Set(this.ctx.getWebSockets().flatMap((socket) => this.ctx.getTags(socket)));
+    for (const agentId of watchedAgentIds) this.flushPending(agentId);
+  }
+
+  private flushPending(agentId: string): void {
+    const openSockets = this.ctx.getWebSockets(agentId).filter((socket) => socket.readyState === WebSocket.OPEN);
+    if (!openSockets.length) return;
+    const pending = one<{ message_id: number; reason: string }>(
+      this.sql,
+      `SELECT message_id, reason FROM inbox
+       WHERE agent_id = ?1 AND message_id > (SELECT push_cursor FROM agents WHERE id = ?1) AND read_at IS NULL
+       ORDER BY message_id LIMIT 1`,
+      agentId,
+    );
+    if (!pending) return;
+    const event = JSON.stringify(this.pushEvent(pending.message_id, pending.reason));
+    for (const socket of openSockets) socket.send(event);
+    run(
+      this.sql,
+      "UPDATE agents SET push_cursor = (SELECT max(message_id) FROM inbox WHERE agent_id = ?1) WHERE id = ?1",
+      agentId,
+    );
+  }
+
+  private pushEvent(messageId: number, reason: string) {
+    const message = one<MessageRow>(this.sql, "SELECT * FROM messages WHERE id = ?", messageId)!;
+    const conversation = one<ConversationRow>(this.sql, "SELECT * FROM conversations WHERE id = ?", message.conversation_id)!;
+    const author = one<{ handle: string }>(this.sql, "SELECT handle FROM agents WHERE id = ?", message.author_id);
+    return {
+      reason,
+      conversation: label(conversation),
+      message: messageRef(conversation, message.seq),
+      from: `@${author?.handle ?? "unknown"}`,
+    };
   }
 
   async adminList(
@@ -261,7 +367,9 @@ export class WorkspaceDO extends DurableObject<Env> {
     if (!agent) return null;
     if (agent.revoked_at !== null) return agent.id;
     run(this.sql, "UPDATE agents SET revoked_at = ? WHERE id = ?", Date.now(), agent.id);
+    run(this.sql, "DELETE FROM stream_tickets WHERE agent_id = ?", agent.id);
     this.audit(grantId, agent.id, "revoke_agent");
+    for (const socket of this.ctx.getWebSockets(agent.id)) socket.close(POLICY_VIOLATION, "agent revoked");
     return agent.id;
   }
 

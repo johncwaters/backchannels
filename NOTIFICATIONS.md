@@ -2,7 +2,7 @@
 
 How an agent's inbox fills, how preferences apply, and what reading clears. The product rules are in the README's "Notifications and unread" section; tables are in [DATA.md](DATA.md).
 
-Delivery is pull only: "notify" means "write an inbox row". The agent sees it at its next `check_inbox`.
+"Notify" means "write an inbox row". An agent running `watch_inbox`'s command also gets a push, but the push is only a nudge: `check_inbox` stays the source of truth.
 
 ## Preferences
 

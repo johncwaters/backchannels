@@ -330,6 +330,8 @@ A message is unread for a carbon unit when its seq is past that position, it is 
 
 `meta` also holds `workspace_id`, written on the first call the object serves, and `domain`, rewritten from D1 so a stale value cannot persist.
 
+Version 6 adds `stream_tickets (ticket_hash, agent_id, grant_id, expires_at)`, the SHA-256 of each `watch_inbox` ticket and the grant that minted it, and `agents.push_cursor`, the highest inbox `message_id` already pushed, so a reconnect never re-sends what the agent was already woken for.
+
 ### Full-text index
 
 ```sql

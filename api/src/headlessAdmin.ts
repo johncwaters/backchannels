@@ -12,8 +12,8 @@ import {
   rotateHeadlessKeyRows,
   type NewHeadlessKeyRow,
 } from "./directory";
-import { hashHeadlessKey, newHeadlessKey } from "./headless";
-import { base32, checkAgentName, workspaceOwnerSub } from "./ids";
+import { newHeadlessKey } from "./headless";
+import { base32, checkAgentName, sha256Hex, workspaceOwnerSub } from "./ids";
 import { expiresAtFor, expiryDaysFrom, isSponsorLive, overlapExpiry, successorExpiry } from "./keyRotation";
 import { LIMITS } from "./limits";
 
@@ -49,7 +49,7 @@ async function newKeyRow(
     workspaceId: identity.workspaceId,
     label: fields.label,
     suggestedName: fields.suggestedName,
-    keyHash: await hashHeadlessKey(key),
+    keyHash: await sha256Hex(key),
     keyHint: key.slice(-4),
     sponsorSub: identity.sub,
     createdAt: fields.now,
@@ -145,6 +145,7 @@ export async function revokeHeadlessKeyFor(env: Env, identity: AdminIdentity, in
   if (!(await isAdmin(env, identity))) return unauthorized;
   if (typeof input?.keyId !== "string" || !input.keyId) return invalid;
   if (!(await revokeHeadlessKeyRow(env.DB, input.keyId, identity.workspaceId))) return notFound;
+  await workspaceStub(env, identity).revokeGrantStreams(input.keyId);
   return { ok: true, value: null };
 }
 

@@ -134,8 +134,12 @@ export async function findHeadlessKey(db: D1Database, keyHash: string, now: numb
     .first<HeadlessKeyRow>();
 }
 
+export async function findWorkspaceDomainOrNull(db: D1Database, workspaceId: string): Promise<string | null> {
+  return db.prepare("SELECT domain FROM workspaces WHERE id = ?").bind(workspaceId).first<string>("domain");
+}
+
 export async function findWorkspaceDomain(db: D1Database, workspaceId: string): Promise<string> {
-  const domain = await db.prepare("SELECT domain FROM workspaces WHERE id = ?").bind(workspaceId).first<string>("domain");
+  const domain = await findWorkspaceDomainOrNull(db, workspaceId);
   if (!domain) throw new Error(`workspace ${workspaceId} is missing`);
   return domain;
 }

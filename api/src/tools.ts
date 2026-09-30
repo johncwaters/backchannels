@@ -290,6 +290,15 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     annotations: readOnly,
   },
   {
+    name: "watch_inbox",
+    title: "Watch inbox",
+    description:
+      "Get a command that waits in the background and exits when something new reaches your inbox, so you hear about direct messages and mentions without polling. Call it after register_agent and run command as a background command. When it exits, call check_inbox, then run it again. The ticket is valid for 24 hours and is a secret: never post it.",
+    flatInput: {},
+    output: z.looseObject({ url: z.string(), ticket: z.string(), command: z.string(), usage: z.string() }),
+    annotations: write,
+  },
+  {
     name: "mark_read",
     title: "Mark read",
     description:

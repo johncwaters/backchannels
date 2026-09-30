@@ -1,5 +1,6 @@
-import { ensureWorkspaceOwner } from "../src/directory";
-import { hashHeadlessKey, newHeadlessKey } from "../src/headless";
+import { ensureWorkspaceOwner, recordInstallation } from "../src/directory";
+import { newHeadlessKey } from "../src/headless";
+import { sha256Hex } from "../src/ids";
 import { createHeadlessKeyFor, listHeadlessKeysFor, revokeHeadlessAgentFor, revokeHeadlessKeyFor, rotateHeadlessKeyFor } from "../src/headlessAdmin";
 import worker from "../src/index";
 import { serveMcp } from "../src/mcp";
@@ -7,7 +8,18 @@ import type { TuningOverrides } from "../src/search/config";
 import { vectorId } from "../src/search/indexing";
 import { deleteVectors } from "../src/search/vectors";
 
-export { AdminApi, AdminClientsDO, ReindexWorkflow, WorkspaceDO } from "../src/index";
+import { WorkspaceDO as ProductionWorkspaceDO } from "../src/index";
+
+export { AdminApi, AdminClientsDO, ReindexWorkflow } from "../src/index";
+
+export class WorkspaceDO extends ProductionWorkspaceDO {
+  async expireStreamTickets(handle: string): Promise<number> {
+    return this.ctx.storage.sql.exec(
+      "UPDATE stream_tickets SET expires_at = 0 WHERE agent_id = (SELECT id FROM agents WHERE handle = ?)",
+      handle,
+    ).rowsWritten;
+  }
+}
 
 const DEFAULT_SPACE = "suite";
 const EVAL_DOMAIN = "eval.example";
@@ -74,7 +86,7 @@ async function seedHeadlessKey(env: Env, space: EvalSpace, seed: HeadlessSeed): 
       space.workspaceId,
       "eval key",
       seed.suggestedName ?? "hosted-eval",
-      await hashHeadlessKey(key),
+      await sha256Hex(key),
       key.slice(-4),
       sponsorSub,
       now,
@@ -185,6 +197,7 @@ export default {
         workspace_id: space.workspaceId,
         grant_id: `eval-${space.workspaceId}-${who}`,
       };
+      await recordInstallation(env.DB, { grantId: auth.grant_id, sub: auth.sub, workspaceId: space.workspaceId, clientId: "eval", kind: "mcp" });
       return serveMcp(new Request(new URL("/mcp", request.url), request), env, ctx, auth);
     }
     if (url.pathname.startsWith("/eval/")) {
@@ -213,6 +226,12 @@ export default {
       }
       if (url.pathname === "/eval/seed-headless" && request.method === "POST") {
         return seedHeadlessKey(env, space, (await request.json()) as HeadlessSeed);
+      }
+      if (url.pathname === "/eval/expire-stream-tickets" && request.method === "POST") {
+        const body = (await request.json()) as { handle: string };
+        const evalWorkspaces = env.WORKSPACE as unknown as DurableObjectNamespace<WorkspaceDO>;
+        const stub = evalWorkspaces.get(evalWorkspaces.idFromName(space.workspaceId));
+        return Response.json({ expired: await stub.expireStreamTickets(body.handle.replace(/^@/, "")) });
       }
       if (url.pathname === "/eval/tuning" && request.method === "POST") {
         const body = (await request.json()) as { tuning?: TuningOverrides | null; resetSignals?: boolean };

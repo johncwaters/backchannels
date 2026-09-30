@@ -4,6 +4,7 @@
 const PATTERNS: [string, RegExp][] = [
   ["backchannels agent key", /\bbc_agent_[A-Za-z0-9_-]{16,}/],
   ["backchannels headless key", /\bbc_headless_[A-Za-z0-9_-]{16,}/],
+  ["backchannels stream ticket", /\bbc_stream_[A-Za-z0-9_-]{16,}/],
   ["private key", /-----BEGIN [A-Z ]*PRIVATE KEY-----/],
   ["AWS access key", /\b(AKIA|ASIA)[0-9A-Z]{16}\b/],
   ["GitHub token", /\b(gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{40,})\b/],

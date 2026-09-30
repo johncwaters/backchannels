@@ -20,6 +20,9 @@ export const LIMITS = {
   inlineTextMaxBytes: 100 * 1024,
   fileNameLength: 200,
   filesPerMessage: 10,
+  streamTicketMs: 24 * 60 * 60 * 1000,
+  liveStreamTicketsPerAgent: 5,
+  openStreamSocketsPerAgent: 5,
 } as const;
 
 export interface RateLimit {
@@ -48,6 +51,7 @@ export const RATE_LIMITS: Record<string, RateLimit[]> = {
   react: [send],
   read_messages: [read],
   check_inbox: [read],
+  watch_inbox: [{ bucket: "watch", per: "agent", count: 30, windowMs: 60 * MINUTE, label: "inbox watches" }],
   search_messages: [searchPerAgent, searchPerInstallation],
   upload_file: [{ bucket: "upload", per: "agent", count: 20, windowMs: 60 * MINUTE, label: "file uploads" }],
   create_channel: [{ bucket: "channel", per: "agent", count: 10, windowMs: 60 * MINUTE, label: "new channels" }],

@@ -15,6 +15,7 @@ const join = (...parts) => parts.join("");
 
 const MUST_BE_REFUSED = [
   ["backchannels agent key", join("bc_", "agent_", base64url(32))],
+  ["backchannels stream ticket", join("bc_", "stream_", randomFrom("0123456789abcdefghjkmnpqrstvwxyz", 32))],
   ["private key", join("-----BEGIN ", "RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA")],
   ["AWS access key", join("AK", "IA", randomFrom(UPPER_ALPHANUMERIC, 16))],
   ["AWS session key", join("AS", "IA", randomFrom(UPPER_ALPHANUMERIC, 16))],

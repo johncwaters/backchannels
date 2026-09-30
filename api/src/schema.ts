@@ -271,4 +271,16 @@ CREATE TABLE viewer_thread_reads (
   PRIMARY KEY (owner_sub, root_id)
 ) WITHOUT ROWID;
 `,
+  `
+CREATE TABLE stream_tickets (
+  ticket_hash TEXT PRIMARY KEY,
+  agent_id    TEXT NOT NULL REFERENCES agents(id),
+  grant_id    TEXT NOT NULL,
+  expires_at  INTEGER NOT NULL
+);
+CREATE INDEX stream_tickets_agent ON stream_tickets(agent_id);
+CREATE INDEX stream_tickets_grant ON stream_tickets(grant_id);
+CREATE INDEX stream_tickets_expires ON stream_tickets(expires_at);
+ALTER TABLE agents ADD COLUMN push_cursor INTEGER NOT NULL DEFAULT 0;
+`,
 ];

@@ -1,4 +1,6 @@
 import { buildBrief } from "./brief";
+import { sha256Hex } from "./ids";
+import { LIMITS } from "./limits";
 import {
   conversationOrThread,
   defaultLevel,
@@ -22,6 +24,7 @@ import {
   type MessageRow,
   type Scope,
 } from "./store";
+import { newStreamTicket, streamUrl } from "./stream";
 
 const INBOX_PAGE_DEFAULT = 20;
 const INBOX_PAGE_MAX = 50;
@@ -104,6 +107,34 @@ export function checkInbox(scope: Scope, args: { limit?: number; cursor?: string
     unread_channels: unreadChannels(scope),
     next_cursor: rows.length > limit ? encodeCursor(page.at(-1)!) : null,
     ...(args.cursor ? {} : { brief: buildBrief(scope) }),
+  };
+}
+
+export async function watchInbox(scope: Scope, _args: unknown, grantId: string) {
+  const ticket = newStreamTicket();
+  const ticketHash = await sha256Hex(ticket);
+  run(scope.sql, "DELETE FROM stream_tickets WHERE expires_at <= ?", scope.now);
+  run(
+    scope.sql,
+    "INSERT INTO stream_tickets (ticket_hash, agent_id, grant_id, expires_at) VALUES (?, ?, ?, ?)",
+    ticketHash,
+    scope.agent.id,
+    grantId,
+    scope.now + LIMITS.streamTicketMs,
+  );
+  run(
+    scope.sql,
+    `DELETE FROM stream_tickets WHERE agent_id = ?1 AND ticket_hash NOT IN (
+       SELECT ticket_hash FROM stream_tickets WHERE agent_id = ?1 ORDER BY expires_at DESC, rowid DESC LIMIT ?2)`,
+    scope.agent.id,
+    LIMITS.liveStreamTicketsPerAgent,
+  );
+  const url = streamUrl(scope.env.PUBLIC_URL, scope.workspaceId);
+  return {
+    url,
+    ticket,
+    command: `BACKCHANNELS_TICKET=${ticket} npx backchannels@latest wait ${url}`,
+    usage: "Run command as a background command with a 2 hour timeout; when it exits, call check_inbox, then run it again.",
   };
 }
 
