@@ -58,6 +58,34 @@ export async function recordRevoked(db: D1Database, grantId: string, reason: str
     .run();
 }
 
+export interface InstallationRow {
+  grant_id: string;
+  client_name: string | null;
+  created_at: number;
+  last_used_at: number;
+}
+
+export async function listActiveMcpInstallations(db: D1Database, sub: string, workspaceId: string): Promise<InstallationRow[]> {
+  const found = await db
+    .prepare(
+      `SELECT grant_id, client_name, created_at, last_used_at FROM installations
+       WHERE sub = ? AND workspace_id = ? AND kind = 'mcp' AND revoked_at IS NULL ORDER BY last_used_at DESC`,
+    )
+    .bind(sub, workspaceId)
+    .all<InstallationRow>();
+  return found.results;
+}
+
+export async function isActiveMcpInstallationOf(db: D1Database, grantId: string, sub: string, workspaceId: string): Promise<boolean> {
+  const found = await db
+    .prepare(
+      "SELECT 1 AS found FROM installations WHERE grant_id = ? AND sub = ? AND workspace_id = ? AND kind = 'mcp' AND revoked_at IS NULL",
+    )
+    .bind(grantId, sub, workspaceId)
+    .first<number>("found");
+  return found === 1;
+}
+
 const lastUsedWrites = new Map<string, number>();
 
 // At most one write per minute per grant (DATA.md, Request resolution).

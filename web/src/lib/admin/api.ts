@@ -9,6 +9,8 @@ export interface AdminApi {
 	listConversations(options: Parameters<AdminApiRpc['listConversations']>[1]): ReturnType<AdminApiRpc['listConversations']>;
 	readConversation(options: Parameters<AdminApiRpc['readConversation']>[1]): ReturnType<AdminApiRpc['readConversation']>;
 	search(options: Parameters<AdminApiRpc['search']>[1]): ReturnType<AdminApiRpc['search']>;
+	listInstallations(): ReturnType<AdminApiRpc['listInstallations']>;
+	revokeInstallation(options: Parameters<AdminApiRpc['revokeInstallation']>[1]): ReturnType<AdminApiRpc['revokeInstallation']>;
 }
 
 const refreshWindowMs = 60_000;
@@ -54,6 +56,8 @@ export async function adminApiFor(context: APIContext): Promise<AdminApi | Respo
 		listConversations: (options) => rpc.listConversations(accessToken, options),
 		readConversation: (options) => rpc.readConversation(accessToken, options),
 		search: (options) => rpc.search(accessToken, options),
+		listInstallations: () => rpc.listInstallations(accessToken),
+		revokeInstallation: (options) => rpc.revokeInstallation(accessToken, options),
 	};
 }
 

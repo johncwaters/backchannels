@@ -1,11 +1,13 @@
 import { WorkerEntrypoint, WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
-import type { AdminApiRpc, AdminResult, ConversationSort, DirectoryKind, Scope, SearchMatch, Viewer } from "./admin";
+import type { AdminApiRpc, AdminResult, ConversationSort, DirectoryKind, Installation, Scope, SearchMatch, Viewer } from "./admin";
 import {
   adminSignInUrl,
   authenticateAdmin,
   exchangeAdminCode,
+  listInstallations,
   refreshAdminSession,
   revokeAdminSession,
+  revokeInstallation,
   type AdminIdentity,
 } from "./adminSession";
 import { authorize, googleCallback, oauthServers } from "./auth";
@@ -96,6 +98,18 @@ export class AdminApi extends WorkerEntrypoint<Env> implements AdminApiRpc {
       ranges: match.ranges.map(([start, end]): [number, number] => [start, end]),
     }));
     return { ok: true, value: { ...found.value, matches } };
+  }
+
+  async listInstallations(token: string): Promise<AdminResult<{ installations: Installation[] }>> {
+    const identity = await authenticateAdmin(this.env, this.ctx, token);
+    if (!identity) return unauthorized;
+    return listInstallations(this.env, identity);
+  }
+
+  async revokeInstallation(token: string, options: { grantId: string }): Promise<AdminResult<null>> {
+    const identity = await authenticateAdmin(this.env, this.ctx, token);
+    if (!identity) return unauthorized;
+    return revokeInstallation(this.env, identity, options);
   }
 }
 

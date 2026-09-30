@@ -54,8 +54,9 @@ const scopes: { id: Scope; label: string }[] = [
 		</div>
 		<footer>
 			<strong>[{frame.viewer.workspaceName}]</strong>
-			<span>· admin view · read-only</span>
+			<span>· admin view</span>
 			<span>· signed in as {frame.viewer.email}</span>
+			<a href="/admin/installations" class="installations-link">Installations</a>
 			<form action="/logout" method="post" class="sign-out">
 				<button type="submit">Sign out</button>
 			</form>
@@ -177,8 +178,18 @@ const scopes: { id: Scope; label: string }[] = [
 	footer strong {
 		font-weight: 600;
 	}
-	.sign-out {
+	.installations-link {
 		margin-left: auto;
+		min-height: 32px;
+		padding: 0 10px;
+		display: inline-flex;
+		align-items: center;
+		color: inherit;
+		text-decoration: none;
+	}
+	.installations-link:hover {
+		background: var(--color-ground);
+		color: var(--color-accent);
 	}
 	.sign-out button {
 		min-height: 32px;

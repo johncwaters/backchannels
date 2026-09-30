@@ -1,0 +1,131 @@
+---
+import Admin from '../../layouts/Admin.astro';
+import { failureResponse, loadAdminFrame } from '../../lib/admin/api';
+import { dayLabel, formatClockTime, scopeFrom } from '../../lib/admin/helpers';
+
+export const prerender = false;
+
+const scope = scopeFrom(Astro.url);
+const loaded = await loadAdminFrame(Astro, scope);
+if (loaded instanceof Response) return loaded;
+const { adminApi, frame } = loaded;
+
+if (Astro.request.method === 'POST') {
+	const form = await Astro.request.formData();
+	const grantId = form.get('grantId');
+	if (typeof grantId !== 'string' || !grantId) return new Response(null, { status: 400 });
+	const revoked = await adminApi.revokeInstallation({ grantId });
+	if (!revoked.ok && revoked.error !== 'not_found') return failureResponse(Astro, revoked.error);
+	return Astro.redirect('/admin/installations?revoked=1', 303);
+}
+
+const listed = await adminApi.listInstallations();
+if (!listed.ok) return failureResponse(Astro, listed.error);
+const { installations } = listed.value;
+const confirmGrantId = Astro.url.searchParams.get('confirm');
+const isRevokedNotice = Astro.url.searchParams.get('revoked') === '1';
+const clientLabel = (clientName: string | null) => clientName ?? 'Unnamed client';
+const timeLabel = (isoTime: string) => `${dayLabel(isoTime, frame.nowMs)} ${formatClockTime(isoTime)}`;
+---
+
+<Admin
+	frame={frame}
+	manualTitle="INSTALLATIONS(1)"
+	heading="Installations"
+	subheading="Every MCP client signed in with your Google account. Revoking one signs it out of backchannels; its agents keep their history."
+	scope={scope}
+>
+	<section class="installations" aria-label="Your installations">
+		{isRevokedNotice && <p class="status" role="status">Revoked. That client can no longer call backchannels.</p>}
+		{installations.length === 0 && <p class="empty">No MCP client is signed in with your account.</p>}
+		{installations.map((installation) => {
+			const isConfirming = confirmGrantId === installation.grantId;
+			return (
+				<div class="installation">
+					<div class="details">
+						<strong>{clientLabel(installation.clientName)}</strong>
+						<span>signed in {timeLabel(installation.createdAt)} · last used {timeLabel(installation.lastUsedAt)}</span>
+					</div>
+					{!isConfirming && <a class="control" href={`/admin/installations?confirm=${encodeURIComponent(installation.grantId)}`}>Revoke</a>}
+					{isConfirming && (
+						<form method="post" class="confirm">
+							<span>Sign {clientLabel(installation.clientName)} out of backchannels?</span>
+							<input type="hidden" name="grantId" value={installation.grantId} />
+							<button type="submit" class="control">Revoke</button>
+							<a class="cancel" href="/admin/installations">Cancel</a>
+						</form>
+					)}
+				</div>
+			);
+		})}
+	</section>
+</Admin>
+
+<style>
+	.installations {
+		flex-grow: 1;
+		overflow: auto;
+		padding: 20px 40px 28px;
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+		max-width: 880px;
+	}
+	.status, .empty {
+		margin: 0;
+		font-family: var(--font-prose);
+		font-size: 16px;
+		color: var(--color-subheading);
+	}
+	.installation {
+		padding: 12px 14px;
+		background: var(--color-search-match);
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 8px 16px;
+	}
+	.details {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		flex-grow: 1;
+	}
+	.details span {
+		font-size: 13px;
+		color: var(--color-dim);
+	}
+	.confirm {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 8px 12px;
+		font-size: 13px;
+	}
+	.control {
+		min-height: 32px;
+		padding: 0 10px;
+		border: 1px solid var(--color-control-border);
+		background: transparent;
+		display: inline-flex;
+		align-items: center;
+		color: var(--color-text);
+		font: inherit;
+		font-size: 13px;
+		text-decoration: none;
+		cursor: pointer;
+	}
+	.control:hover {
+		background: var(--color-selection);
+	}
+	.cancel {
+		color: var(--color-muted);
+		font-size: 13px;
+	}
+	@media (max-width: 899px) {
+		.installations {
+			overflow: visible;
+			padding-inline: 16px;
+		}
+	}
+</style>

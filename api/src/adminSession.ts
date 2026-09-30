@@ -1,10 +1,11 @@
 import type { OAuthHelpers } from "@cloudflare/workers-oauth-provider";
-import type { AdminResult, AdminSession } from "./admin";
+import type { AdminResult, AdminSession, Installation } from "./admin";
 import { adminClient, adminResource, isAdminClient, oauthServers, type AdminClient, type AuthProps } from "./auth";
-import { recordRevoked, recordUsed } from "./directory";
+import { isActiveMcpInstallationOf, listActiveMcpInstallations, recordRevoked, recordUsed } from "./directory";
 
 const unauthorized = { ok: false, error: "unauthorized" } as const;
 const invalid = { ok: false, error: "invalid" } as const;
+const notFound = { ok: false, error: "not_found" } as const;
 
 const isText = (value: unknown): value is string => typeof value === "string" && value.length > 0;
 
@@ -94,11 +95,11 @@ export async function refreshAdminSession(
   return requestSession(env, ctx, client, { grant_type: "refresh_token", refresh_token: input.refreshToken });
 }
 
-async function hasGrant(oauth: OAuthHelpers, userId: string, grantId: string, clientId: string): Promise<boolean> {
+async function hasGrant(oauth: OAuthHelpers, userId: string, grantId: string, clientId?: string): Promise<boolean> {
   let cursor: string | undefined;
   do {
     const page = await oauth.listUserGrants(userId, { cursor });
-    if (page.items.some((grant) => grant.id === grantId && grant.clientId === clientId)) return true;
+    if (page.items.some((grant) => grant.id === grantId && (clientId === undefined || grant.clientId === clientId))) return true;
     cursor = page.cursor;
   } while (cursor);
   return false;
@@ -129,5 +130,31 @@ export async function revokeAdminSession(
   const isRevoked = (await attemptRevocation()) || (await attemptRevocation());
   if (!isRevoked) throw new Error("The admin grant survived two revocation attempts.");
   ctx.waitUntil(recordRevoked(env.DB, grantId, "user"));
+  return { ok: true, value: null };
+}
+
+export async function listInstallations(env: Env, identity: AdminIdentity): Promise<AdminResult<{ installations: Installation[] }>> {
+  const rows = await listActiveMcpInstallations(env.DB, identity.sub, identity.workspaceId);
+  const installations = rows.map((row) => ({
+    grantId: row.grant_id,
+    clientName: row.client_name,
+    createdAt: new Date(row.created_at).toISOString(),
+    lastUsedAt: new Date(row.last_used_at).toISOString(),
+  }));
+  return { ok: true, value: { installations } };
+}
+
+export async function revokeInstallation(
+  env: Env,
+  identity: AdminIdentity,
+  input: { grantId: string },
+): Promise<AdminResult<null>> {
+  if (!isText(input?.grantId)) return invalid;
+  const { grantId } = input;
+  if (!(await isActiveMcpInstallationOf(env.DB, grantId, identity.sub, identity.workspaceId))) return notFound;
+  const oauth = oauthServers(env).authorization.getOAuthApi(env);
+  await oauth.revokeGrant(grantId, identity.sub);
+  if (await hasGrant(oauth, identity.sub, grantId)) throw new Error("The installation's grant survived revocation.");
+  await recordRevoked(env.DB, grantId, "user");
   return { ok: true, value: null };
 }

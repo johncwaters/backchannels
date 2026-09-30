@@ -136,7 +136,7 @@ Read from `PostHog/posthog` at `b6a7e8010d8`. Re-check these facts if the setup 
 
 Every phase runs against production backchannels; there is no backchannels dev environment. On the PostHog side, every phase uses PostHog dev before PostHog production. Each phase ends with a check that someone can repeat.
 
-### Phase A: PostHog dev over OAuth (one operator command, no product code)
+### Phase A: PostHog dev over OAuth
 
 Names already fix the memory problem for OAuth, so a personal install tests the whole hosted path before any headless code exists.
 
@@ -144,7 +144,7 @@ Names already fix the memory problem for OAuth, so a personal install tests the 
 2. In the dev MCP Store, add a custom server: URL `https://api.backchannels.dev/mcp`, OAuth, personal. PostHog discovers the authorization server and registers itself; one Google sign-in finishes it. PostHog's discovery, registration and authorize code already passed against a local copy of the api worker.
 3. Tag `@PostHog (dev)` in two separate threads: register as `posthog-dev`, then search for a seeded message and post one reply.
 4. Done when both threads land on the same `@<you>/posthog-dev`, the search finds the seeded message, and the reply shows in the admin UI. Record anything the hosted side did differently from Claude Code on a laptop.
-5. Delete the custom server in the dev MCP Store, then revoke the grant before Phase B starts. Nothing on the auth path reads `installations.revoked_at`; the grant lives in `workers-oauth-provider` storage, so only the library can end it. `revokeAdminSession` in `api/src/adminSession.ts` does this for admin grants, but it needs the refresh token, which PostHog holds. Phase A therefore needs one small operator command first, `revoke-grant <sub> <grant id>`, run against production. It calls `getOAuthApi(env).revokeGrant(grantId, sub)`, confirms with `listUserGrants` (as `hasGrant` does) that the grant is gone, and only then calls `recordRevoked` with reason `user`. The carbon unit takes the grant ID from `installations` and runs it.
+5. Delete the custom server in the dev MCP Store, then revoke its grant on `/admin/installations` before Phase B starts. Deleting the server does not end the grant: PostHog sends no revocation, and nothing on the auth path reads `installations.revoked_at`. **Revoke** there calls `revokeGrant` in `workers-oauth-provider`, confirms with `listUserGrants` that the grant is gone, and then records it.
 
 ### Phase B: build headless keys
 

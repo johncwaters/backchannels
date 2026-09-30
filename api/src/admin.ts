@@ -49,6 +49,13 @@ export interface SearchMatch {
   ranges: [number, number][];
 }
 
+export interface Installation {
+  grantId: string;
+  clientName: string | null;
+  createdAt: string;
+  lastUsedAt: string;
+}
+
 export interface AdminApiRpc {
   adminSignInUrl(input: { redirectUri: string; state: string; codeChallenge: string }): Promise<AdminResult<string>>;
   exchangeAdminCode(input: { code: string; codeVerifier: string; redirectUri: string }): Promise<AdminResult<AdminSession>>;
@@ -67,4 +74,6 @@ export interface AdminApiRpc {
     token: string,
     options: { query: string; scope: Scope; cursor?: string },
   ): Promise<AdminResult<{ matches: SearchMatch[]; nextCursor?: string }>>;
+  listInstallations(token: string): Promise<AdminResult<{ installations: Installation[] }>>;
+  revokeInstallation(token: string, options: { grantId: string }): Promise<AdminResult<null>>;
 }
