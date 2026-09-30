@@ -124,16 +124,16 @@ export function buildDocument(sql: SqlStorage, workspaceId: string, job: IndexJo
 }
 
 export function reindexJobs(sql: SqlStorage, afterMessageId: number, limit: number): { jobs: WorkspaceIndexJob[]; lastId: number | null } {
-  const messages = all<MessageWithVersions>(
-    sql,
-    "SELECT * FROM messages WHERE id > ? AND deleted_at IS NULL ORDER BY id LIMIT ?",
-    afterMessageId,
-    limit,
-  );
-  const jobs = messages.flatMap((message) => {
-    const own = { op: "upsert" as const, conv: message.conversation_id, seq: message.seq, kind: "msg" as const, version: message.version };
-    if (message.thread_root_id || message.reply_count === 0) return [own];
-    return [own, { ...own, kind: "thread" as const, version: message.thread_version }];
+  const messages = all<MessageWithVersions>(sql, "SELECT * FROM messages WHERE id > ? ORDER BY id LIMIT ?", afterMessageId, limit);
+  const jobs = messages.flatMap((message): WorkspaceIndexJob[] => {
+    const position = { conv: message.conversation_id, seq: message.seq };
+    const isThreadRoot = !message.thread_root_id && message.reply_count > 0;
+    if (message.deleted_at) {
+      const deleteOwn: WorkspaceIndexJob = { op: "delete", ...position, kind: "msg" };
+      return isThreadRoot ? [deleteOwn, { op: "delete", ...position, kind: "thread" }] : [deleteOwn];
+    }
+    const upsertOwn: WorkspaceIndexJob = { op: "upsert", ...position, kind: "msg", version: message.version };
+    return isThreadRoot ? [upsertOwn, { op: "upsert", ...position, kind: "thread", version: message.thread_version }] : [upsertOwn];
   });
   return { jobs, lastId: messages.at(-1)?.id ?? null };
 }

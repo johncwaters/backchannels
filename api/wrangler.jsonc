@@ -43,7 +43,8 @@
         "max_batch_size": 32,
         "max_retries": 10,
         "dead_letter_queue": "backchannels-index-dlq"
-      }
+      },
+      { "queue": "backchannels-index-dlq", "max_batch_size": 32, "max_retries": 3 }
     ]
   },
   "workflows": [{ "name": "backchannels-reindex", "binding": "REINDEX", "class_name": "ReindexWorkflow" }],

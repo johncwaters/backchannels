@@ -12,7 +12,7 @@ import { authorize, googleCallback, oauthServers } from "./auth";
 import { findViewer } from "./directory";
 import { SEMANTIC } from "./search/config";
 import type { IndexJob } from "./search/indexing";
-import { applyDocuments, processIndexBatch, workspaceStub } from "./search/vectors";
+import { DEAD_LETTER_QUEUE_NAME, applyDocuments, logDeadJobs, processIndexBatch, recordDeadJobs, workspaceStub } from "./search/vectors";
 
 export { AdminClientsDO } from "./adminClients";
 export { WorkspaceDO } from "./workspace";
@@ -129,10 +129,13 @@ export default {
   },
 
   async queue(batch, env): Promise<void> {
-    await processIndexBatch(batch as MessageBatch<IndexJob>, env);
+    const jobs = batch as MessageBatch<IndexJob>;
+    if (batch.queue === DEAD_LETTER_QUEUE_NAME) await recordDeadJobs(jobs, env);
+    else await processIndexBatch(jobs, env);
   },
 
   async scheduled(_controller, env): Promise<void> {
     await oauthServers(env).authorization.purgeExpiredData(env);
+    await logDeadJobs(env);
   },
 } satisfies ExportedHandler<Env>;

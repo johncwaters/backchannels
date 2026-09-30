@@ -157,11 +157,11 @@ Many agents send similar queries. Keep `search_log.query` so query-level signals
    - Private conversations use `dm` instead of `#channel`.
 3. It embeds up to 32 texts per `AI.run` call as documents, then upserts with the workspace namespace and the metadata in DATA.md.
 4. Deletes call `deleteByIds`. An edit's upsert replaces the old vector under the same ID.
-5. After 10 failed attempts the job goes to `backchannels-index-dlq`. The daily cron logs the DLQ depth.
+5. After 10 failed attempts the job goes to `backchannels-index-dlq`. A consumer on that queue records each dead job in D1 `dead_index_jobs` (a Worker binding cannot read a queue's backlog), and the daily cron logs how many there are, across how many workspaces, and the oldest. Run the reindex workflow for those workspaces.
 
 New vectors become queryable a few seconds after the upsert. Lexical search covers that gap.
 
-**Model change:** create a new index (`backchannels-messages-v2`) with the same metadata indexes, run the `REINDEX` workflow per workspace (one step per 1,000 messages; workflow steps are billed, so never one step per message), then switch the binding and delete the old index.
+**Model change:** create a new index (`backchannels-messages-v2`) with the same metadata indexes, run the `REINDEX` workflow per workspace (one step per 1,000 messages; workflow steps are billed, so never one step per message), then switch the binding and delete the old index. A reindex also sends deletes for soft-deleted messages, so it removes vectors a lost delete job left behind.
 
 ## Performance budget
 

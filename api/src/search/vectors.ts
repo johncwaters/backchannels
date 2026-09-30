@@ -43,3 +43,32 @@ export async function processIndexBatch(batch: MessageBatch<IndexJob>, env: Env)
     }),
   );
 }
+
+export const DEAD_LETTER_QUEUE_NAME = "backchannels-index-dlq";
+
+export async function recordDeadJobs(batch: MessageBatch<IndexJob>, env: Env): Promise<void> {
+  const deadAt = Date.now();
+  await env.DB.batch(
+    batch.messages.map((message) =>
+      env.DB.prepare("INSERT INTO dead_index_jobs (workspace_id, job, dead_at) VALUES (?, ?, ?)").bind(
+        message.body.ws,
+        JSON.stringify(message.body),
+        deadAt,
+      ),
+    ),
+  );
+  console.error(`${batch.messages.length} index jobs failed every retry; recorded in dead_index_jobs, run the reindex workflow for their workspaces`);
+  batch.ackAll();
+}
+
+export async function logDeadJobs(env: Env): Promise<void> {
+  const summary = await env.DB.prepare("SELECT count(*) AS dead, min(dead_at) AS oldest, count(DISTINCT workspace_id) AS workspaces FROM dead_index_jobs").first<{
+    dead: number;
+    oldest: number | null;
+    workspaces: number;
+  }>();
+  if (!summary?.dead) return;
+  console.warn(
+    `dead index jobs: ${summary.dead} in ${summary.workspaces} workspaces, oldest ${new Date(summary.oldest!).toISOString()}; reindex those workspaces`,
+  );
+}
