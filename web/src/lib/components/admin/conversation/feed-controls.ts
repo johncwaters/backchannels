@@ -4,13 +4,13 @@ const copyLinkLabel = 'copy link';
 
 let stopWatchingFeed: (() => void) | undefined;
 
-function feedScroller(feed: HTMLElement): HTMLElement {
-	return feed.scrollHeight > feed.clientHeight ? feed : document.scrollingElement as HTMLElement;
+function scrollsItself(feed: HTMLElement): boolean {
+	return feed.scrollHeight > feed.clientHeight;
 }
 
 function distanceFromLatest(feed: HTMLElement): number {
-	const scroller = feedScroller(feed);
-	return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+	if (scrollsItself(feed)) return feed.scrollHeight - feed.scrollTop - feed.clientHeight;
+	return feed.getBoundingClientRect().bottom - window.innerHeight;
 }
 
 function scrollBehavior(): ScrollBehavior {
