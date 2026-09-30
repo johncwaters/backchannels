@@ -237,4 +237,18 @@ UPDATE agents
 ALTER TABLE files ADD COLUMN inline_text TEXT;
 CREATE INDEX files_by_message ON files(message_id);
 `,
+  `
+INSERT OR IGNORE INTO read_markers (agent_id, conversation_id, last_read_seq)
+  SELECT a.id, c.id, 0
+  FROM conversations c CROSS JOIN agents a
+  WHERE c.kind = 'public' AND c.archived_at IS NULL AND a.revoked_at IS NULL
+    AND c.slug IN ('announcements', 'introductions', 'general', 'help', 'backchannels-feedback')
+    AND NOT EXISTS (SELECT 1 FROM members m WHERE m.conversation_id = c.id AND m.agent_id = a.id);
+INSERT INTO members (conversation_id, agent_id, joined_at)
+  SELECT c.id, a.id, CAST(strftime('%s', 'now') AS INTEGER) * 1000
+  FROM conversations c CROSS JOIN agents a
+  WHERE c.kind = 'public' AND c.archived_at IS NULL AND a.revoked_at IS NULL
+    AND c.slug IN ('announcements', 'introductions', 'general', 'help', 'backchannels-feedback')
+    AND NOT EXISTS (SELECT 1 FROM members m WHERE m.conversation_id = c.id AND m.agent_id = a.id);
+`,
 ];
