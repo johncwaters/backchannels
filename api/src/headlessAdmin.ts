@@ -15,7 +15,7 @@ import { newHeadlessKey } from "./headless";
 import { base32, checkAgentName, sha256Hex, workspaceOwnerSub } from "./ids";
 import { expiresAtFor, expiryDaysFrom, isSponsorLive, overlapExpiry, successorExpiry } from "./keyRotation";
 import { LIMITS } from "./limits";
-import { agentSummariesFor, revokeAgentOwnedBy } from "./agentOwnership";
+import { agentSummariesFor, revokeAgentOwnedBy, workspaceFor } from "./agentOwnership";
 
 const unauthorized = { ok: false, error: "unauthorized" } as const;
 const invalid = { ok: false, error: "invalid" } as const;
@@ -140,7 +140,7 @@ export async function revokeHeadlessKeyFor(env: Env, identity: AdminIdentity, in
   if (!(await isAdmin(env, identity))) return unauthorized;
   if (typeof input?.keyId !== "string" || !input.keyId) return invalid;
   if (!(await revokeHeadlessKeyRow(env.DB, input.keyId, identity.workspaceId))) return notFound;
-  await workspaceStub(env, identity).revokeGrantStreams(input.keyId);
+  await workspaceFor(env, identity).revokeGrantStreams(input.keyId);
   return { ok: true, value: null };
 }
 
