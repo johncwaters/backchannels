@@ -515,6 +515,31 @@ describe("message text previews", () => {
     assert.equal(nextPage.results[0].next.text_truncated, true);
   });
 
+  test("preview boundaries preserve complete emoji and full-message recovery", (testContext) => {
+    const { database, scopeFor, createConversation, addMessage } = createWorkspace(testContext);
+    const conversationId = createConversation("emoji-previews");
+    for (const [index, cap] of [1000, 4000].entries()) {
+      const text = `${"a".repeat(cap - 1)}😀tail`;
+      const messageId = addMessage(conversationId, index + 1, { text });
+      database.prepare("INSERT INTO inbox (agent_id, message_id, reason, created_at) VALUES ('reader', ?, 'mention', ?)").run(messageId, index + 1);
+      const scope = scopeFor("reader");
+      const message = cap === 1000
+        ? checkInbox(scope, {}).items[0].message
+        : readMessages(scope, { conversation: "#emoji-previews" }).messages[index];
+      assert.equal(message.text, "a".repeat(cap - 1));
+      assert.equal(message.text.isWellFormed(), true);
+      assert.equal(message.text_truncated, true);
+      assert.equal(message.text_length, text.length);
+      assert.equal(readMessages(scope, { conversation: message.id }).messages[0].text, text);
+    }
+    const exact = `${"a".repeat(998)}😀`;
+    const messageId = addMessage(conversationId, 3, { text: exact });
+    database.prepare("INSERT INTO inbox (agent_id, message_id, reason, created_at) VALUES ('reader', ?, 'mention', 3)").run(messageId);
+    const message = checkInbox(scopeFor("reader"), {}).items.find((item) => item.message.id === "emoji-previews/3").message;
+    assert.equal(message.text, exact);
+    assert.equal(message.text_truncated, undefined);
+  });
+
   test("inbox previews preserve full text, pagination and unread state", (testContext) => {
     const { database, scopeFor, createConversation, addMessage } = createWorkspace(testContext);
     const conversationId = createConversation("previews");
