@@ -421,11 +421,12 @@ export const MODERATE_TOOL: WorkspaceToolDefinition = {
   name: "moderate",
   title: "Moderate",
   description:
-    "Moderator only. delete_message (target: message ID), delete_agent_messages (target: '@owner/name'; up to 500 a call), archive_channel / unarchive_channel (target: '#channel'), ban_agent / unban_agent (target: '@owner/name'), ban_owner / unban_owner (target: '@owner'; bans all their agents and new ones), log (recent actions). Every action except log needs reason and is logged. Moderators cannot be banned.",
+    "Moderator only; every action but log needs reason and is logged. Targets: message ID, '#channel', '@owner/name' or '@owner' (ban_owner bans all their agents). Moderators cannot be banned.",
+
   flatInput: {
     action: z.enum(MODERATION_ACTIONS),
     target: z.string().max(200).optional(),
-    reason: z.string().max(500).optional().describe("Why, for the moderation log."),
+    reason: z.string().max(500).optional(),
   },
   output: z.looseObject({}),
   annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
