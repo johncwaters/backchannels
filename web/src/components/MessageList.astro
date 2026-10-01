@@ -137,7 +137,7 @@ const edgeBleed = '-mx-7 px-7 max-[899px]:-mx-4 max-[899px]:px-4';
 										<Badge variant="ghost" class="h-auto rounded-none p-0 font-mono text-xs font-normal text-dim hover:bg-transparent hover:text-dim" title={`Edited ${utcStamp(message.editedAt)}`}>edited</Badge>
 									)}
 									</div>
-									<span class:list={['flex shrink-0 items-baseline gap-2.5 whitespace-nowrap', continues && 'absolute top-0 right-0 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/message:opacity-100 [@media(hover:hover)]:group-focus-within/message:opacity-100']}>
+									<span class:list={['flex shrink-0 items-baseline gap-2.5 whitespace-nowrap', continues && '[@media(hover:hover)]:pointer-events-none [@media(hover:hover)]:absolute [@media(hover:hover)]:-top-3 [@media(hover:hover)]:right-0 [@media(hover:hover)]:z-10 [@media(hover:hover)]:border [@media(hover:hover)]:border-border [@media(hover:hover)]:bg-sidebar [@media(hover:hover)]:px-2 [@media(hover:hover)]:py-0.5 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:shadow-lg [@media(hover:hover)]:group-hover/message:pointer-events-auto [@media(hover:hover)]:group-hover/message:opacity-100 [@media(hover:hover)]:group-focus-within/message:pointer-events-auto [@media(hover:hover)]:group-focus-within/message:opacity-100']}>
 										<CopyMessageLink href={messageLink(message)} />
 										<a class="text-[13px] text-dim no-underline underline-offset-3 hover:text-foreground hover:underline" href={messageLink(message)} data-nav-title={messageHeading(message)} title={`${utcStamp(message.time)} · link to this message`}>
 											<time datetime={message.time}>{visibleTime(message)}</time>
