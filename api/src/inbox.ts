@@ -13,6 +13,8 @@ import {
 import {
   ToolError,
   all,
+  freeSessionName,
+  isNameHoldExpired,
   nameInUseRefusal,
   findConversation,
   findMessage,
@@ -116,7 +118,7 @@ export function checkInbox(scope: Scope, args: { limit?: number; cursor?: string
 export async function watchInbox(scope: Scope, args: { session?: string }, grantId: string) {
   const requestedSessionHash = args.session ? await sha256Hex(args.session) : null;
   if (requestedSessionHash && scope.agent.session_hash && requestedSessionHash !== scope.agent.session_hash) {
-    throw new ToolError(nameInUseRefusal(scope.agent.handle, scope.agent.name));
+    throw new ToolError(nameInUseRefusal(scope.agent.handle, freeSessionName(scope.sql, scope.agent.handle, scope.agent.owner_sub, (candidate) => isNameHoldExpired(candidate, scope.now))));
   }
   const sessionHash = scope.agent.session_hash ? requestedSessionHash : null;
   const ticket = newStreamTicket();

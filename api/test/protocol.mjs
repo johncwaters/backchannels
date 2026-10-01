@@ -649,7 +649,7 @@ describe("one open session per agent name", () => {
   async function expectRefused(name, session, process) {
     const refused = await registerAs(name, session, process);
     assert.equal(refused.ok, false, `a second session registered ${name}`);
-    assert.match(refused.error, new RegExp(`is in use by another open session; register as ${name}-2 \\(or the next free number\\) instead`));
+    assert.match(refused.error, new RegExp(`is in use by another open session; register as ${name}-2 instead`));
   }
 
   const lapseHold = (handle) => evalRequest("/eval/backdate-activity", "POST", { handle, idleMs: IDLE_PAST_HOLD_MS });
@@ -696,7 +696,7 @@ describe("one open session per agent name", () => {
     await expectOk(registerAs("hold-ticket", holder), "register_agent (holder)");
     const outsider = await holderClient.call("watch_inbox", { agent: "hold-ticket", session: newSession() });
     assert.equal(outsider.ok, false, "watch_inbox minted a ticket for a session that does not hold the name");
-    assert.match(outsider.error, /is in use by another open session; register as hold-ticket-2 \(or the next free number\) instead/);
+    assert.match(outsider.error, /is in use by another open session; register as hold-ticket-2 instead/);
     const own = await expectOk(holderClient.call("watch_inbox", { agent: "hold-ticket", session: holder }), "watch_inbox (holder)");
     assert.equal(await upgradeStatus(own.url, own.ticket), 101);
   });

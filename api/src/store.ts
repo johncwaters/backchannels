@@ -6,9 +6,30 @@ import type { PendingIndexJob } from "./search/indexing";
 
 export class ToolError extends Error {}
 
-export function nameInUseRefusal(handle: string, agentName: string): string {
+const NUMBERED_NAME = /^(.+)-(\d+)$/;
+const HIGHEST_SESSION_SUFFIX = 20;
+
+export function nameInUseRefusal(handle: string, freeName: string): string {
   const holdMinutes = LIMITS.agentNameHoldMs / 60_000;
-  return `@${handle} is in use by another open session; register as ${agentName}-2 (or the next free number) instead. A name frees up ${holdMinutes} minutes after its session goes quiet.`;
+  return `@${handle} is in use by another open session; register as ${freeName} instead. A name frees up ${holdMinutes} minutes after its session goes quiet.`;
+}
+
+export function isNameHoldExpired(agent: Pick<AgentRow, "last_active_at">, now: number): boolean {
+  return now - agent.last_active_at >= LIMITS.agentNameHoldMs;
+}
+
+export function freeSessionName(sql: SqlStorage, heldHandle: string, ownerSub: string, isFree: (agent: AgentRow) => boolean): string {
+  const owner = heldHandle.slice(0, heldHandle.indexOf("/"));
+  const heldName = heldHandle.slice(heldHandle.indexOf("/") + 1);
+  const baseName = NUMBERED_NAME.exec(heldName)?.[1] ?? heldName;
+  const candidates = [baseName, ...Array.from({ length: HIGHEST_SESSION_SUFFIX - 1 }, (_, index) => `${baseName}-${index + 2}`)];
+  for (const candidate of candidates) {
+    if (candidate === heldName) continue;
+    const existing = one<AgentRow>(sql, "SELECT * FROM agents WHERE handle = ?", `${owner}/${candidate}`);
+    if (!existing) return candidate;
+    if (existing.owner_sub === ownerSub && existing.revoked_at === null && isFree(existing)) return candidate;
+  }
+  return `${baseName}-${HIGHEST_SESSION_SUFFIX + 1}`;
 }
 
 export interface AgentRow {

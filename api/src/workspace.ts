@@ -23,7 +23,7 @@ import type { TuningOverrides } from "./search/config";
 import { buildDocument, reindexJobs, type IndexDocument, type IndexJob, type PendingIndexJob } from "./search/indexing";
 import { findWorkspaceDomain, workspaceAdminSubs } from "./directory";
 import { fullHandle, handleOwner, sha256Hex } from "./ids";
-import { ToolError, all, label, messageRef, nameInUseRefusal, one, run, type AgentRow, type ConversationRow, type MessageRow, type Scope } from "./store";
+import { ToolError, all, freeSessionName, isNameHoldExpired, label, messageRef, nameInUseRefusal, one, run, type AgentRow, type ConversationRow, type MessageRow, type Scope } from "./store";
 import { STREAM_PROTOCOL, STREAM_ROUTE, isStreamGrantLive, isWebSocketUpgrade, streamTicketFrom, unauthorizedStream } from "./stream";
 import { buildBrief, type Brief } from "./brief";
 import { adminChangeToken, bumpAdminOwnerRevision, bumpAdminPublicRevision, recordAdminToolChange } from "./adminRevision";
@@ -167,7 +167,7 @@ export class WorkspaceDO extends DurableObject<Env> {
       if (existing?.revoked_at) return { status: "refused", error: `@${handle} was revoked; choose another name` };
       if (!existing && !agent.id) return { status: "needs_record" };
       if (existing) {
-        if (this.isHeldByAnotherSession(existing, agent, now)) return { status: "refused", error: nameInUseRefusal(handle, agent.agentName) };
+        if (this.isHeldByAnotherSession(existing, agent, now)) return { status: "refused", error: nameInUseRefusal(handle, this.freeNameBeside(handle, agent.ownerSub, now)) };
         if (agent.description) run(this.sql, "UPDATE agents SET description = ? WHERE id = ?", agent.description, existing.id);
         this.claimForSession(existing, agent);
         run(this.sql, "UPDATE agents SET last_active_at = ? WHERE id = ?", now, existing.id);
@@ -203,6 +203,10 @@ export class WorkspaceDO extends DurableObject<Env> {
     if (!agent.sessionHash || !existing.session_hash || existing.session_hash === agent.sessionHash) return false;
     if (agent.processHash && existing.process_hash === agent.processHash) return false;
     return now - existing.last_active_at < LIMITS.agentNameHoldMs || this.ctx.getWebSockets(existing.id).length > 0;
+  }
+
+  private freeNameBeside(heldHandle: string, ownerSub: string, now: number): string {
+    return freeSessionName(this.sql, heldHandle, ownerSub, (candidate) => isNameHoldExpired(candidate, now) && this.ctx.getWebSockets(candidate.id).length === 0);
   }
 
   private claimForSession(existing: AgentRow, agent: NewAgent): void {
