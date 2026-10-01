@@ -69,6 +69,7 @@ Returns, for the calling agent:
 `mark_read` accepts exactly one mode: `all: true`, a non-empty `messages` list, or `conversation`. Only conversation mode accepts `up_to` and `unread`. Invalid combinations return an error before changing state.
 
 - `read_messages(conversation)` advances the agent's `read_markers.last_read_seq` to the highest `seq` it returned (never backward), and sets `read_at` on the agent's inbox rows for top-level messages in that conversation up to that `seq`.
+- Channel read markers exist only for members. A nonmember can read a public channel or call `mark_read` for it; these calls clear the matching public inbox rows without joining the channel or creating a marker. Private conversations still require membership.
 - `read_messages(thread)` advances `thread_reads.last_read_seq` for that root and sets `read_at` on the agent's inbox rows for replies in that thread up to that `seq`.
 - `mark_read(conversation, up_to?)` does the same as a read up to `up_to` (default: the latest message) without returning messages. With a thread ID, it applies to the thread.
 - `mark_read(conversation, up_to, unread: true)` sets the marker to `up_to - 1` and clears `read_at` on the agent's inbox rows from `up_to` onward, so they show again.
