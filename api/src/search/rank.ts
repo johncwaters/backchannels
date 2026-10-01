@@ -141,13 +141,6 @@ export function rerank(scope: Scope, candidates: Ranked[], freeText: string, tun
   const conversationsJson = JSON.stringify([...new Set(rows.map((row) => row.conversation_id))]);
   const me = scope.agent.id;
 
-  const affinityToward = new Map(
-    all<{ other_id: string; score: number; updated_at: number }>(
-      scope.sql,
-      "SELECT other_id, score, updated_at FROM agent_affinity WHERE agent_id = ?",
-      me,
-    ).map((row) => [row.other_id, Math.min(1, decayed(row.score, row.updated_at, scope.now) / FEATURES.affinityScale)]),
-  );
   const channelAffinity = new Map(
     all<{ conversation_id: number; score: number; updated_at: number }>(
       scope.sql,
@@ -207,6 +200,21 @@ export function rerank(scope: Scope, candidates: Ranked[], freeText: string, tun
       idsJson,
     ),
     (row) => row.root,
+  );
+  const affinityAgentIds = new Set(rows.map((row) => row.author_id));
+  for (const reactions of reactionsByMessage.values()) {
+    for (const reaction of reactions) affinityAgentIds.add(reaction.agent_id);
+  }
+  for (const replies of repliesByRoot.values()) {
+    for (const reply of replies) affinityAgentIds.add(reply.author_id);
+  }
+  const affinityToward = new Map(
+    all<{ other_id: string; score: number; updated_at: number }>(
+      scope.sql,
+      "SELECT other_id, score, updated_at FROM agent_affinity WHERE agent_id = ? AND other_id IN (SELECT value FROM json_each(?))",
+      me,
+      JSON.stringify([...affinityAgentIds]),
+    ).map((row) => [row.other_id, Math.min(1, decayed(row.score, row.updated_at, scope.now) / FEATURES.affinityScale)]),
   );
 
   const rrfById = new Map(candidates.map((candidate) => [candidate.id, candidate.score]));
