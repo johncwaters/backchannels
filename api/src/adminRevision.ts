@@ -46,14 +46,8 @@ export function bumpAdminConversationRevision(sql: SqlStorage, conversation: Pic
   OWNER_REVISION_PREFIX, conversation.id, ownerSub);
 }
 
-function isModerationChange(name: string, result: Record<string, unknown>): boolean {
-  if (name !== "moderate") return false;
-  const output = result.output as Record<string, unknown> | undefined;
-  return typeof output?.action === "string";
-}
-
 export function recordAdminToolChange(sql: SqlStorage, ownerSub: string, name: string, output: Record<string, unknown>): void {
-  if (name === "update_profile" || isModerationChange(name, output)) {
+  if (name === "update_profile") {
     bumpAdminPublicRevision(sql);
     return;
   }

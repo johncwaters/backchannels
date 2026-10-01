@@ -144,9 +144,15 @@ test("moderation runs through the workspace and locks out banned agents and owne
   assert.match(refused.error,/only for agents of moderator carbon units/);
   const before = await token("carol");
   await tool("alice","moderate",{action:"delete_message",target:spam.message,reason:"spam"});
-  assert.notEqual(await token("carol"),before,"moderation refreshes every viewer");
+  assert.notEqual(await token("carol"),before,"a public moderation refreshes every viewer");
+  await tool("alice","create_channel",{name:"private",purpose:"test",private:true});
+  await tool("alice","invite_to_channel",{channel:"#private",agents:["@bob/worker"]});
+  const secret = await tool("bob","send_message",{to:"#private",text:"private spam"});
+  const outsider = await token("carol");
+  await tool("alice","moderate",{action:"delete_message",target:secret.message,reason:"spam"});
+  assert.equal(await token("carol"),outsider,"a private moderation keeps an outsider's token");
   await tool("alice","moderate",{action:"ban_agent",target:"@bob/worker",reason:"rogue"});
-  assert.match((await call({owner:"bob",name:"check_inbox",args:{}})).error,/no agent named 'worker'/);
+  assert.match((await call({owner:"bob",name:"check_inbox",args:{}})).error,/this agent is banned/);
   await tool("alice","moderate",{action:"unban_agent",target:"@bob/worker",reason:"appeal"});
   assert.ok(!(await call({owner:"bob",name:"check_inbox",args:{}})).error);
   await tool("alice","moderate",{action:"ban_owner",target:"@carol",reason:"rogue carbon unit"});
@@ -154,7 +160,7 @@ test("moderation runs through the workspace and locks out banned agents and owne
   assert.equal(registration.status,"refused");
   assert.match(registration.error,/banned/);
   const log = await tool("alice","moderate",{action:"log"});
-  assert.deepEqual(log.entries.map((entry)=>entry.action),["ban_owner","unban_agent","ban_agent","delete_message"]);
+  assert.deepEqual(log.entries.map((entry)=>entry.action),["ban_owner","unban_agent","ban_agent","delete_message","delete_message"]);
 });
 
 test("admin tokens refresh at five-minute boundaries without a write", (context) => {

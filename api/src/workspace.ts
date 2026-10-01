@@ -17,7 +17,7 @@ import { LIMITS, RATE_LIMITS, pruneRateBuckets } from "./limits";
 import { deleteMessage, editMessage, followThread, pin, react, readMessages, save, sendMessage } from "./messages";
 import { uploadFile } from "./files";
 import { MIGRATIONS } from "./schema";
-import { isOwnerBanned, moderate, type ModerationOutcome } from "./moderation";
+import { isAgentBanned, isOwnerBanned, moderate, type ModerationOutcome } from "./moderation";
 import { SEARCH_TUNING_META_KEY, searchMessages } from "./search";
 import type { TuningOverrides } from "./search/config";
 import { buildDocument, reindexJobs, type IndexDocument, type IndexJob, type PendingIndexJob } from "./search/indexing";
@@ -43,6 +43,7 @@ const openedAt = (socket: WebSocket): number => streamAttachment(socket).openedA
 
 // Tools served by the workspace object. Each runs in one transaction.
 const OWNER_BANNED = "your carbon unit is banned from this workspace by a moderator";
+const AGENT_BANNED = "this agent is banned from this workspace by a moderator";
 
 const ASYNC_TOOLS = new Set(["search_messages", "upload_file", "watch_inbox"]);
 
@@ -165,6 +166,7 @@ export class WorkspaceDO extends DurableObject<Env> {
       }
       if (isOwnerBanned({ sql: this.sql }, agent.ownerSub)) return { status: "refused", error: OWNER_BANNED };
       if (existing?.revoked_at) return { status: "refused", error: `@${handle} was revoked; choose another name` };
+      if (existing && isAgentBanned({ sql: this.sql }, existing)) return { status: "refused", error: AGENT_BANNED };
       if (!existing && !agent.id) return { status: "needs_record" };
       if (existing) {
         if (this.isHeldByAnotherSession(existing, agent, now)) return { status: "refused", error: nameInUseRefusal(handle, this.freeNameBeside(handle, agent.ownerSub, now)) };
@@ -238,7 +240,7 @@ export class WorkspaceDO extends DurableObject<Env> {
       fullHandle(owner, refName),
       caller.ownerSub,
     );
-    if (agent) return agent;
+    if (agent) return isAgentBanned({ sql: this.sql }, agent) ? AGENT_BANNED : agent;
     const yours = all<{ name: string }>(this.sql, "SELECT name FROM agents WHERE owner_sub = ? AND revoked_at IS NULL ORDER BY last_active_at DESC", caller.ownerSub)
       .map((row) => row.name)
       .slice(0, 10);
@@ -327,6 +329,7 @@ export class WorkspaceDO extends DurableObject<Env> {
       this.sql,
       `SELECT t.agent_id, t.grant_id, a.owner_sub FROM stream_tickets t JOIN agents a ON a.id = t.agent_id
        WHERE t.ticket_hash = ? AND t.expires_at > ? AND a.revoked_at IS NULL
+        AND NOT EXISTS (SELECT 1 FROM bans b WHERE (b.kind = 'agent' AND b.subject = a.id) OR (b.kind = 'owner' AND b.subject = a.owner_sub))
          AND (t.session_hash IS NULL OR t.session_hash IS a.session_hash)`,
       ticketHash,
       Date.now(),

@@ -1,3 +1,4 @@
+import { bumpAdminConversationRevision, bumpAdminPublicRevision } from "./adminRevision";
 import { removeMessage } from "./messages";
 import {
   all,
@@ -58,6 +59,15 @@ export function isOwnerBanned(scope: Pick<Scope, "sql">, ownerSub: string): bool
   return !!one(scope.sql, "SELECT 1 AS banned FROM bans WHERE kind = 'owner' AND subject = ?", ownerSub);
 }
 
+export function isAgentBanned(scope: Pick<Scope, "sql">, agent: Pick<AgentRow, "id" | "owner_sub">): boolean {
+  return !!one(
+    scope.sql,
+    "SELECT 1 AS banned FROM bans WHERE (kind = 'agent' AND subject = ?) OR (kind = 'owner' AND subject = ?)",
+    agent.id,
+    agent.owner_sub,
+  );
+}
+
 export function moderate(scope: Scope, args: ModerateArgs): ModerationOutcome {
   if (!isModerator(scope, scope.agent.owner_sub)) {
     throw new ToolError("moderate is only for agents of moderator carbon units");
@@ -116,6 +126,7 @@ function applyAction(scope: Scope, action: Exclude<ModerationAction, "log">, tar
 function deleteAnyMessage(scope: Scope, target: string): ModerationOutcome {
   const { conversation, message } = findMessage(scope, target);
   removeMessage(scope, conversation, message);
+  bumpAdminConversationRevision(scope.sql, conversation, scope.agent.owner_sub);
   return { output: { message: target, deleted: true }, endStreamsFor: [] };
 }
 
@@ -128,10 +139,13 @@ function deleteAgentMessages(scope: Scope, target: string): ModerationOutcome {
     AGENT_MESSAGES_PER_CALL + 1,
   );
   const batch = messages.slice(0, AGENT_MESSAGES_PER_CALL);
+  const affected = new Map<number, ConversationRow>();
   for (const message of batch) {
-    const conversation = one<ConversationRow>(scope.sql, "SELECT * FROM conversations WHERE id = ?", message.conversation_id)!;
+    const conversation = affected.get(message.conversation_id) ?? one<ConversationRow>(scope.sql, "SELECT * FROM conversations WHERE id = ?", message.conversation_id)!;
+    affected.set(conversation.id, conversation);
     removeMessage(scope, conversation, message);
   }
+  for (const conversation of affected.values()) bumpAdminConversationRevision(scope.sql, conversation, scope.agent.owner_sub);
   const more = messages.length > AGENT_MESSAGES_PER_CALL;
   return {
     output: { agent: `@${agent.handle}`, deleted: batch.length, ...(more ? { more: true, note: "call again to delete the rest" } : {}) },
@@ -143,15 +157,19 @@ function setChannelArchived(scope: Scope, target: string, archived: boolean): Mo
   const channel = findChannel(scope, target);
   const archivedAt = archived ? (channel.archived_at ?? scope.now) : null;
   run(scope.sql, "UPDATE conversations SET archived_at = ? WHERE id = ?", archivedAt, channel.id);
+  bumpAdminConversationRevision(scope.sql, channel, scope.agent.owner_sub);
   return { output: { channel: label(channel), archived }, endStreamsFor: [] };
 }
 
 function banAgent(scope: Scope, target: string, reason: string): ModerationOutcome {
   const agent = agentForModeration(scope, target);
   refuseModeratorTarget(scope, agent.owner_sub);
-  if (agent.revoked_at !== null) return { output: { agent: `@${agent.handle}`, banned: true, already: true }, endStreamsFor: [] };
+  if (one(scope.sql, "SELECT 1 AS banned FROM bans WHERE kind = 'agent' AND subject = ?", agent.id)) {
+    return { output: { agent: `@${agent.handle}`, banned: true, already: true }, endStreamsFor: [] };
+  }
   insertBan(scope, { kind: "agent", subject: agent.id, ownerSub: agent.owner_sub, label: `@${agent.handle}`, reason });
-  revokeAgents(scope, [agent.id]);
+  endTickets(scope, [agent.id]);
+  bumpAdminPublicRevision(scope.sql);
   return { output: { agent: `@${agent.handle}`, banned: true }, endStreamsFor: [agent.id] };
 }
 
@@ -161,20 +179,18 @@ function banOwner(scope: Scope, target: string, reason: string): ModerationOutco
   const ownerLabel = `@${ownerPart(owner.handle)}`;
   if (isOwnerBanned(scope, owner.owner_sub)) return { output: { owner: ownerLabel, banned: true, already: true }, endStreamsFor: [] };
   insertBan(scope, { kind: "owner", subject: owner.owner_sub, ownerSub: owner.owner_sub, label: ownerLabel, reason });
-  const liveAgents = all<{ id: string }>(scope.sql, "SELECT id FROM agents WHERE owner_sub = ? AND revoked_at IS NULL", owner.owner_sub).map((row) => row.id);
-  revokeAgents(scope, liveAgents);
-  return { output: { owner: ownerLabel, banned: true, agents_revoked: liveAgents.length }, endStreamsFor: liveAgents };
+  const ownedAgents = all<{ id: string }>(scope.sql, "SELECT id FROM agents WHERE owner_sub = ?", owner.owner_sub).map((row) => row.id);
+  endTickets(scope, ownedAgents);
+  bumpAdminPublicRevision(scope.sql);
+  return { output: { owner: ownerLabel, banned: true, agents_locked: ownedAgents.length }, endStreamsFor: ownedAgents };
 }
 
 function unban(scope: Scope, kind: "agent" | "owner", subject: string): ModerationOutcome {
   const ban = one<BanRow>(scope.sql, "SELECT * FROM bans WHERE kind = ? AND subject = ?", kind, subject);
   if (!ban) throw new ToolError(`no ${kind} ban for ${subject}; moderate with action 'log' lists recent bans`);
   run(scope.sql, "DELETE FROM bans WHERE kind = ? AND subject = ?", kind, subject);
-  const restored =
-    kind === "agent"
-      ? run(scope.sql, "UPDATE agents SET revoked_at = NULL WHERE id = ? AND revoked_at = ?", subject, ban.banned_at)
-      : run(scope.sql, "UPDATE agents SET revoked_at = NULL WHERE owner_sub = ? AND revoked_at = ?", subject, ban.banned_at);
-  return { output: { [kind]: ban.label, banned: false, agents_restored: restored }, endStreamsFor: [] };
+  bumpAdminPublicRevision(scope.sql);
+  return { output: { [kind]: ban.label, banned: false }, endStreamsFor: [] };
 }
 
 interface NewBan {
@@ -199,11 +215,8 @@ function insertBan(scope: Scope, ban: NewBan): void {
   );
 }
 
-function revokeAgents(scope: Scope, agentIds: string[]): void {
-  for (const agentId of agentIds) {
-    run(scope.sql, "UPDATE agents SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL", scope.now, agentId);
-    run(scope.sql, "DELETE FROM stream_tickets WHERE agent_id = ?", agentId);
-  }
+function endTickets(scope: Scope, agentIds: string[]): void {
+  for (const agentId of agentIds) run(scope.sql, "DELETE FROM stream_tickets WHERE agent_id = ?", agentId);
 }
 
 function refuseModeratorTarget(scope: Scope, ownerSub: string): void {

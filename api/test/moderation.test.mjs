@@ -3,7 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import { MIGRATIONS } from "../src/schema.ts";
 
-const { moderate, isOwnerBanned, isModerator } = await import("../src/moderation.ts");
+const { moderate, isOwnerBanned, isAgentBanned, isModerator } = await import("../src/moderation.ts");
 const { sendMessage, readMessages } = await import("../src/messages.ts");
 
 const MODERATOR_SUBS = new Set(["mod-sub"]);
@@ -72,36 +72,38 @@ test("a moderator deletes another agent's message and the log records it", (test
   assert.equal(output.entries[0].moderator, "@mod/agent");
 });
 
-test("ban_agent revokes the agent and ends its streams; unban_agent restores it", (testContext) => {
+test("ban_agent locks the agent and ends its streams without touching revoked_at; unban_agent unlocks it", (testContext) => {
   const { scopeFor, agentRow } = createWorkspace(testContext);
   const banned = moderate(scopeFor("mod-agent"), { action: "ban_agent", target: "@rogue/agent", reason: "rogue" });
   assert.deepEqual(banned.endStreamsFor, ["rogue"]);
-  assert.equal(agentRow("rogue").revoked_at, 10_000);
-  assert.equal(agentRow("rogue-two").revoked_at, null);
-  moderate(scopeFor("mod-agent", 20_000), { action: "unban_agent", target: "@rogue/agent", reason: "appeal" });
+  assert.equal(isAgentBanned(scopeFor("mod-agent"), agentRow("rogue")), true);
+  assert.equal(isAgentBanned(scopeFor("mod-agent"), agentRow("rogue-two")), false);
   assert.equal(agentRow("rogue").revoked_at, null);
+  moderate(scopeFor("mod-agent", 20_000), { action: "unban_agent", target: "@rogue/agent", reason: "appeal" });
+  assert.equal(isAgentBanned(scopeFor("mod-agent"), agentRow("rogue")), false);
 });
 
-test("unban_agent leaves an agent its owner revoked alone", (testContext) => {
+test("an owner revocation during a ban survives the unban", (testContext) => {
   const { database, scopeFor, agentRow } = createWorkspace(testContext);
-  database.prepare("UPDATE agents SET revoked_at = 5 WHERE id = 'rogue'").run();
-  const banned = moderate(scopeFor("mod-agent"), { action: "ban_agent", target: "@rogue/agent", reason: "rogue" });
-  assert.equal(banned.output.already, true);
-  assert.throws(() => moderate(scopeFor("mod-agent"), { action: "unban_agent", target: "@rogue/agent", reason: "appeal" }), /no agent ban/);
-  assert.equal(agentRow("rogue").revoked_at, 5);
+  moderate(scopeFor("mod-agent"), { action: "ban_agent", target: "@rogue/agent", reason: "rogue" });
+  database.prepare("UPDATE agents SET revoked_at = 15000 WHERE id = 'rogue'").run();
+  moderate(scopeFor("mod-agent", 20_000), { action: "unban_agent", target: "@rogue/agent", reason: "appeal" });
+  assert.equal(agentRow("rogue").revoked_at, 15_000);
 });
 
-test("ban_owner revokes every agent of that carbon unit and unban_owner restores only those", (testContext) => {
+test("ban_owner locks every agent of that carbon unit and unban_owner leaves a separate agent ban in place", (testContext) => {
   const { scopeFor, agentRow } = createWorkspace(testContext);
+  moderate(scopeFor("mod-agent"), { action: "ban_agent", target: "@rogue/agent", reason: "rogue" });
   const banned = moderate(scopeFor("mod-agent"), { action: "ban_owner", target: "@rogue", reason: "rogue carbon unit" });
-  assert.equal(banned.output.agents_revoked, 2);
+  assert.equal(banned.output.agents_locked, 2);
   assert.deepEqual([...banned.endStreamsFor].sort(), ["rogue", "rogue-two"]);
   assert.equal(isOwnerBanned(scopeFor("mod-agent"), "rogue-sub"), true);
-  assert.equal(agentRow("bystander").revoked_at, null);
-  moderate(scopeFor("mod-agent", 20_000), { action: "unban_owner", target: "@rogue/agent", reason: "appeal" });
+  assert.equal(isAgentBanned(scopeFor("mod-agent"), agentRow("rogue-two")), true);
+  assert.equal(isAgentBanned(scopeFor("mod-agent"), agentRow("bystander")), false);
+  moderate(scopeFor("mod-agent"), { action: "unban_owner", target: "@rogue/agent", reason: "appeal" });
   assert.equal(isOwnerBanned(scopeFor("mod-agent"), "rogue-sub"), false);
-  assert.equal(agentRow("rogue").revoked_at, null);
-  assert.equal(agentRow("rogue-two").revoked_at, null);
+  assert.equal(isAgentBanned(scopeFor("mod-agent"), agentRow("rogue-two")), false);
+  assert.equal(isAgentBanned(scopeFor("mod-agent"), agentRow("rogue")), true, "the separate agent ban still holds");
 });
 
 test("moderators cannot be banned", (testContext) => {
