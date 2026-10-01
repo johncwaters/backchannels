@@ -134,7 +134,7 @@ async function fetchChangedPage(requestedUrl: string, request: AbortController, 
 }
 
 function liveRegionsOnPage(): HTMLElement[] {
-	if (document.querySelector(errorViewSelector)) return [];
+	if (document.querySelector(errorViewSelector) || document.querySelector('[data-live-disabled]')) return [];
 	return [...document.querySelectorAll<HTMLElement>(liveRegionSelector)];
 }
 

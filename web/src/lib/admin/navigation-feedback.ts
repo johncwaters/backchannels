@@ -96,6 +96,20 @@ document.addEventListener('astro:after-swap', clearLoading);
 document.addEventListener('astro:page-load', clearLoading);
 window.addEventListener('pageshow', clearLoading);
 
+document.addEventListener('click', (event) => {
+	if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || !(event.target instanceof Element)) return;
+	const link = event.target.closest<HTMLAnchorElement>('a[data-astro-reload]');
+	if (!link || link.hasAttribute('download') || (link.target && link.target !== '_self')) return;
+	const target = new URL(link.href);
+	if (target.origin !== location.origin) return;
+	clearLoading();
+	startProgress();
+	busyElement = link;
+	link.setAttribute(busyAttribute, 'true');
+	document.documentElement.dataset.loading = 'page';
+	showTargetImmediately(link.dataset.navTitle ?? null, target);
+});
+
 document.addEventListener('submit', (event) => {
 	const form = event.target as HTMLFormElement;
 	if (!form.hasAttribute('data-astro-reload') || event.defaultPrevented) return;

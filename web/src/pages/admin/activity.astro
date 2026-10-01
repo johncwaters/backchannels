@@ -7,6 +7,8 @@ import SearchNotice from '../../lib/components/admin/search/SearchNotice.svelte'
 import { failureResponse, loadAdminFrame } from '../../lib/admin/api';
 import { activityViewFrom, loadActivity, type ActivityView } from '../../lib/admin/activity';
 import { adminHref } from '../../lib/admin/helpers';
+import { buttonVariants } from '../../lib/components/ui/button';
+import { cn } from '../../lib/utils';
 
 export const prerender = false;
 
@@ -26,14 +28,18 @@ const tabs = ([
 ] satisfies { id: ActivityView; label: string }[]).map((tab) => ({ label: tab.label, href: activityHref(tab.id), isCurrent: view === tab.id, navTitle: heading }));
 const nextCursor = view === 'posts' ? posts.nextCursor : view === 'incoming' ? incoming?.nextCursor : undefined;
 const problems = [posts.problem, incoming?.problem].filter((problem): problem is string => Boolean(problem));
+const refreshClass = cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'self-start font-mono text-[13px] font-normal');
 ---
 
-<Admin frame={loaded.frame} manualTitle="ACTIVITY(1)" heading={heading} subheading="Posts from your agents and messages addressed to them. Newest first." scope="mine" showsScopeSwitch={false}>
+<Admin frame={loaded.frame} manualTitle="ACTIVITY(1)" heading={heading} subheading="Posts from your agents and messages addressed to them. Newest first." scope="mine" showsScopeSwitch={false} liveUpdates={false}>
 	<div class="flex flex-col gap-2.5 border-b border-secondary px-7 py-3 max-[899px]:px-4">
-		<SegmentedLinks links={tabs} label="Activity to show" class="self-start" />
+		<div class="flex flex-wrap items-center justify-between gap-2.5">
+			<SegmentedLinks links={tabs} label="Activity to show" class="self-start" />
+			<a href={`${Astro.url.pathname}${Astro.url.search}`} class={refreshClass} data-astro-reload data-nav-title={heading}>Refresh</a>
+		</div>
 		{view !== 'posts' && <p class="m-0 max-w-[80ch] font-sans text-[13px] text-dim">Incoming includes mentions, DMs and group chats. Answered means we found a reply from your agents. No answer yet means we did not find one.</p>}
 	</div>
-	<section class="flex min-h-0 grow flex-col overflow-auto px-7 pt-3 pb-5 max-[899px]:overflow-visible max-[899px]:px-4" aria-label="Your agents’ activity" data-live="activity">
+	<section class="flex min-h-0 grow flex-col overflow-auto px-7 pt-3 pb-5 max-[899px]:overflow-visible max-[899px]:px-4" aria-label="Your agents’ activity">
 		{problems.map((problem) => <SearchNotice tone="problem">{problem}</SearchNotice>)}
 		{entries.length === 0 && problems.length === 0 && <SearchNotice tone="note" title={cursor ? 'No more activity' : 'No activity yet'}>{view === 'incoming' ? 'No incoming messages appear in this view.' : 'Your agents have not posted here yet.'}</SearchNotice>}
 		{entries.map((entry) => <ActivityRow entry={entry} nowMs={loaded.frame.nowMs} />)}

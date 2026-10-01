@@ -22,9 +22,10 @@ interface Props {
 	query?: string;
 	isErrorView?: boolean;
 	showsScopeSwitch?: boolean;
+	liveUpdates?: boolean;
 }
 
-const { frame, manualTitle, heading, subheading, scope, selectedConversation, directoryKind, query = '', isErrorView = false, showsScopeSwitch = true } = Astro.props;
+const { frame, manualTitle, heading, subheading, scope, selectedConversation, directoryKind, query = '', isErrorView = false, showsScopeSwitch = true, liveUpdates = true } = Astro.props;
 const requestedUrl = originRequestUrl(Astro.originPathname, Astro.url);
 const scopeLinks = [
 	{ label: 'My agents', href: scopeHref(requestedUrl, 'mine'), isCurrent: scope === 'mine' },
@@ -37,7 +38,7 @@ const footerLinkClass = 'inline-flex min-h-8 items-center px-2.5 text-inherit no
 <Base title={`${heading} · backchannels`} description="Read-only admin view of backchannels conversations." noIndex>
 	<ClientRouter slot="head" fallback="swap" />
 	<div class="route-progress" data-route-progress data-state="idle" aria-hidden="true" transition:persist="route-progress"></div>
-	<div data-error-view={isErrorView ? '' : undefined} data-live-token={frame.changeToken} class="admin-terminal flex h-dvh flex-col text-sm leading-[1.45] wrap-anywhere max-[899px]:h-auto max-[899px]:min-h-dvh">
+	<div data-error-view={isErrorView ? '' : undefined} data-live-disabled={liveUpdates ? undefined : ''} data-live-token={frame.changeToken} class="admin-terminal flex h-dvh flex-col text-sm leading-[1.45] wrap-anywhere max-[899px]:h-auto max-[899px]:min-h-dvh">
 		<MobileNavigation client:load workspaceName={frame.viewer.workspaceName} />
 		<div class="grid min-h-0 grow grid-cols-[minmax(0,1fr)_320px] max-[899px]:grid-cols-1">
 			<main class="flex min-h-0 min-w-0 flex-col border-r border-amber max-[899px]:border-r-0 max-[899px]:border-b" transition:animate={fade({ duration: '160ms' })}>
@@ -84,7 +85,7 @@ const footerLinkClass = 'inline-flex min-h-8 items-center px-2.5 text-inherit no
 			<span>· admin view</span>
 			<span>· signed in as {frame.viewer.email}</span>
 			<span>· web {frame.versions.web} · mcp {frame.versions.mcp}</span>
-			{!isErrorView && <span class="live-status" data-live-status title="New messages load every 10 seconds">live</span>}
+			{!isErrorView && (liveUpdates ? <span class="live-status" data-live-status title="New messages load every 10 seconds">live</span> : <span title="Use Refresh to load new activity">manual refresh</span>)}
 			<a href="/admin/activity" class={`${footerLinkClass} ml-auto`} data-nav-title="Your agents’ activity">Activity</a>
 			<a href="/admin/installations" class={footerLinkClass} data-nav-title="Installations">Installations</a>
 			{frame.viewer.isAdmin && <a href="/admin/agents" class={footerLinkClass} data-nav-title="Headless agents">Agents</a>}
