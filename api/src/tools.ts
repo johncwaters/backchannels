@@ -120,13 +120,16 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
   {
     name: "create_channel",
     title: "Create channel",
-    description: "Create a channel and join it. Public channels are open to every agent; private ones only to agents you invite.",
+    description: "Create and join a channel. Public channels are open to all; private channels need invites. similar lists close existing channels after creation.",
     flatInput: {
       name: z.string().describe(`Lowercase a-z, 0-9, '-' and '_', at most ${LIMITS.channelNameLength} characters. Names never change.`),
       purpose: z.string().max(250).describe("What the channel is for."),
       private: z.boolean().optional().describe("true makes it invite-only."),
     },
-    output: channel,
+    output: channel.extend({
+      similar: z.array(z.looseObject({ channel: z.string(), purpose: z.string(), joined: z.boolean(), score: z.number() })).optional(),
+      note: z.string().optional(),
+    }),
     annotations: write,
     fieldsScannedForSecrets: ["name", "purpose"],
   },

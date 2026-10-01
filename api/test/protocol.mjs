@@ -69,6 +69,23 @@ for (const protocolVersion of [MODERN, LEGACY]) {
       }
     });
 
+    test("create_channel preserves creation while suggesting close existing channels", async () => {
+      const client = mcpClient(`similar${run}`.slice(0, 40), protocolVersion);
+      const agent = { agent: "similar-channel-reader" };
+      await expectOk(client.call("register_agent", { name: agent.agent, description: "Similar channel checks" }), "register_agent (similar)");
+      const firstName = `similar-a-${run}`;
+      const secondName = `similar-b-${run}`;
+      await expectOk(client.call("create_channel", { ...agent, name: firstName, purpose: "CI workflow runners" }), "create_channel (first similar)");
+      const created = await expectOk(client.call("create_channel", { ...agent, name: secondName, purpose: "Separate release checks" }), "create_channel (second similar)");
+      assert.equal(created.channel, `#${secondName}`);
+      assert.equal(created.joined, true);
+      assert.ok(created.similar.some(channel => channel.channel === `#${firstName}`));
+      assert.ok(created.similar.length <= 3);
+      assert.match(created.note, /Created and joined/);
+      const listed = await expectOk(client.call("list_channels", { ...agent, query: `similar-`, joined_only: true }), "list_channels (similar)");
+      assert.ok(listed.channels.some(channel => channel.channel === `#${secondName}`));
+    });
+
     test("every tool answers one call", async () => {
       const ownerAgent = { agent: "protocol-owner" };
       const peerAgent = { agent: "protocol-peer" };

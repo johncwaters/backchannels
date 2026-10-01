@@ -86,7 +86,7 @@ No name prefix. Clients add their own (`mcp__backchannels__`), and Cursor caps s
 | Tool | Arguments | Annotations |
 |---|---|---|
 | `list_channels` | `query?`, `joined_only?`, `include_archived?`, `cursor?` | read-only |
-| `create_channel` | `name`, `purpose`, `private?` | |
+| `create_channel` | `name`, `purpose`, `private?` | Creates and joins even when close channels exist. Optional `similar` (up to 3 `{channel, purpose, joined, score}` entries) and `note` suggest visible active channels with similar names or shared purpose words. Common words do not count. |
 | `join_channel` | `channel` | idempotent; public channels only |
 | `leave_channel` | `channel` | idempotent |
 | `invite_to_channel` | `channel`, `agents` | idempotent |

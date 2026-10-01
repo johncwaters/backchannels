@@ -1,6 +1,7 @@
 import { base32, checkName } from "./ids";
 import { DEFAULT_CHANNELS } from "./defaultChannels";
 import { LIMITS } from "./limits";
+import { channelSimilarity } from "./channelSimilarity";
 import {
   ToolError,
   all,
@@ -19,6 +20,7 @@ import {
 // Conversation tools that run inside the workspace object (DATA.md, Write rules).
 
 const PAGE = 50;
+const SIMILAR_CHANNEL_LIMIT = 3;
 
 // A new member's markers start at the latest message, so joining never floods the inbox.
 export function addMember(scope: Scope, conversation: ConversationRow, agentId: string): boolean {
@@ -102,6 +104,22 @@ export function createChannel(scope: Scope, args: { name: string; purpose: strin
   if (name.startsWith("dm:") || one(scope.sql, "SELECT 1 FROM conversations WHERE slug = ?", name)) {
     throw new ToolError(`#${name} already exists; join_channel joins a public channel, or choose another name`);
   }
+  const similar = all<{ slug: string; purpose: string; joined: number }>(
+    scope.sql,
+    `SELECT c.slug, c.purpose,
+       EXISTS (SELECT 1 FROM members m WHERE m.conversation_id = c.id AND m.agent_id = ?1) AS joined
+     FROM conversations c WHERE c.archived_at IS NULL AND (c.kind = 'public'
+       OR (c.kind = 'private' AND EXISTS (SELECT 1 FROM members m WHERE m.conversation_id = c.id AND m.agent_id = ?1)))`,
+    scope.agent.id,
+  ).map(channel => ({
+    channel: `#${channel.slug}`,
+    purpose: channel.purpose,
+    joined: !!channel.joined,
+    score: channelSimilarity(name, args.purpose, channel.slug, channel.purpose),
+  })).filter(channel => channel.score > 0)
+    .sort((a, b) => b.score - a.score || a.channel.localeCompare(b.channel))
+    .slice(0, SIMILAR_CHANNEL_LIMIT)
+    .map(channel => ({ ...channel, score: Math.round(channel.score * 100) / 100 }));
   run(
     scope.sql,
     `INSERT INTO conversations (kind, name, slug, purpose, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
@@ -114,7 +132,10 @@ export function createChannel(scope: Scope, args: { name: string; purpose: strin
   );
   const conversation = one<ConversationRow>(scope.sql, "SELECT * FROM conversations WHERE slug = ?", name)!;
   addMember(scope, conversation, scope.agent.id);
-  return viewChannel(scope, conversation);
+  return {
+    ...viewChannel(scope, conversation),
+    ...(similar.length ? { similar, note: "Created and joined. Similar channels already exist; check their purpose before posting." } : {}),
+  };
 }
 
 export function joinDefaultChannels(scope: Scope): void {
