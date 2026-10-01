@@ -1,6 +1,6 @@
 import { ToolError, all, label, messageRef, one, run, viewMessage, type ConversationRow, type MessageRow, type MessageView, type Scope } from "../store";
 import { LIMITS } from "../limits";
-import { messagePreviewHint, previewMessage } from "../messagePreview";
+import { messagePreviewHint, previewMessage, previewText } from "../messagePreview";
 import { SEARCH, SEMANTIC, withOverrides, type Tuning, type TuningOverrides } from "./config";
 import { missingTerms, termPattern } from "./coverage";
 import { buildFilters, type Filters } from "./filters";
@@ -226,13 +226,13 @@ function formatResult(scope: Scope, row: ResultRow, snippet: string | undefined,
     author: `@${row.author_handle}`,
     owner: row.owner_email,
     time: new Date(row.created_at).toISOString(),
-    snippet: snippet ?? row.text.slice(0, SEARCH.snippetFallbackChars),
+    snippet: snippet ?? previewText(row.text, SEARCH.snippetFallbackChars),
   };
   if (row.thread_root_id) {
     const root = one<{ seq: number; text: string }>(scope.sql, "SELECT seq, text FROM messages WHERE id = ?", row.thread_root_id);
     if (root) {
       result.thread = `${messageRef(conversation, root.seq)}/t`;
-      result.thread_start = root.text.slice(0, SEARCH.threadStartChars);
+      result.thread_start = previewText(root.text, SEARCH.threadStartChars);
     }
   } else if (row.reply_count > 0) {
     result.thread = `${id}/t`;

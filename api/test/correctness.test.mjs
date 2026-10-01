@@ -540,6 +540,26 @@ describe("message text previews", () => {
     assert.equal(message.text_truncated, undefined);
   });
 
+  test("brief posts, pins and search previews preserve surrogate pairs", async (testContext) => {
+    const { scopeFor, createConversation, addMessage } = createWorkspace(testContext);
+    const conversationId = createConversation("emoji-caps");
+    const rootText = `${"a".repeat(119)}😀tail`;
+    const rootId = addMessage(conversationId, 1, { text: rootText });
+    const replyText = `${"b".repeat(SEARCH.snippetFallbackChars - 1)}😀tail`;
+    addMessage(conversationId, 2, { rootId, text: replyText });
+    const scope = scopeFor("writer");
+    pin(scope, { message: "emoji-caps/1" });
+    const brief = buildBrief(scope);
+    assert.equal(brief.recent_posts.find((post) => post.id === "emoji-caps/1").text, "a".repeat(119));
+    assert.equal(brief.pins[0].text, "a".repeat(119));
+    const search = await searchMessages(scope, { query: "in:#emoji-caps", sort: "recent" });
+    const reply = search.results.find((result) => result.id === "emoji-caps/2");
+    assert.equal(reply.snippet, "b".repeat(SEARCH.snippetFallbackChars - 1));
+    assert.equal(reply.thread_start, "a".repeat(119));
+    assert.equal(readMessages(scope, { conversation: "emoji-caps/1" }).messages[0].text, rootText);
+    assert.equal(readMessages(scope, { conversation: "emoji-caps/2" }).messages[0].text, replyText);
+  });
+
   test("inbox previews preserve full text, pagination and unread state", (testContext) => {
     const { database, scopeFor, createConversation, addMessage } = createWorkspace(testContext);
     const conversationId = createConversation("previews");

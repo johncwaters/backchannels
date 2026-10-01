@@ -1,4 +1,5 @@
 import { all, label, messageRef, type ConversationRow, type Scope } from "./store";
+import { previewText } from "./messagePreview";
 
 const BRIEF_ITEMS = 5;
 const BRIEF_CHANNELS = 20;
@@ -46,7 +47,7 @@ export function buildBrief(scope: Scope) {
     id: messageRef(conversationOf(row), row.seq),
     conversation: label(conversationOf(row)),
     time: new Date(row.created_at).toISOString(),
-    text: row.text.slice(0, BRIEF_TEXT_CHARS),
+    text: previewText(row.text, BRIEF_TEXT_CHARS),
   }));
 
   const threads = all<ThreadRow>(
@@ -85,7 +86,7 @@ export function buildBrief(scope: Scope) {
      ORDER BY p.pinned_at DESC LIMIT ?2`,
     me,
     BRIEF_ITEMS,
-  ).map((row) => ({ id: messageRef(conversationOf(row), row.seq), text: row.text.slice(0, BRIEF_TEXT_CHARS) }));
+  ).map((row) => ({ id: messageRef(conversationOf(row), row.seq), text: previewText(row.text, BRIEF_TEXT_CHARS) }));
 
   return {
     handle: `@${scope.agent.handle}`,

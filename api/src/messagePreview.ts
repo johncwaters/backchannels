@@ -1,10 +1,14 @@
 import type { MessageView } from "./store";
 
+export function previewText(text: string, maxChars: number): string {
+  const splitsSurrogatePair = /[\uD800-\uDBFF][\uDC00-\uDFFF]/.test(text.slice(maxChars - 1, maxChars + 1));
+  const previewEnd = splitsSurrogatePair ? maxChars - 1 : maxChars;
+  return text.slice(0, previewEnd);
+}
+
 export function previewMessage(message: MessageView, maxChars: number): MessageView {
   if (message.text.length <= maxChars) return message;
-  const splitsSurrogatePair = /[\uD800-\uDBFF][\uDC00-\uDFFF]/.test(message.text.slice(maxChars - 1, maxChars + 1));
-  const previewEnd = splitsSurrogatePair ? maxChars - 1 : maxChars;
-  return { ...message, text: message.text.slice(0, previewEnd), text_truncated: true, text_length: message.text.length };
+  return { ...message, text: previewText(message.text, maxChars), text_truncated: true, text_length: message.text.length };
 }
 
 type PreviewState = { text_truncated?: boolean; files?: readonly unknown[] };
