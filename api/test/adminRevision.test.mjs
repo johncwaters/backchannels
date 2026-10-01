@@ -10,10 +10,14 @@ const require = createRequire(realpathSync(fileURLToPath(new URL("../node_module
 const { build } = require("esbuild");
 const { Miniflare, convertV4MiniflareOptions } = require("miniflare");
 const workspacePath = fileURLToPath(new URL("../src/workspace.ts", import.meta.url));
+const adminSessionPath = fileURLToPath(new URL("../src/adminSession.ts", import.meta.url));
+const authPath = fileURLToPath(new URL("../src/auth.ts", import.meta.url));
 
 async function runtime(context) {
   const source = `
     import { WorkspaceDO } from ${JSON.stringify(workspacePath)};
+    import { revokeInstallation } from ${JSON.stringify(adminSessionPath)};
+    import { oauthServers } from ${JSON.stringify(authPath)};
     const now = 1800000000000;
     Date.now = () => now;
     const workspaceId = 'ws_test';
@@ -37,6 +41,50 @@ async function runtime(context) {
           return {value, rowsRead, rowsWritten};
         }
         if(input.action === 'register') return this.registerAgent({id:input.owner, agentName:'worker', description:'token test', ownerSub:input.owner, ownerEmail:input.owner+'@example.com', ownerName:input.owner, sessionHash:null, processHash:null}, {workspaceId}, 'grant');
+        if(input.action === 'revokeInstallation') {
+          const originalContext = this.ctx;
+          const closed = [];
+          const grants = [{id:'grant'}];
+          let installationRevoked = false;
+          let streamCalls = 0;
+          this.sql.exec("UPDATE stream_tickets SET grant_id = 'other-grant' WHERE agent_id != ?", input.owner);
+          const env = {
+            ...this.env,
+            PUBLIC_URL:'https://installation.test',
+            DB:{prepare:()=>({bind:()=>({first:async()=>installationRevoked ? null : 1,run:async()=>{installationRevoked=true;}})})},
+            WORKSPACE:{idFromName:id=>id,get:()=>({revokeGrantStreams:async grant=>{
+              streamCalls++;
+              if(input.failFirstStreamCall && streamCalls === 1) throw new Error('Durable Object reset because its code was updated');
+              await this.revokeGrantStreams(grant);
+            }})},
+          };
+          const authorization = oauthServers(env).authorization;
+          const originalOAuthApi = authorization.getOAuthApi;
+          authorization.getOAuthApi = () => ({
+            revokeGrant:async()=>{grants.length=0;},
+            listUserGrants:async()=>({items:grants}),
+          });
+          this.ctx = {getWebSockets:()=>['grant','other-grant'].map(grantId=>({
+            deserializeAttachment:()=>({grantId}),close:(code,reason)=>closed.push({grantId,code,reason}),
+          }))};
+          try {
+            let firstError;
+            if(input.failFirstStreamCall) {
+              try {
+                await revokeInstallation(env,{sub:input.owner,workspaceId,grantId:'admin-grant'},{grantId:'grant'});
+              } catch(error) {
+                firstError = error.message;
+              }
+            }
+            const revokedAfterFailure = installationRevoked;
+            const result = await revokeInstallation(env,{sub:input.owner,workspaceId,grantId:'admin-grant'},{grantId:'grant'});
+            const tickets = this.sql.exec('SELECT grant_id FROM stream_tickets ORDER BY grant_id').toArray();
+            return {result,closed,tickets,installationRevoked,firstError,revokedAfterFailure};
+          } finally {
+            this.ctx = originalContext;
+            authorization.getOAuthApi = originalOAuthApi;
+          }
+        }
         if(input.action === 'push') {
           const originalContext = this.ctx;
           const events = [];
@@ -63,8 +111,8 @@ async function runtime(context) {
       return Response.json(await object.perform(await request.json()));
     }};
   `;
-  const bundle = await build({stdin:{contents:source, resolveDir:fileURLToPath(new URL("..",import.meta.url))}, bundle:true, format:"esm", platform:"browser", external:["cloudflare:workers"], write:false});
-  const miniflare = new Miniflare(convertV4MiniflareOptions({modules:true, script:bundle.outputFiles[0].text, compatibilityDate:"2026-09-30", durableObjects:{TEST:{className:"TestWorkspace",useSQLite:true}}}));
+  const bundle = await build({stdin:{contents:source, resolveDir:fileURLToPath(new URL("..",import.meta.url))}, bundle:true, format:"esm", platform:"browser", external:["cloudflare:workers","node:*"], write:false});
+  const miniflare = new Miniflare(convertV4MiniflareOptions({modules:true, script:bundle.outputFiles[0].text, compatibilityDate:"2026-09-30", compatibilityFlags:["nodejs_compat","global_fetch_strictly_public"], durableObjects:{TEST:{className:"TestWorkspace",useSQLite:true}}}));
   context.after(() => miniflare.dispose());
   async function call(input) {
     const response = await miniflare.dispatchFetch("http://localhost", {method:"POST",body:JSON.stringify(input)});
@@ -86,6 +134,31 @@ function eventsWithNumericCursors(events) {
     return event;
   });
 }
+
+test("revoking an OAuth installation closes only its push sockets and deletes its tickets", async (context) => {
+  const {call,tool} = await runtime(context);
+  for(const owner of ["alice","bob"]) await call({action:"register",owner});
+  await tool("alice","watch_inbox",{});
+  await tool("bob","watch_inbox",{});
+  const result = await call({action:"revokeInstallation",owner:"bob"});
+  assert.deepEqual(result.result,{ok:true,value:null});
+  assert.equal(result.installationRevoked,true);
+  assert.deepEqual(result.closed,[{grantId:"grant",code:1008,reason:"credential revoked"}]);
+  assert.deepEqual(result.tickets,[{grant_id:"other-grant"}]);
+});
+
+test("installation stream revocation can retry after a Durable Object reset", async (context) => {
+  const {call,tool} = await runtime(context);
+  for(const owner of ["alice","bob"]) await call({action:"register",owner});
+  await tool("bob","watch_inbox",{});
+  const result = await call({action:"revokeInstallation",owner:"bob",failFirstStreamCall:true});
+  assert.match(result.firstError,/Durable Object reset/);
+  assert.equal(result.revokedAfterFailure,false,"the failed stream call must leave the installation available for retry");
+  assert.deepEqual(result.result,{ok:true,value:null});
+  assert.equal(result.installationRevoked,true);
+  assert.deepEqual(result.closed,[{grantId:"grant",code:1008,reason:"credential revoked"}]);
+  assert.deepEqual(result.tickets,[]);
+});
 
 test("push notifications hide private inbox entries after leave and retain public mentions", async (context) => {
   const {call,tool} = await runtime(context);

@@ -2,6 +2,7 @@ import type { OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 import type { AdminResult, AdminSession, Installation } from "./admin";
 import { adminClient, adminResource, isAdminClient, oauthServers, type AdminClient, type AuthProps } from "./auth";
 import { isActiveMcpInstallationOf, listActiveMcpInstallations, recordRevoked, recordUsed } from "./directory";
+import { workspaceFor } from "./agentOwnership";
 
 const unauthorized = { ok: false, error: "unauthorized" } as const;
 const invalid = { ok: false, error: "invalid" } as const;
@@ -155,6 +156,7 @@ export async function revokeInstallation(
   const oauth = oauthServers(env).authorization.getOAuthApi(env);
   await oauth.revokeGrant(grantId, identity.sub);
   if (await hasGrant(oauth, identity.sub, grantId)) throw new Error("The installation's grant survived revocation.");
+  await workspaceFor(env, identity).revokeGrantStreams(grantId);
   await recordRevoked(env.DB, grantId, "user");
   return { ok: true, value: null };
 }
