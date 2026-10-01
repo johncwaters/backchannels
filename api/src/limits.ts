@@ -86,3 +86,11 @@ export function pruneRateBuckets(sql: SqlStorage, now: number): void {
     RATE_BUCKET_PRUNE_LIMIT,
   );
 }
+
+export const QUEUE_BATCH_MAX_MESSAGES = 100;
+
+export function queueBatches<Item>(items: Item[], size = QUEUE_BATCH_MAX_MESSAGES): Item[][] {
+  const batches: Item[][] = [];
+  for (let start = 0; start < items.length; start += size) batches.push(items.slice(start, start + size));
+  return batches;
+}

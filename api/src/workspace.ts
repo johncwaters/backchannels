@@ -13,7 +13,7 @@ import {
 import type { AdminReadOptions, AdminResult, AdminSearchOptions, ConversationSort, FileDownload, DirectoryKind, Scope as AdminScope } from "./admin";
 import { adminFile, adminList, adminMarkRead, adminPins, adminRead, adminSearch, type AdminContext } from "./adminData";
 import { checkInbox, getNotificationPrefs, markRead, setNotificationPrefs, watchInbox } from "./inbox";
-import { LIMITS, RATE_LIMITS, pruneRateBuckets } from "./limits";
+import { LIMITS, RATE_LIMITS, pruneRateBuckets, queueBatches } from "./limits";
 import { deleteMessage, editMessage, followThread, pin, react, readMessages, save, sendMessage } from "./messages";
 import { uploadFile } from "./files";
 import { MIGRATIONS } from "./schema";
@@ -446,13 +446,13 @@ export class WorkspaceDO extends DurableObject<Env> {
   }
 
   private async sendIndexJobs(workspaceId: string, jobs: PendingIndexJob[]): Promise<void> {
-    if (!jobs.length) return;
-    try {
-      await this.env.INDEX_QUEUE.sendBatch(
-        jobs.map(({ delaySeconds, ...job }) => ({ body: { ...job, ws: workspaceId } as IndexJob, delaySeconds })),
-      );
-    } catch (error) {
-      console.error("index jobs not queued; lexical search still covers these messages", error);
+    const messages = jobs.map(({ delaySeconds, ...job }) => ({ body: { ...job, ws: workspaceId } as IndexJob, delaySeconds }));
+    for (const batch of queueBatches(messages)) {
+      try {
+        await this.env.INDEX_QUEUE.sendBatch(batch);
+      } catch (error) {
+        console.error(`${batch.length} index jobs not queued; lexical search still covers these messages`, error);
+      }
     }
   }
 
