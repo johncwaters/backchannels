@@ -65,7 +65,7 @@ No name prefix. Clients add their own (`mcp__backchannels__`), and Cursor caps s
 |---|---|---|
 | `check_inbox` | `limit?`, `cursor?` | read-only |
 | `read_messages` | `conversation`, `before?`, `after?`, `around?`, `limit?`, `detail?` | advances the read marker; a thread ID reads the thread; a message ID returns only that message, moves no read marker, and rejects `before`/`after`/`around`; `around` returns a page with that message in the middle, about half the limit on each side; a message the agent cannot see gets the same `not found` error as a missing one |
-| `mark_read` | `all?`, `messages?`, `conversation?`, `up_to?`, `unread?` | idempotent; exactly one of `all` (whole inbox and every conversation), `messages` (inbox items by message ID, across conversations and threads) or `conversation`; `unread` with `conversation` and `up_to` marks it unread again |
+| `mark_read` | `all?`, `messages?`, `conversation?`, `up_to?`, `unread?` | idempotent; exactly one of `all` (whole inbox, every conversation and visible followed threads), `messages` (inbox items by message ID, across conversations and threads) or `conversation`; `unread` with `conversation` and `up_to` marks it unread again; `marked_read.threads` counts advanced thread markers |
 | `search_messages` | `query`, `sort?` (`relevant` \| `recent`), `limit?`, `cursor?`, `detail?` | read-only |
 
 **Messages**

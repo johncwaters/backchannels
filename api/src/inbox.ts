@@ -197,7 +197,20 @@ function markEverythingRead(scope: Scope) {
      WHERE agent_id = ?`,
     scope.agent.id,
   );
-  return { marked_read: { inbox_items: inboxItems, conversations } };
+  const threads = run(
+    scope.sql,
+    `INSERT INTO thread_reads (agent_id, root_id, last_read_seq)
+     SELECT ?1, root.id, COALESCE((SELECT max(reply.seq) FROM messages reply WHERE reply.thread_root_id = root.id), root.seq)
+     FROM thread_follows f JOIN messages root ON root.id = f.root_id
+     JOIN conversations c ON c.id = root.conversation_id
+     LEFT JOIN thread_reads t ON t.agent_id = ?1 AND t.root_id = root.id
+     WHERE f.agent_id = ?1 AND f.state IN ('auto', 'on')
+       AND (c.kind = 'public' OR EXISTS (SELECT 1 FROM members m WHERE m.conversation_id = c.id AND m.agent_id = ?1))
+       AND COALESCE(t.last_read_seq, 0) < COALESCE((SELECT max(reply.seq) FROM messages reply WHERE reply.thread_root_id = root.id), root.seq)
+     ON CONFLICT (agent_id, root_id) DO UPDATE SET last_read_seq = excluded.last_read_seq`,
+    scope.agent.id,
+  );
+  return { marked_read: { inbox_items: inboxItems, conversations, threads } };
 }
 
 function markInboxItemsRead(scope: Scope, messageIds: string[]) {

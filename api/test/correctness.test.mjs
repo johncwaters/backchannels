@@ -151,6 +151,60 @@ describe("brief visibility and follows", () => {
   });
 });
 
+describe("mark_read all clears followed thread state", () => {
+  test("clears public and archived thread counts and later replies become unread", testContext => {
+    const { database, scopeFor, createConversation, addMessage } = createWorkspace(testContext);
+    const roots = [];
+    for (const slug of ["open-follow", "archived-follow"]) {
+      const conversationId = createConversation(slug, "public", ["writer"]);
+      const rootId = addMessage(conversationId, 1);
+      const replyId = addMessage(conversationId, 2, { rootId });
+      roots.push([conversationId, rootId]);
+      database.prepare("INSERT INTO thread_follows (agent_id, root_id, state) VALUES ('reader', ?, 'on')").run(rootId);
+      database.prepare("INSERT INTO inbox (agent_id, message_id, reason, created_at) VALUES ('reader', ?, 'thread', 2)").run(replyId);
+    }
+    database.prepare("UPDATE conversations SET archived_at = 1 WHERE slug = 'archived-follow'").run();
+    assert.deepEqual(buildBrief(scopeFor("reader")).threads.map(thread => thread.unread_replies), [1, 1]);
+    assert.deepEqual(markRead(scopeFor("reader"), { all: true }).marked_read, { inbox_items: 2, conversations: 0, threads: 2 });
+    assert.equal(checkInbox(scopeFor("reader"), {}).items.length, 0);
+    assert.ok(buildBrief(scopeFor("reader")).threads.every(thread => thread.unread_replies === 0));
+    assert.equal(markRead(scopeFor("reader"), { all: true }).marked_read.threads, 0);
+    addMessage(roots[0][0], 3, { rootId: roots[0][1] });
+    assert.equal(buildBrief(scopeFor("reader")).threads.find(thread => thread.thread === "open-follow/1/t").unread_replies, 1);
+  });
+
+  test("excludes hidden private threads, off follows and other agents", testContext => {
+    const { database, scopeFor, createConversation, addMessage } = createWorkspace(testContext);
+    const roots = [];
+    for (const [slug, kind, members, state] of [
+      ["visible-private", "private", ["reader", "writer"], "auto"],
+      ["hidden-private", "private", ["writer"], "on"],
+      ["hidden-chat", "dm", ["writer"], "on"],
+      ["off-follow", "public", ["reader", "writer"], "off"],
+    ]) {
+      const conversationId = createConversation(slug, kind, members);
+      const rootId = addMessage(conversationId, 1);
+      addMessage(conversationId, 2, { rootId });
+      roots.push(rootId);
+      database.prepare("INSERT INTO thread_follows (agent_id, root_id, state) VALUES ('reader', ?, ?), ('writer', ?, 'on')").run(rootId, state, rootId);
+    }
+    assert.equal(markRead(scopeFor("reader"), { all: true }).marked_read.threads, 1);
+    assert.deepEqual(database.prepare("SELECT agent_id, root_id, last_read_seq FROM thread_reads").all().map(row => [row.agent_id, row.root_id, row.last_read_seq]), [["reader", roots[0], 2]]);
+  });
+
+  test("preserves newer markers and clears threads without replies", testContext => {
+    const { database, scopeFor, createConversation, addMessage } = createWorkspace(testContext);
+    const conversationId = createConversation("newer-markers");
+    const rootId = addMessage(conversationId, 1);
+    addMessage(conversationId, 2, { rootId });
+    const emptyRootId = addMessage(conversationId, 3);
+    database.prepare("INSERT INTO thread_follows (agent_id, root_id, state) VALUES ('reader', ?, 'auto'), ('reader', ?, 'on')").run(rootId, emptyRootId);
+    database.prepare("INSERT INTO thread_reads (agent_id, root_id, last_read_seq) VALUES ('reader', ?, 99)").run(rootId);
+    assert.equal(markRead(scopeFor("reader"), { all: true }).marked_read.threads, 1);
+    assert.deepEqual(database.prepare("SELECT last_read_seq FROM thread_reads ORDER BY root_id").all().map(row => row.last_read_seq), [99, 3]);
+  });
+});
+
 describe("message text previews", () => {
   test("list attachments stay metadata and single-message full detail recovers inline text", async (testContext) => {
     const { database, scopeFor, createConversation, addMessage } = createWorkspace(testContext);

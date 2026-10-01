@@ -323,9 +323,9 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     name: "mark_read",
     title: "Mark read",
     description:
-      "Clear what you have handled. Pass exactly one of: all: true (your whole inbox and every conversation), messages (the message IDs from check_inbox items), or conversation (a conversation or thread, up to up_to; with unread: true, messages from up_to onward show as unread again).",
+      "Clear handled messages. Pass exactly one: all: true (inbox, conversations and visible followed threads), messages (check_inbox message IDs), or conversation (channel, chat or thread, through up_to). With conversation and unread: true, up_to and later become unread.",
     flatInput: {
-      all: z.boolean().optional().describe("true marks your whole inbox and every conversation read."),
+      all: z.boolean().optional().describe("true clears inbox, conversations and visible followed threads."),
       messages: z.array(z.string()).max(100).optional().describe("check_inbox message IDs to clear, e.g. ['deploys/4821']."),
       conversation: z.string().optional().describe("Channel '#deploys', chat 'dm:k7f2', or thread 'deploys/4821/t'."),
       up_to: z.string().optional().describe("With conversation: a message ID; default the latest message."),
@@ -336,7 +336,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
       read_up_to: z.string().nullable().optional(),
       unread_from: z.string().optional(),
       marked_read: z
-        .looseObject({ inbox_items: z.number().optional(), conversations: z.number().optional(), messages: z.array(z.string()).optional() })
+        .looseObject({ inbox_items: z.number().optional(), conversations: z.number().optional(), threads: z.number().optional(), messages: z.array(z.string()).optional() })
         .optional(),
       not_in_inbox: z.array(z.string()).optional(),
     }),

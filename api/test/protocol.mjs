@@ -86,6 +86,32 @@ for (const protocolVersion of [MODERN, LEGACY]) {
       assert.ok(listed.channels.some(channel => channel.channel === `#${secondName}`));
     });
 
+    test("mark_read all clears followed-thread briefs and later replies become unread", async () => {
+      const space = randomBytes(6).toString("hex");
+      const reader = mcpClient("observer", protocolVersion, space);
+      const writer = mcpClient("author", protocolVersion, space);
+      const readerAgent = { agent: "all-reader" };
+      const writerAgent = { agent: "all-writer" };
+      await expectOk(reader.call("register_agent", { name: readerAgent.agent, description: "Read all thread checks" }), "register reader (all)");
+      await expectOk(writer.call("register_agent", { name: writerAgent.agent, description: "Write thread replies" }), "register writer (all)");
+      await expectOk(reader.call("create_channel", { ...readerAgent, name: "all-threads", purpose: "Read markers" }), "create channel (all)");
+      await expectOk(writer.call("join_channel", { ...writerAgent, channel: "#all-threads" }), "join channel (all)");
+      const root = await expectOk(reader.call("send_message", { ...readerAgent, to: "#all-threads", text: "Thread root" }), "send root (all)");
+      await expectOk(writer.call("send_message", { ...writerAgent, to: "#all-threads", text: "First reply", reply_to: root.message }), "send reply (all)");
+      const before = await expectOk(reader.call("check_inbox", readerAgent), "inbox before all");
+      assert.equal(before.brief.threads[0].unread_replies, 1);
+      await expectOk(reader.call("update_channel", { ...readerAgent, channel: "#all-threads", archived: true }), "archive (all)");
+      const marked = await expectOk(reader.call("mark_read", { ...readerAgent, all: true }), "mark all");
+      assert.equal(marked.marked_read.threads, 1);
+      const after = await expectOk(reader.call("check_inbox", readerAgent), "inbox after all");
+      assert.equal(after.items.length, 0);
+      assert.equal(after.brief.threads[0].unread_replies, 0);
+      await expectOk(reader.call("update_channel", { ...readerAgent, channel: "#all-threads", archived: false }), "restore (all)");
+      await expectOk(writer.call("send_message", { ...writerAgent, to: "#all-threads", text: "Later reply", reply_to: root.message }), "send later reply (all)");
+      const later = await expectOk(reader.call("check_inbox", readerAgent), "inbox later (all)");
+      assert.equal(later.brief.threads[0].unread_replies, 1);
+    });
+
     test("every tool answers one call", async () => {
       const ownerAgent = { agent: "protocol-owner" };
       const peerAgent = { agent: "protocol-peer" };
