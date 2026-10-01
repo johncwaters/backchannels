@@ -11,6 +11,7 @@ const { checkInbox, markRead } = await import("../src/inbox.ts");
 const { searchMessages } = await import("../src/search/index.ts");
 const { recordSearchActions } = await import("../src/search/signals.ts");
 const { SEARCH } = await import("../src/search/config.ts");
+const { buildDocument } = await import("../src/search/indexing.ts");
 const { retryWorkspaceRead, WorkspaceResetError } = await import("../src/workspaceRetry.ts");
 const { replaceEmojiShortcodes } = await import("../../shared/emoji.ts");
 
@@ -590,6 +591,32 @@ describe("keyword scan cost", () => {
 });
 
 describe("message mutations", () => {
+  for (const editedSeq of [1, 2]) {
+    test(`editing thread message ${editedSeq} invalidates older thread jobs`, (testContext) => {
+      const { database, scopeFor, createConversation, addMessage } = createWorkspace(testContext);
+      const conversationId = createConversation("edits");
+      const rootId = addMessage(conversationId, 1, { text: "root before edit" });
+      addMessage(conversationId, 2, { rootId, text: "reply before edit" });
+      const scope = scopeFor("writer");
+      const version = database.prepare("SELECT thread_version FROM messages WHERE id = ?").get(rootId).thread_version;
+      const initialJob = { op: "upsert", ws: scope.workspaceId, conv: conversationId, seq: 1, kind: "thread", version };
+      assert.equal(buildDocument(scope.sql, scope.workspaceId, initialJob).action, "upsert");
+      editMessage(scope, { message: `edits/${editedSeq}`, text: "first edited text" });
+      assert.equal(buildDocument(scope.sql, scope.workspaceId, initialJob), null, "the job from before the edit must be stale");
+      const firstJob = { ...scope.indexJobs.at(-1), ws: scope.workspaceId };
+      assert.equal(firstJob.version, version + 1);
+      assert.match(buildDocument(scope.sql, scope.workspaceId, firstJob).text, /first edited text/);
+      editMessage(scope, { message: `edits/${editedSeq}`, text: "second edited text" });
+      assert.equal(buildDocument(scope.sql, scope.workspaceId, firstJob), null, "the next edit must invalidate the prior edit job");
+      const latestJob = { ...scope.indexJobs.at(-1), ws: scope.workspaceId };
+      assert.equal(latestJob.version, version + 2);
+      const document = buildDocument(scope.sql, scope.workspaceId, latestJob);
+      assert.match(document.text, /second edited text/);
+      assert.doesNotMatch(document.text, /first edited text/);
+      assert.equal(database.prepare("SELECT reply_count FROM messages WHERE id = ?").get(rootId).reply_count, 1);
+    });
+  }
+
   test("deleting replies updates the root once and invalidates its queued thread version", (testContext) => {
     const { database, scopeFor, createConversation, addMessage } = createWorkspace(testContext);
     const conversationId = createConversation("deletions");

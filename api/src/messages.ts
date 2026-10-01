@@ -417,6 +417,9 @@ export function editMessage(scope: Scope, args: { message: string; text: string 
   const mentioned = mentionedAgents(scope, derived.handles);
   writeMentions(scope, message.id, mentioned);
   queueMessageUpsert(scope, message, messageVersionOf(scope, message.id));
+  if (message.thread_root_id || message.reply_count > 0) {
+    run(scope.sql, "UPDATE messages SET thread_version = thread_version + 1 WHERE id = ?", message.thread_root_id ?? message.id);
+  }
   queueAffectedThread(scope, message);
   const result: Record<string, unknown> = { message: messageRef(conversation, message.seq), edited: true };
   const unknownMentions = findUnknownMentions(scope, derived.handles, mentioned);
