@@ -32,7 +32,7 @@ const scopeLinks = [
 	{ label: 'Everyone', href: scopeHref(requestedUrl, 'everyone'), isCurrent: scope === 'everyone' },
 ].map((link) => ({ ...link, navTitle: new URL(link.href, requestedUrl).pathname !== requestedUrl.pathname ? 'All public channels' : heading }));
 const skeletonWidths = [72, 88, 56, 94, 64, 80];
-const footerLinkClass = 'inline-flex min-h-8 items-center px-2.5 text-inherit no-underline transition-colors duration-150 hover:bg-ground hover:text-amber';
+const footerLinkClass = 'inline-flex min-h-8 items-center px-2.5 text-inherit no-underline transition-colors duration-150 hover:bg-ground hover:text-amber max-[899px]:min-h-11 max-[899px]:shrink-0 max-[899px]:px-1 max-[899px]:whitespace-nowrap';
 ---
 
 <Base title={`${heading} · backchannels`} description="Read-only admin view of backchannels conversations." noIndex>
@@ -80,12 +80,21 @@ const footerLinkClass = 'inline-flex min-h-8 items-center px-2.5 text-inherit no
 				<ConversationList groups={frame.sidebarGroups} nowMs={frame.nowMs} scope={scope} viewerEmail={frame.viewer.email} selectedConversation={selectedConversation} directoryKind={directoryKind} />
 			</aside>
 		</div>
-		<footer class="flex min-h-8 flex-wrap items-center gap-x-3.5 bg-amber px-3 text-[13px] text-ground max-[899px]:px-4" transition:animate="none">
-			<strong class="font-semibold">[{frame.viewer.workspaceName}]</strong>
-			<span>· admin view</span>
-			<span>· signed in as {frame.viewer.email}</span>
-			<span>· web {frame.versions.web} · mcp {frame.versions.mcp}</span>
-			{!isErrorView && (liveUpdates ? <span class="live-status" data-live-status title="New messages load every 10 seconds">live</span> : <span title="Use Refresh to load new activity">manual refresh</span>)}
+		<footer class="flex min-h-8 flex-wrap items-center gap-x-3.5 bg-amber px-3 text-[13px] text-ground max-[899px]:min-h-11 max-[899px]:flex-nowrap max-[899px]:gap-x-0 max-[899px]:px-2" transition:animate="none">
+			<strong class="font-semibold max-[899px]:hidden">[{frame.viewer.workspaceName}]</strong>
+			<span class="max-[899px]:hidden">· admin view</span>
+			<span class="max-[899px]:hidden">· signed in as {frame.viewer.email}</span>
+			<span class="max-[899px]:hidden">· web {frame.versions.web} · mcp {frame.versions.mcp}</span>
+			{!isErrorView && <span class="max-[899px]:hidden">{liveUpdates ? <span class="live-status" data-live-status title="New messages load every 10 seconds">live</span> : <span title="Use Refresh to load new activity">manual refresh</span>}</span>}
+			<details class="relative hidden shrink-0 max-[899px]:block">
+				<summary class="flex min-h-11 min-w-11 cursor-pointer list-none items-center justify-center px-1 hover:bg-ground hover:text-amber [&::-webkit-details-marker]:hidden" aria-label="Workspace and connection information">Info</summary>
+				<div class="absolute bottom-full left-0 z-40 mb-1 flex w-[min(358px,calc(100vw-16px))] flex-col gap-1 border border-border bg-sidebar px-3 py-2 text-foreground shadow-lg">
+					<strong class="font-semibold">[{frame.viewer.workspaceName}] · admin view</strong>
+					<span>Signed in as {frame.viewer.email}</span>
+					<span>web {frame.versions.web} · mcp {frame.versions.mcp}</span>
+					{!isErrorView && (liveUpdates ? <span data-live-status title="New messages load every 10 seconds">live</span> : <span>Manual refresh · use Refresh to load new activity</span>)}
+				</div>
+			</details>
 			<a href="/admin/activity" class={`${footerLinkClass} ml-auto`} data-nav-title="Your agents’ activity">Activity</a>
 			<a href="/admin/installations" class={footerLinkClass} data-nav-title="Installations">Installations</a>
 			{frame.viewer.isAdmin && <a href="/admin/agents" class={footerLinkClass} data-nav-title="Headless agents">Agents</a>}

@@ -153,8 +153,8 @@ function liveRegionsOnPage(): HTMLElement[] {
 	return [...document.querySelectorAll<HTMLElement>(liveRegionSelector)];
 }
 
-function liveStatus(): HTMLElement | null {
-	return document.querySelector<HTMLElement>('[data-live-status]');
+function liveStatuses(): HTMLElement[] {
+	return [...document.querySelectorAll<HTMLElement>('[data-live-status]')];
 }
 
 function refreshPageUrl(requestedUrl: string, regions: HTMLElement[]): string {
@@ -187,16 +187,16 @@ export function installLiveFeed(): () => void {
 		const request = new AbortController();
 		inFlightRequest = request;
 		const timeout = window.setTimeout(() => request.abort('timeout'), refreshTimeoutMs);
-		const status = liveStatus();
-		if (status) status.dataset.refreshing = '';
+		const statuses = liveStatuses();
+		for (const status of statuses) status.dataset.refreshing = '';
 		const freshPage = await fetchChangedPage(refreshPageUrl(requestedUrl, regions), request, currentChangeToken).finally(() => {
 			window.clearTimeout(timeout);
 			if (inFlightRequest === request) inFlightRequest = null;
 		});
-		window.setTimeout(() => status?.removeAttribute('data-refreshing'), statusPulseMs);
+		window.setTimeout(() => statuses.forEach((status) => status.removeAttribute('data-refreshing')), statusPulseMs);
 		if (freshPage.outcome === 'cancelled') return;
 		hasLastRefreshFailed = freshPage.outcome === 'unreachable';
-		if (status) status.textContent = connectionStatusText();
+		for (const status of statuses) status.textContent = connectionStatusText();
 		if (!freshPage.freshDocument || location.href !== requestedUrl) return;
 		if (applyFreshRegions(regions, freshPage.freshDocument)) currentChangeToken = changeTokenFrom(freshPage.freshDocument);
 	}
@@ -240,9 +240,10 @@ export function installLiveFeed(): () => void {
 	}, { signal });
 
 	document.addEventListener('visibilitychange', () => {
-		const status = liveStatus();
-		status?.toggleAttribute('data-paused', document.hidden);
-		if (status) status.textContent = connectionStatusText();
+		for (const status of liveStatuses()) {
+			status.toggleAttribute('data-paused', document.hidden);
+			status.textContent = connectionStatusText();
+		}
 		if (!document.hidden) void refreshLiveRegions();
 	}, { signal });
 
