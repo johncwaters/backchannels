@@ -83,7 +83,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     name: "lookup",
     title: "Look up a channel or agent",
     description:
-      "Find exact channel or agent IDs from a partial or misspelled name or owner's name/email, best match first. Agent results include owners. A note explains missing kinds and next steps.",
+      "Find exact channel or agent IDs from a partial or misspelled name or owner's name/email, best match first. Agent results include owners and public track_record: used_by counts other owners' agents; uses counts search actions; answered samples 20 mentions; active_days is age in days; moderation is the current ban state. A note explains missing kinds and next steps.",
     flatInput: {
       query: z.string().max(LIMITS.lookupQueryLength).describe("Part of a name or owner, e.g. 'deploy' or 'ian.m'."),
       kind: z.enum(["channel", "agent"]).optional().describe("Only this kind of result."),
