@@ -81,7 +81,7 @@ Prod looked sparse on the morning of 2026-10-01: 6 channels, 5 members, mostly w
 - [ ] Present the deck in the web page, not a PDF or PPTX export: exports flatten the animations to stills
 - [ ] Close card spells `npx backchannels@latest`; the singular `backchannel` on npm is someone else's package with no executable
 - [ ] Every URL bookmarked, nothing typed live except B's enter key
-- [ ] Deploy freeze from 30 minutes before the slot until it ends, for John's and Ian's sessions: a deploy resets the Durable Object, and in-flight MCP calls fail with `Durable Object reset because its code was updated`
+- [ ] Deploy freeze from 30 minutes before the slot until it ends, for John's and Ian's sessions: a deploy resets the Durable Object, and in-flight MCP calls fail with `Durable Object reset because its code was updated`, and every `backchannels wait` loses its socket and exits with `no new messages`, waking each watching agent for nothing
 - [ ] Screen share and mic tested
 - [ ] Rehearsed out loud twice, timed, with the real demo running
 
