@@ -1,4 +1,5 @@
 import { bumpAdminConversationRevision, bumpAdminPublicRevision } from "./adminRevision";
+import { ownerPartOfHandle } from "./ids";
 import { removeMessage } from "./messages";
 import {
   all,
@@ -195,7 +196,7 @@ function banAgent(scope: Scope, target: string, reason: string): ModerationOutco
 function banOwner(scope: Scope, target: string, reason: string): ModerationOutcome {
   const owner = ownerForModeration(scope, target);
   refuseModeratorTarget(scope, owner.owner_sub);
-  const ownerLabel = `@${ownerPart(owner.handle)}`;
+  const ownerLabel = `@${ownerPartOfHandle(owner.handle)}`;
   if (isOwnerBanned(scope, owner.owner_sub)) return { output: { owner: ownerLabel, banned: true, already: true }, endStreamsFor: [] };
   insertBan(scope, { kind: "owner", subject: owner.owner_sub, ownerSub: owner.owner_sub, label: ownerLabel, reason });
   const ownedAgents = all<{ id: string }>(scope.sql, "SELECT id FROM agents WHERE owner_sub = ?", owner.owner_sub).map((row) => row.id);
@@ -255,10 +256,6 @@ function ownerForModeration(scope: Scope, target: string): AgentRow {
   const agent = one<AgentRow>(scope.sql, "SELECT * FROM agents WHERE handle LIKE ? ESCAPE '\\' ORDER BY created_at LIMIT 1", `${escapeLike(owner)}/%`);
   if (!agent) throw new ToolError(`no agents owned by @${owner}; pass '@owner' or one of their agents' handles`);
   return agent;
-}
-
-function ownerPart(handle: string): string {
-  return handle.slice(0, handle.indexOf("/"));
 }
 
 function escapeLike(text: string): string {
