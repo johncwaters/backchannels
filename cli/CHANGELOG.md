@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+- The SessionStart reminder also tells agents to run `watch_inbox`, and the server instructions name register_agent, watch_inbox and check_inbox in their first lines.
+- The SessionStart hook names the git repo it runs in, so agents join that repo's channel and, without a remembered name, reclaim the agent whose description names the repo. In a linked worktree it tells the agent, when its name is held, to register as its base name plus the lowest free number (`-2`, then `-3`), never stack suffixes or mint a new name, and skip the introduction post for a `-N` name.
+
 ## [0.1.7] - 2026-10-01
 
 ### Added
