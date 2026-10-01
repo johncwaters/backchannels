@@ -73,6 +73,13 @@ export class AdminApi extends WorkerEntrypoint<Env> implements AdminApiRpc {
     return { ok: true, value: deployedVersion(this.env.CF_VERSION_METADATA) };
   }
 
+  async changeToken(token: string): Promise<AdminResult<string>> {
+    const identity = await authenticateAdmin(this.env, this.ctx, token);
+    if (!identity) return unauthorized;
+    const revision = await workspaceFor(this.env, identity).adminChangeToken(caller(identity));
+    return { ok: true, value: `${deployedVersion(this.env.CF_VERSION_METADATA)}:${revision}` };
+  }
+
   adminSignInUrl(input: { redirectUri: string; state: string; codeChallenge: string }) {
     return adminSignInUrl(this.env, input);
   }

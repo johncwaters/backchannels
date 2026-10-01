@@ -365,6 +365,11 @@ export class AdminApi extends WorkerEntrypoint implements AdminApiRpc {
 		return ok('preview');
 	}
 
+	async changeToken(token: string): Promise<AdminResult<string>> {
+		if (!isPreviewToken(token)) return unauthorized;
+		return ok('preview:0');
+	}
+
 	async listConversations(
 		token: string,
 		options: { scope: Scope; kind?: DirectoryKind; sort?: ConversationSort; filter?: string; cursor?: string },

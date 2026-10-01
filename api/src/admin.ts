@@ -156,6 +156,7 @@ export interface AdminApiRpc {
   revokeAdminSession(input: { refreshToken: string; redirectUri: string }): Promise<AdminResult<null>>;
   viewer(token: string): Promise<AdminResult<Viewer>>;
   serverVersion(token: string): Promise<AdminResult<string>>;
+  changeToken(token: string): Promise<AdminResult<string>>;
   listConversations(
     token: string,
     options: { scope: Scope; kind?: DirectoryKind; sort?: ConversationSort; filter?: string; cursor?: string },

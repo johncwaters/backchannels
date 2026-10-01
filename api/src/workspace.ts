@@ -25,6 +25,7 @@ import { fullHandle, handleOwner, sha256Hex } from "./ids";
 import { ToolError, all, label, messageRef, nameInUseRefusal, one, run, type AgentRow, type ConversationRow, type MessageRow, type Scope } from "./store";
 import { STREAM_PROTOCOL, STREAM_ROUTE, isStreamGrantLive, isWebSocketUpgrade, streamTicketFrom, unauthorizedStream } from "./stream";
 import { buildBrief, type Brief } from "./brief";
+import { adminChangeToken, bumpAdminOwnerRevision, bumpAdminPublicRevision, recordAdminToolChange } from "./adminRevision";
 
 // RFC 6455 section 7.4.1: these codes describe a close but must never be sent in a close frame.
 const UNSENDABLE_CLOSE_CODES = new Set([1005, 1006, 1015]);
@@ -188,6 +189,7 @@ export class WorkspaceDO extends DurableObject<Env> {
       const registered = one<AgentRow>(this.sql, "SELECT * FROM agents WHERE handle = ?", handle)!;
       if (!existing) joinDefaultChannels(this.scopeFor(registered, identity.workspaceId, now));
       this.audit(grantId, registered.id, "register_agent");
+      bumpAdminPublicRevision(this.sql);
       return { status: "registered", handle, created: !existing, brief: buildBrief(this.scopeFor(registered, identity.workspaceId, now)) };
     });
   }
@@ -238,16 +240,23 @@ export class WorkspaceDO extends DurableObject<Env> {
     const agent = this.resolveCaller(caller, domain);
     if (typeof agent === "string") return { error: agent };
 
-    run(this.sql, "UPDATE agents SET last_active_at = ? WHERE id = ? AND last_active_at < ?", now, agent.id, now - 60_000);
+    if (run(this.sql, "UPDATE agents SET last_active_at = ? WHERE id = ? AND last_active_at < ?", now, agent.id, now - 60_000)) {
+      bumpAdminOwnerRevision(this.sql, caller.ownerSub);
+    }
     if (caller.ownerName && caller.ownerName !== agent.owner_name) {
       run(this.sql, "UPDATE agents SET owner_name = ? WHERE owner_sub = ?", caller.ownerName, agent.owner_sub);
       agent.owner_name = caller.ownerName;
+      bumpAdminPublicRevision(this.sql);
     }
     this.audit(caller.grantId, agent.id, name);
     const limited = this.takeTokens(name, agent.id, caller, now);
     if (limited) return { error: limited };
     const scope = this.scopeFor(agent, caller.workspaceId, now);
-    const invoke = () => handler(scope, args as never, caller.grantId);
+    const invoke = () => {
+      const output = handler(scope, args as never, caller.grantId);
+      if (!ASYNC_TOOLS.has(name)) recordAdminToolChange(this.sql, caller.ownerSub, name, output as Record<string, unknown>);
+      return output;
+    };
     try {
       const output = ASYNC_TOOLS.has(name) ? await invoke() : this.ctx.storage.transactionSync(invoke);
       await this.sendIndexJobs(caller.workspaceId, scope.indexJobs);
@@ -350,6 +359,10 @@ export class WorkspaceDO extends DurableObject<Env> {
     };
   }
 
+  async adminChangeToken(caller: AdminCaller): Promise<string> {
+    return adminChangeToken(this.sql, caller.sub, Date.now());
+  }
+
   async adminList(
     caller: AdminCaller,
     options: { scope: AdminScope; kind?: DirectoryKind; sort?: ConversationSort; filter?: string; cursor?: string },
@@ -396,6 +409,7 @@ export class WorkspaceDO extends DurableObject<Env> {
     run(this.sql, "UPDATE agents SET revoked_at = ? WHERE id = ?", Date.now(), agent.id);
     this.audit(grantId, agent.id, "revoke_agent");
     this.endAgentStreams(agent.id, "agent revoked");
+    bumpAdminOwnerRevision(this.sql, ownerSub);
     return agent.id;
   }
 
@@ -407,6 +421,7 @@ export class WorkspaceDO extends DurableObject<Env> {
       sub: caller.sub,
       audit: (tool, conversationId) => this.audit(caller.grantId, null, tool, conversationId ?? null),
       searchScope: (agent) => this.scopeFor(agent, caller.workspaceId, now),
+      readStateChanged: () => bumpAdminOwnerRevision(this.sql, caller.sub),
     };
   }
 
@@ -430,6 +445,7 @@ export class WorkspaceDO extends DurableObject<Env> {
         run(this.sql, "DELETE FROM search_log");
         run(this.sql, "DELETE FROM channel_usefulness");
       }
+      bumpAdminPublicRevision(this.sql);
     });
   }
 

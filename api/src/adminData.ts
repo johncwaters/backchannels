@@ -19,6 +19,7 @@ export interface AdminContext {
   sub: string;
   audit: (tool: string, conversationId?: number) => void;
   searchScope: (agent: AgentRow) => ToolScope;
+  readStateChanged?: () => void;
 }
 
 type ListedRow = ConversationRow & {
@@ -70,7 +71,9 @@ const MESSAGE_JOINS = `LEFT JOIN agents a ON a.id = m.author_id LEFT JOIN pins p
 const MESSAGE_SELECT = `SELECT ${MESSAGE_COLUMNS} FROM messages m ${MESSAGE_JOINS}`;
 
 function rememberViewer(context: AdminContext): void {
-  run(context.sql, "INSERT OR IGNORE INTO viewers (owner_sub, first_seen_at) VALUES (?, ?)", context.sub, context.now);
+  if (run(context.sql, "INSERT OR IGNORE INTO viewers (owner_sub, first_seen_at) VALUES (?, ?)", context.sub, context.now)) {
+    context.readStateChanged?.();
+  }
 }
 
 function listedConversations(context: AdminContext, condition: string, conversationCondition: string, ...bindings: (string | number)[]): ListedRow[] {
@@ -397,15 +400,17 @@ export function adminMarkRead(context: AdminContext, options: { conversation: st
   if (!row) return notFound;
   const upToSeq = Math.min(options.upToSeq, row.last_seq);
   if (options.thread === undefined) {
-    run(
+    const changed = run(
       context.sql,
       `INSERT INTO viewer_reads (owner_sub, conversation_id, last_read_seq, updated_at) VALUES (?1, ?2, ?3, ?4)
-       ON CONFLICT (owner_sub, conversation_id) DO UPDATE SET last_read_seq = max(last_read_seq, excluded.last_read_seq), updated_at = excluded.updated_at`,
+       ON CONFLICT (owner_sub, conversation_id) DO UPDATE SET last_read_seq = excluded.last_read_seq, updated_at = excluded.updated_at
+       WHERE excluded.last_read_seq > viewer_reads.last_read_seq`,
       context.sub,
       row.id,
       upToSeq,
       context.now,
     );
+    if (changed) context.readStateChanged?.();
     const unread = one<{ count: number }>(
       context.sql,
       `SELECT count(*) AS count FROM messages m WHERE m.conversation_id = ?1 AND m.seq > ?2
@@ -423,15 +428,17 @@ export function adminMarkRead(context: AdminContext, options: { conversation: st
     options.thread,
   );
   if (!root) return notFound;
-  run(
+  const changed = run(
     context.sql,
     `INSERT INTO viewer_thread_reads (owner_sub, root_id, last_read_seq, updated_at) VALUES (?1, ?2, ?3, ?4)
-     ON CONFLICT (owner_sub, root_id) DO UPDATE SET last_read_seq = max(last_read_seq, excluded.last_read_seq), updated_at = excluded.updated_at`,
+     ON CONFLICT (owner_sub, root_id) DO UPDATE SET last_read_seq = excluded.last_read_seq, updated_at = excluded.updated_at
+     WHERE excluded.last_read_seq > viewer_thread_reads.last_read_seq`,
     context.sub,
     root.id,
     upToSeq,
     context.now,
   );
+  if (changed) context.readStateChanged?.();
   return { ok: true, value: { unread: row.unread } };
 }
 
