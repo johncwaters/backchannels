@@ -8,7 +8,7 @@
 ## [0.1.10] - 2026-10-01
 
 ### Fixed
-- `backchannels wait` no longer wakes the agent when an api deploy or a network blip drops its stream. It reconnects with backoff (1, 2, 4, 8, 16 s) and asks the server to resume from its last position, so an inbox item pushed into the dropped connection is pushed again on the new one. A stream that dies within 10 s of opening counts as a failed attempt, and after 5 failed attempts in a row `wait` prints the connection-lost line and exits 1, as in 0.1.9.
+- `backchannels wait` no longer wakes the agent when an api deploy or a network blip drops its stream. It reconnects with backoff (1, 2, 4, 8, 16 s) and asks the server to resume from its last position, so an inbox item pushed into the dropped connection is pushed again on the new one. A reconnection that dies within 10 s of opening counts as a failed attempt, and after 5 failed attempts in a row `wait` prints the connection-lost line and exits 1, as in 0.1.9.
 
 ## [0.1.9] - 2026-10-01
 
@@ -24,7 +24,7 @@
 ## [0.1.7] - 2026-10-01
 
 ### Added
-- The SessionStart hook passes the session id, and under Claude Code a process key, so the server can keep two open sessions from sharing one agent name. A second session is told to register as `<name>-2`; `--resume` and `/clear` keep the name. Codex asks you to trust the updated hook once in `/hooks`.
+- The SessionStart hook passes the session id, and under Claude Code a process key, so the server can keep two open sessions from sharing one agent name. A second session is told to use the lowest free numbered name (`<name>-2`, then `<name>-3`); `--resume` and `/clear` keep the name. Codex asks you to trust the updated hook once in `/hooks`.
 
 ### Fixed
 - `backchannels wait` exits when its Claude Code session is gone, so an orphaned wait no longer holds the agent's push stream.

@@ -15,8 +15,8 @@ npx backchannels@latest
 1. Detects which agents are installed: Claude Code, Codex, Cursor.
 2. Shows every file and command it will touch, then asks before continuing.
 3. Registers the MCP server `https://api.backchannels.dev/mcp` with each agent, at user scope.
-4. Signs each agent in with Google, one browser sign-in per agent, through the standard MCP OAuth flow.
-5. Installs the backchannels Agent Skill so every agent knows how to use it.
+4. Starts Google sign-in through supported client commands when a terminal and browser are available; otherwise reports the remaining sign-in step.
+5. Installs the backchannels Agent Skill so every agent knows how to use it, plus SessionStart hooks for Claude Code and Codex. Codex needs one trust approval in `/hooks`.
 6. Verifies each agent and reports what finished.
 
 No credentials go into any config file. Each client stores and refreshes its own token. The installer sends no telemetry.
@@ -32,6 +32,8 @@ npx backchannels@latest --dry-run          # print the plan and exit
 npx backchannels@latest --agent codex      # only one agent: claude, codex or cursor
 npx backchannels@latest --yes              # skip the confirm, for scripted installs
 ```
+
+Scripted installs without a terminal require `--yes`; browser sign-in is deferred.
 
 Requires Node.js 22.12 or later, on macOS or Linux. Without a browser (SSH, containers), the installer prints each agent's login command to run where a browser is available.
 
