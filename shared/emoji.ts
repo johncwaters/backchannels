@@ -21,7 +21,7 @@ function isEscaped(text: string, index: number): boolean {
   return slashes % 2 === 1;
 }
 
-function replaceInlineShortcodes(text: string, sourceOffset: number, recordReplacement?: RecordReplacement): string {
+function* walkInlineProseRanges(text: string, sourceOffset: number): Generator<{ start: number; end: number }> {
   const tokens = [...text.matchAll(INLINE_TOKEN)];
   const nextBacktick = new Map<number, number>();
   const closingBacktick = new Map<number, number>();
@@ -32,29 +32,26 @@ function replaceInlineShortcodes(text: string, sourceOffset: number, recordRepla
     if (next !== undefined) closingBacktick.set(index, next);
     nextBacktick.set(token.length, index);
   }
-  const parts: string[] = [];
   let consumed = 0;
   for (let index = 0; index < tokens.length; index++) {
     const token = tokens[index];
-    if (isEscaped(text, token.index)) continue;
+    if (token[0].startsWith(":")) continue;
     if (token[0].startsWith("`")) {
+      if (isEscaped(text, token.index)) continue;
       const closing = closingBacktick.get(index);
-      if (closing !== undefined) index = closing;
+      if (closing === undefined) continue;
+      yield { start: sourceOffset + consumed, end: sourceOffset + token.index };
+      consumed = tokens[closing].index + tokens[closing][0].length;
+      index = closing;
       continue;
     }
-    if (!token[0].startsWith(":")) continue;
-    const emoji = emojiForShortcode(token[0].slice(1, -1));
-    if (emoji === null) continue;
-    recordReplacement?.({ start: sourceOffset + token.index, end: sourceOffset + token.index + token[0].length, emoji });
-    parts.push(text.slice(consumed, token.index), emoji);
+    yield { start: sourceOffset + consumed, end: sourceOffset + token.index };
     consumed = token.index + token[0].length;
   }
-  parts.push(text.slice(consumed));
-  return parts.join("");
+  yield { start: sourceOffset + consumed, end: sourceOffset + text.length };
 }
 
-export function replaceEmojiShortcodes(text: string, recordReplacement?: RecordReplacement): string {
-  const parts: string[] = [];
+function* walkProseRanges(text: string): Generator<{ start: number; end: number }> {
   let fence: { marker: string; quoteDepth: number } | undefined;
   let offset = 0;
   let proseStart = 0;
@@ -62,7 +59,6 @@ export function replaceEmojiShortcodes(text: string, recordReplacement?: RecordR
     const match = line.match(FENCE_LINE);
     const quoteDepth = match?.[1].match(/>/g)?.length ?? 0;
     if (fence) {
-      parts.push(line);
       if (
         match &&
         !match[2] &&
@@ -74,13 +70,45 @@ export function replaceEmojiShortcodes(text: string, recordReplacement?: RecordR
         fence = undefined;
         proseStart = offset + line.length;
       }
-    } else if (match && (match[3][0] !== "`" || !match[4].includes("`"))) {
-      parts.push(replaceInlineShortcodes(text.slice(proseStart, offset), proseStart, recordReplacement), line);
+      offset += line.length;
+      continue;
+    }
+    if (match && (match[3][0] !== "`" || !match[4].includes("`"))) {
+      yield* walkInlineProseRanges(text.slice(proseStart, offset), proseStart);
       fence = { marker: match[3], quoteDepth };
     }
     offset += line.length;
   }
-  if (!fence) parts.push(replaceInlineShortcodes(text.slice(proseStart), proseStart, recordReplacement));
+  if (!fence) yield* walkInlineProseRanges(text.slice(proseStart), proseStart);
+}
+
+export function maskCode(text: string): string {
+  const parts: string[] = [];
+  let consumed = 0;
+  for (const range of walkProseRanges(text)) {
+    parts.push(text.slice(consumed, range.start).replace(/[^\r\n]/g, " "), text.slice(range.start, range.end));
+    consumed = range.end;
+  }
+  parts.push(text.slice(consumed).replace(/[^\r\n]/g, " "));
+  return parts.join("");
+}
+
+export function replaceEmojiShortcodes(text: string, recordReplacement?: RecordReplacement): string {
+  const parts: string[] = [];
+  let consumed = 0;
+  for (const range of walkProseRanges(text)) {
+    for (const token of text.slice(range.start, range.end).matchAll(INLINE_TOKEN)) {
+      const start = range.start + token.index;
+      if (!token[0].startsWith(":") || isEscaped(text, start)) continue;
+      const emoji = emojiForShortcode(token[0].slice(1, -1));
+      if (emoji === null) continue;
+      const end = start + token[0].length;
+      recordReplacement?.({ start, end, emoji });
+      parts.push(text.slice(consumed, start), emoji);
+      consumed = end;
+    }
+  }
+  parts.push(text.slice(consumed));
   return parts.join("");
 }
 

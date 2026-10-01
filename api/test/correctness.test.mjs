@@ -13,7 +13,7 @@ const { recordSearchActions } = await import("../src/search/signals.ts");
 const { SEARCH } = await import("../src/search/config.ts");
 const { buildDocument } = await import("../src/search/indexing.ts");
 const { retryWorkspaceRead, WorkspaceResetError } = await import("../src/workspaceRetry.ts");
-const { replaceEmojiShortcodes } = await import("../../shared/emoji.ts");
+const { maskCode, replaceEmojiShortcodes } = await import("../../shared/emoji.ts");
 
 describe("workspace deploy reset recovery", () => {
   const reset = () => new Error("Durable Object reset because its code was updated.");
@@ -95,6 +95,15 @@ function createWorkspace(testContext) {
 }
 
 describe("message emoji shortcodes", () => {
+  test("code masking preserves prose, length, and line endings", () => {
+    const input = "👋 @team `@team\n:wave:` https://example.com/?owner=@team\r\n> - ~~~\r\n> @team\r\n> ~~~\r\n\\`@team\\`";
+    const expected = "👋 @team " + " ".repeat(6) + "\n" + " ".repeat(7) + " " + " ".repeat(32) + "\r\n" + " ".repeat(7) + "\r\n" + " ".repeat(7) + "\r\n" + " ".repeat(5) + "\r\n\\`@team\\`";
+    const masked = maskCode(input);
+    assert.equal(masked, expected);
+    assert.equal(masked.length, input.length);
+    assert.deepEqual([...masked.matchAll(/\r?\n/g)].map((match) => match.index), [...input.matchAll(/\r?\n/g)].map((match) => match.index));
+  });
+
   for (const [name, input, expected] of [
     ["known and repeated shortcodes", ":wave: :rocket::rocket: :+1:", "👋 🚀🚀 👍"],
     ["unknown shortcodes", ":not-an-emoji: :constructor: :wave:", ":not-an-emoji: :constructor: 👋"],

@@ -1,3 +1,4 @@
+import { maskCode } from "../../shared/emoji";
 import { openChat } from "./conversations";
 import { LIMITS } from "./limits";
 import { previewMessage } from "./messagePreview";
@@ -36,7 +37,7 @@ function hasSenderReachedOwnerCap(scope: Scope, ownerSub: string): boolean {
     scope.sql,
     `SELECT count(*) AS count FROM owner_messages o JOIN messages m ON m.id = o.message_id
        JOIN agents sender ON sender.id = m.author_id
-     WHERE o.owner_sub = ?1 AND o.created_at > ?2 AND sender.owner_sub = ?3
+     WHERE o.owner_sub = ?1 AND o.created_at > ?2 AND sender.owner_sub = ?3 AND m.deleted_at IS NULL
        AND NOT ${claimedByOwnerSql("m.id", "?1")}`,
     ownerSub,
     scope.now - LIMITS.ownerQueueMaxAgeMs,
@@ -62,7 +63,10 @@ export function queueOwnerMessages(scope: Scope, conversation: ConversationRow, 
     return queuedOwners;
   }
   if (conversation.kind !== "public") return queuedOwners;
-  const ownerNames = new Set([...message.text.matchAll(OWNER_MENTION)].map((mention) => mention[1].toLowerCase()));
+  const proseOnlyText = maskCode(message.text);
+  const ownerNames = new Set([...message.text.matchAll(OWNER_MENTION)]
+    .filter((mention) => proseOnlyText[mention.index + mention[0].length - mention[1].length - 1] === "@")
+    .map((mention) => mention[1].toLowerCase()));
   for (const ownerName of ownerNames) {
     if (["channel", "here"].includes(ownerName)) continue;
     const owner = findOwner(scope, ownerName);

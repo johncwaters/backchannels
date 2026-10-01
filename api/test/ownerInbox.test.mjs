@@ -423,6 +423,39 @@ describe("workspace tool transactions", () => {
 });
 
 describe("owner mentions", () => {
+  for (const [name, text] of [
+    ["inline code", "`@team`"],
+    ["backtick fences", "```\n@team\n```"],
+    ["tilde fences", "~~~\n@team\n~~~"],
+    ["quoted list fences", "> - ```\n> @team\n> ```"],
+    ["URL tokens", "https://example.com/?owner=@team"],
+    ["a URL glued to the mention", "@teamhttps://x"],
+    ["a URL glued after a dot", "ping @team.https://x.io/a"],
+  ]) {
+    test(`ignores owner mentions inside ${name}`, (context) => {
+      const workspace = createWorkspace(context);
+      addConversation(workspace.database, "general", ["author"]);
+      const sent = sendMessage(workspace.scopeFor("author"), { to: "#general", text });
+      assert.equal(sent.queued_for, undefined);
+      assert.equal(checkInbox(workspace.scopeFor("caller"), {}).owner_inbox, undefined);
+      assert.equal(workspace.database.prepare("SELECT count(*) AS count FROM owner_messages").get().count, 0);
+    });
+  }
+
+  for (const [name, text] of [
+    ["prose next to inline code", "ask @team about `x`"],
+    ["escaped backticks", "\\`@team\\`"],
+    ["unmatched backticks", "`@team"],
+  ]) {
+    test(`queues owner mentions in ${name}`, (context) => {
+      const workspace = createWorkspace(context);
+      addConversation(workspace.database, "general", ["author"]);
+      const sent = sendMessage(workspace.scopeFor("author"), { to: "#general", text });
+      assert.deepEqual(sent.queued_for, ["@team"]);
+      assert.equal(checkInbox(workspace.scopeFor("caller"), {}).owner_inbox.items[0].message.id, sent.message);
+    });
+  }
+
   test("queues every mentioned owner and keeps one claim per owner", (context) => {
     const workspace = createWorkspace(context);
     setDistinctOwnerHandles(workspace);
@@ -505,11 +538,17 @@ describe("owner inbox sender cap", () => {
     assert.equal(sendToOwner(workspace, "authorSecond", "From another agent").queued_for, undefined);
   });
 
-  test("deleting a queued message does not free a cap slot", (context) => {
+  test("author deletes of every queued message free the whole cap", (context) => {
+    const workspace = createWorkspace(context);
+    for (const queued of fillSenderCap(workspace, "author")) deleteMessage(workspace.scopeFor("author"), { message: queued.message });
+    assert.equal(sendToOwner(workspace, "author", "After deleting all").queued_for, "@team");
+  });
+
+  test("a moderator delete of a queued message frees a cap slot", (context) => {
     const workspace = createWorkspace(context);
     const [firstQueued] = fillSenderCap(workspace, "author");
-    deleteMessage(workspace.scopeFor("author"), { message: firstQueued.message });
-    assert.equal(sendToOwner(workspace, "author", "After a delete").queued_for, undefined);
+    workspace.database.prepare("UPDATE messages SET deleted_at = ? WHERE id = ?").run(workspace.now, workspace.messageIdOf(firstQueued.message));
+    assert.equal(sendToOwner(workspace, "author", "After a moderator delete").queued_for, "@team");
   });
 
   test("a different sending carbon unit keeps its own cap and a claim frees a slot", (context) => {
