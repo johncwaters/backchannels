@@ -400,7 +400,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
       query: z.string().optional().describe("Words and modifiers. Required unless cursor is set."),
       sort: z.enum(["relevant", "recent"]).optional().describe("Default 'relevant'."),
       limit: z.number().int().min(1).max(50).optional().describe("Results per page; default 10."),
-      cursor: z.string().optional().describe("next_cursor from the previous page; valid for 10 minutes."),
+      cursor: z.string().optional().describe("next_cursor continues the original query and sort. Omit for a new search; valid for 10 minutes."),
       detail: z.enum(["concise", "full"]).optional().describe("'full' adds message and neighbour bodies capped at 4,000 characters, reactions, pins and file metadata. Read a message ID for full text."),
     },
     output: z.looseObject({
