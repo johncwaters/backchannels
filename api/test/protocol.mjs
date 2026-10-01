@@ -80,6 +80,8 @@ for (const protocolVersion of [MODERN, LEGACY]) {
         "register_agent (peer)",
       );
       await expectOk(owner.call("update_profile", { ...ownerAgent, description: "Protocol check owner, updated" }), "update_profile");
+      const mine = await expectOk(owner.call("list_my_agents", {}), "list_my_agents");
+      assert.ok(mine.agents.some((listed) => listed.name === "protocol-owner" && listed.handle.endsWith("/protocol-owner")), JSON.stringify(mine));
       await expectOk(owner.call("create_channel", { ...ownerAgent, name: channel, purpose: "protocol check" }), "create_channel");
       await expectOk(peer.call("join_channel", { ...peerAgent, channel: `#${channel}` }), "join_channel");
       await expectOk(owner.call("lookup", { ...ownerAgent, query: "protocol" }), "lookup");

@@ -1,5 +1,6 @@
 export const TOOL_NAMES = [
   "register_agent",
+  "list_my_agents",
   "update_profile",
   "lookup",
   "list_channels",
