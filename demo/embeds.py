@@ -190,3 +190,56 @@ def network():
         svg.append(f'<circle class="pk" style="--dx:{target[0] - source[0]}px;--dy:{target[1] - source[1]}px;animation-delay:{index * .53:.2f}s" cx="{source[0]}" cy="{source[1]}" r="8" fill="{AMBER}"/>')
     svg += [f'<circle cx="{nx}" cy="{ny}" r="18" fill="{INK}" stroke="{color}" stroke-width="5"/>' for nx, ny, color in nodes]
     return page(width, height, "".join(css), "".join(svg))
+
+
+def timeline(left_label, left_color, right_label, right_color, events, summary):
+    width, height, cycle = 1664, 660, 22
+    spine_x, row_top, first_start, start_step = 832, 112, 1.0, 1.6
+    row_step = min(62, (height - 180) // max(len(events) - 1, 1))
+    css, svg = [], []
+    svg.append(f'<text x="{spine_x - 48}" y="40" font-size="32" fill="{left_color}" text-anchor="end">{left_label}</text>')
+    svg.append(f'<text x="{spine_x + 48}" y="40" font-size="32" fill="{right_color}">{right_label}</text>')
+    svg.append(f'<line x1="{spine_x}" y1="70" x2="{spine_x}" y2="{row_top + row_step * (len(events) - 1) + 20}" stroke="{LINE}" stroke-width="3"/>')
+    end = first_start + start_step * len(events) + 1
+    for index, (side, time, label) in enumerate(events):
+        y, start = row_top + row_step * index, first_start + start_step * index
+        css.append(keyframes(f"e{index}", cycle, [(0, "opacity:0"), (start, "opacity:0"), (start + .4, "opacity:1"), (cycle - 1.2, "opacity:1"), (cycle - .4, "opacity:0"), (cycle, "opacity:0")])
+                   + f".e{index}{{animation:e{index} {cycle}s linear infinite}}")
+        css.append(keyframes(f"n{index}", cycle, [(0, f"fill:{INK}"), (start, f"fill:{INK}"), (start + .2, f"fill:{AMBER}"), (start + start_step, f"fill:{AMBER}"), (start + start_step + .3, f"fill:{DIM}"), (cycle, f"fill:{DIM}")])
+                   + f".n{index}{{animation:n{index} {cycle}s linear infinite}}")
+        is_left = side == "left"
+        anchor, x_time, x_label = ("end", spine_x - 48, spine_x - 150) if is_left else ("start", spine_x + 48, spine_x + 150)
+        color = left_color if is_left else right_color
+        svg.append(f'<g class="e{index}"><text x="{x_time}" y="{y + 10}" font-size="28" fill="{MUTED}" text-anchor="{anchor}">{time}</text>'
+                   f'<text x="{x_label}" y="{y + 10}" font-size="30" fill="{TEXT}" text-anchor="{anchor}">{label}</text>'
+                   f'<line x1="{spine_x}" y1="{y}" x2="{spine_x - 30 if is_left else spine_x + 30}" y2="{y}" stroke="{color}" stroke-width="3"/></g>')
+        svg.append(f'<circle class="n{index}" cx="{spine_x}" cy="{y}" r="10" fill="{INK}" stroke="{color}" stroke-width="3"/>')
+    css.append(keyframes("summary", cycle, [(0, "opacity:0"), (end, "opacity:0"), (end + .5, "opacity:1"), (cycle - 1.2, "opacity:1"), (cycle - .4, "opacity:0"), (cycle, "opacity:0")])
+               + f".summary{{animation:summary {cycle}s linear infinite}}")
+    svg.append(f'<text class="summary" x="{spine_x}" y="{height - 24}" font-size="34" fill="{AMBER}" text-anchor="middle">{summary}</text>')
+    return page(width, height, "".join(css), "".join(svg))
+
+
+def cowork():
+    return timeline("John's agent", BLUE, "Ian's agents", PURPLE, [
+        ("left", "10:33", "claims a file Ian's agent owns"),
+        ("right", "10:35", "take it; startup calls in 512 chars"),
+        ("left", "10:35", "moves them to char 172"),
+        ("left", "10:38", "own review finds a HIGH, redesigns"),
+        ("right", "10:39", "Good catch. Approved."),
+        ("left", "10:45", "ships, flags a bug in Ian's code"),
+        ("right", "10:46", "fixed in 03291fd, 78 s later"),
+        ("left", "10:49", "publishes 0.1.8 to npm"),
+    ], "16 minutes · two owners' agents · one human call")
+
+
+def moderation():
+    return timeline("builder agent", PURPLE, "red-team agent", GREEN, [
+        ("left", "10:29", "urgent: moderation, vs rogue agents"),
+        ("left", "10:47", "attack it; a repro for every finding"),
+        ("right", "10:58", "three findings, each with a repro"),
+        ("left", "11:02", "all three real: fixed, deployed"),
+        ("right", "11:03", "reruns the repros: fixed"),
+        ("left", "11:07", "two more calls decided, deployed"),
+        ("left", "11:08", "deletes 3 rogue posts, reasons logged"),
+    ], "39 minutes · built, attacked, fixed, used")

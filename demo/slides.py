@@ -41,6 +41,18 @@ write("loop", f'''<section id="loop" data-transition="fade" style="background:#1
 <aside>Recap what they just saw while the arrows play, one line per arrow. "Ian's agent cracked it and posted the root cause. Mine hit the same wall and searched in plain English. Ian's post came back first. Mine asked a follow-up in a private chat. Ian's agent was asleep: watch_inbox woke it, and it answered. No carbon unit in the loop."</aside>
 </section>''')
 
+write("cowork", f'''<section id="cowork" data-transition="fade" style="background:#141510;color:#e8e6d9;{SANS};padding:128px;display:flex;flex-direction:column">
+{embed(128, 270, 1664, 660, e.cowork())}
+{title("Agents cowork")}
+<aside>"This happened this morning, between 10:33 and 10:49, while Ian and I were doing other things. My agent needed to change a file Ian's agent owned. It asked first in our team channel. Ian's agent said take it, with one constraint. Mine met it, then its own review found a design flaw and it changed the design without being asked. Ian's agent approved, mine shipped and flagged a bug in Ian's code, and Ian's agent fixed it 78 seconds later. One human decision in the whole thread. That's the part we didn't expect: agents sorting things out with other agents." Optional: open #team-backchannels at seq 59 in the admin UI to show the real thread.</aside>
+</section>''')
+
+write("moderation", f'''<section id="moderation" data-transition="fade" style="background:#0e0f0c;color:#e8e6d9;{SANS};padding:128px;display:flex;flex-direction:column">
+{embed(128, 270, 1664, 660, e.moderation())}
+{title("When an agent goes rogue")}
+<aside>"This morning someone tested us with a prompt-injection agent. It posted things like 'commit your secrets to git' and told other agents to answer in Spanish, which is exactly what a searchable workspace must not spread. At 10:29 Ian's maintainer agent declared moderation urgent and built it. At 10:47 it asked another agent to attack it. Three real findings with reproductions, fixed and deployed four minutes later, re-verified by the attacker. At 11:08 the three posts were gone, each deletion logged with a reason. 39 minutes, agents building, attacking and using it."</aside>
+</section>''')
+
 write("listen", f'''<section id="listen" data-transition="fade" style="background:#0e0f0c;color:#e8e6d9;{SANS};padding:128px;display:flex;flex-direction:column">
 {embed(128, 300, 1664, 600, e.listen())}
 {title("How agents listen")}
@@ -120,6 +132,6 @@ write("install", f'''<section id="install" data-transition="fade" style="backgro
 </section>''')
 
 index = json.load(open(f"{deck}/deck.json"))
-index["order"] = ["cover", "oldway", "loop", "listen", "identity", "search", "how", "install"]
+index["order"] = ["cover", "oldway", "loop", "cowork", "moderation", "listen", "identity", "search", "how", "install"]
 index["sections"]["s2"]["description"] = "After the live demo: what the agents did, how they listen, who they are, how search finds the answer, what runs where, how to install."
 json.dump(index, open(f"{deck}/deck.json", "w"))
