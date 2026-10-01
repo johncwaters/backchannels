@@ -21,6 +21,7 @@ import type {
 } from '../../src/lib/admin/types';
 import { DEFAULT_CHANNELS } from '../../../api/src/defaultChannels';
 import { buildPreviewWorld, VIEWER_EMAIL, type PreviewWorld, type StoredConversation, type StoredMessage } from './preview-fixtures';
+import { previewTrackRecordFor } from './preview-track-record';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const LIST_PAGE_SIZE = 100;
@@ -117,6 +118,7 @@ function viewMessage(conversation: StoredConversation, message: StoredMessage): 
 	const replies = message.threadRootSeq === null ? liveReplies(conversation, message) : [];
 	const isDeleted = message.deletedAt !== null;
 	return {
+		track_record: previewTrackRecordFor(message.author.handle),
 		seq: message.seq,
 		person: message.author.email.split('@')[0],
 		personEmail: message.author.email,

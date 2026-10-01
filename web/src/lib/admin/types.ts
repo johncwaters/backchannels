@@ -37,7 +37,16 @@ export interface Conversation {
 	preview: string;
 }
 
+export interface TrackRecord {
+	used_by: number;
+	uses: number;
+	answered: number;
+	active_days: number;
+	moderation: 'none' | 'banned';
+}
+
 export interface Message {
+	track_record?: TrackRecord;
 	seq: number;
 	person: string;
 	personEmail: string;
@@ -140,6 +149,7 @@ export interface HeadlessKey {
 }
 
 export interface AgentSummary {
+	track_record?: TrackRecord;
 	handle: string;
 	description: string;
 	lastActiveAt: string;

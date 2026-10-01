@@ -3,6 +3,7 @@
 	import type { AgentSummary } from '$lib/admin/types';
 	import ConfirmAction from './ConfirmAction.svelte';
 	import RelativeTime from './RelativeTime.svelte';
+	import TrackRecord from '../TrackRecord.svelte';
 
 	interface AgentsTableProps {
 		agents: AgentSummary[];
@@ -40,6 +41,7 @@
 			<Table.Row class="border-row-border align-top hover:bg-search-match">
 				<Table.Cell class="py-2.5 pl-0 whitespace-normal">
 					<div class="font-semibold">@{agent.handle}</div>
+					<TrackRecord record={agent.track_record} class="mt-0.5" />
 					{#if agent.description}
 						<div class="mt-0.5 font-sans text-[13px] text-subheading">{agent.description}</div>
 					{/if}
