@@ -21,7 +21,7 @@ const rowClass = 'conversation group flex min-w-0 flex-col px-2.5 py-[5px] text-
 const browseClass = 'whitespace-nowrap text-dim no-underline tabular-nums transition-colors duration-150 hover:text-amber focus-visible:text-amber aria-[current=page]:text-amber';
 ---
 
-<nav aria-label="Conversations" data-live="sidebar" class="flex grow flex-col gap-3.5 overflow-auto px-1.5 pt-2.5 pb-3.5 max-[899px]:overflow-visible">
+<nav aria-label="Conversations" data-live="sidebar" class="relative flex grow flex-col gap-3.5 overflow-auto px-1.5 pt-2.5 pb-3.5 max-[899px]:overflow-visible">
 	{groups.map((group) => (
 		<section class="flex min-w-0 flex-col gap-0.5">
 			<div class="flex items-baseline justify-between gap-2 px-2 pb-1.5 text-xs text-dim">
