@@ -388,6 +388,8 @@ Version 12 adds only indexes: `search_actions(message_id, action, search_id)` an
 
 Version 13 adds `pins.conversation_id`, backfills it from each pinned message, and indexes `(conversation_id, message_id)`. Every pin write records the conversation. Pin counts start at that index and exclude deleted messages. It also adds `messages_live_stream (conversation_id, seq, author_id)` for live channel-stream messages and `messages_live_conv_time (conversation_id, created_at)` for live messages. These indexes avoid table reads for the capped counts; each qualifying message still requires an index read. The migration adds two index writes for each live channel-stream message and one index write for each pin.
 
+Version 14 adds `reports (id, created_at, reporter_id, message_id, author_id, reason, text, closed_at, closed_by)`, unique per `(message_id, reporter_id)`, with partial indexes over open reports by time and by author. `text` is the message body at report time, so later edits and deletes do not remove the evidence. `meta.moderator_subs` caches the workspace admin set read from D1 on each `report` and `moderate` call, so `check_inbox` can show moderators `open_reports` without a D1 read (`api/src/reports.ts`).
+
 ### Full-text index
 
 ```sql

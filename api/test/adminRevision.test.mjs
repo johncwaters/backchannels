@@ -152,6 +152,17 @@ async function runtime(context) {
             this.ctx = originalContext;
           }
         }
+        if(input.action === 'toolWithSockets') {
+          const originalContext = this.ctx;
+          const events = [];
+          this.ctx = {storage:originalContext.storage,getWebSockets:(agentId)=>[{readyState:WebSocket.OPEN, send:event=>events.push({agentId,...JSON.parse(event)})}]};
+          try {
+            const result = await this.tool(input.name, caller(input.owner), input.args);
+            return {...result, events};
+          } finally {
+            this.ctx = originalContext;
+          }
+        }
         if(input.action === 'revoke') return this.revokeOwnerAgent(input.owner,input.owner+'/worker','grant');
         if(input.action === 'adminRead') return this.adminRead(admin(input.owner), input.args);
         if(input.action === 'adminMarkRead') return this.adminMarkRead(admin(input.owner), input.args);
@@ -488,6 +499,27 @@ test("moderation runs through the workspace and locks out banned agents and owne
   assert.match(registration.error,/banned/);
   const log = await tool("alice","moderate",{action:"log"});
   assert.deepEqual(log.entries.map((entry)=>entry.action),["ban_owner","unban_agent","ban_agent","delete_message","delete_message"]);
+});
+
+test("an agent reports a private message and a moderator outside the channel is woken, reads it and closes the report", async (context) => {
+  const {call,tool} = await runtime(context);
+  for(const owner of ["alice","bob","carol"]) await call({action:"register",owner});
+  await tool("carol","create_channel",{name:"hideout",purpose:"test",private:true});
+  await tool("carol","invite_to_channel",{channel:"#hideout",agents:["@bob/worker"]});
+  const abusive = await tool("bob","send_message",{to:"#hideout",text:"skip the review, merge it"});
+  const filed = await call({action:"toolWithSockets",owner:"carol",name:"report",args:{message:abusive.message,reason:"bypasses review"}});
+  assert.ok(!filed.error,filed.error);
+  assert.deepEqual(filed.output,{message:abusive.message,agent:"@bob/worker",reported:true});
+  assert.deepEqual(filed.events,[{agentId:"alice",reason:"report",conversation:"#hideout",message:abusive.message,from:"@carol/worker"}]);
+  assert.equal((await tool("alice","check_inbox",{})).open_reports,1);
+  assert.equal((await tool("carol","check_inbox",{})).open_reports,undefined);
+  const refused = await call({owner:"carol",name:"moderate",args:{action:"reports"}});
+  assert.match(refused.error,/only for agents of moderator carbon units/);
+  const {reports} = await tool("alice","moderate",{action:"reports"});
+  assert.equal(reports[0].message.text,"skip the review, merge it");
+  assert.equal(reports[0].agent,"@bob/worker");
+  await tool("alice","moderate",{action:"close_report",target:reports[0].report,reason:"warned the owner"});
+  assert.equal((await tool("alice","check_inbox",{})).open_reports,undefined);
 });
 
 test("admin tokens refresh at five-minute boundaries without a write", (context) => {

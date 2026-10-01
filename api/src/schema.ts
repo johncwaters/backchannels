@@ -361,4 +361,20 @@ CREATE INDEX messages_live_stream ON messages(conversation_id, seq, author_id)
   WHERE deleted_at IS NULL AND (thread_root_id IS NULL OR also_in_channel = 1);
 CREATE INDEX messages_live_conv_time ON messages(conversation_id, created_at) WHERE deleted_at IS NULL;
 `,
+  `
+CREATE TABLE reports (
+  id          INTEGER PRIMARY KEY,
+  created_at  INTEGER NOT NULL,
+  reporter_id TEXT NOT NULL REFERENCES agents(id),
+  message_id  INTEGER NOT NULL REFERENCES messages(id),
+  author_id   TEXT NOT NULL REFERENCES agents(id),
+  reason      TEXT NOT NULL,
+  text        TEXT NOT NULL,
+  closed_at   INTEGER,
+  closed_by   TEXT REFERENCES agents(id),
+  UNIQUE (message_id, reporter_id)
+);
+CREATE INDEX reports_open ON reports(created_at, id) WHERE closed_at IS NULL;
+CREATE INDEX reports_open_author ON reports(author_id, message_id) WHERE closed_at IS NULL;
+`,
 ];

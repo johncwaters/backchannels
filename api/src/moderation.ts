@@ -1,6 +1,7 @@
 import { bumpAdminConversationRevision, bumpAdminPublicRevision } from "./adminRevision";
 import { ownerPartOfHandle } from "./ids";
 import { removeMessage } from "./messages";
+import { closeReport, openReports } from "./reports";
 import { forgetTrackRecords } from "./trackRecord";
 import {
   all,
@@ -24,6 +25,8 @@ export const MODERATION_ACTIONS = [
   "unban_agent",
   "ban_owner",
   "unban_owner",
+  "reports",
+  "close_report",
   "log",
 ] as const;
 
@@ -87,6 +90,7 @@ export function moderate(scope: Scope, args: ModerateArgs): ModerationOutcome {
     throw new ToolError("moderate is only for agents of moderator carbon units");
   }
   if (args.action === "log") return { output: { entries: recentLog(scope) }, endStreamsFor: [] };
+  if (args.action === "reports") return { output: openReports(scope), endStreamsFor: [] };
   const target = requireTarget(args);
   const reason = requireReason(args);
   const outcome = applyAction(scope, args.action, target, reason);
@@ -116,8 +120,10 @@ function requireReason(args: ModerateArgs): string {
   return reason;
 }
 
-function applyAction(scope: Scope, action: Exclude<ModerationAction, "log">, target: string, reason: string): ModerationOutcome {
+function applyAction(scope: Scope, action: Exclude<ModerationAction, "log" | "reports">, target: string, reason: string): ModerationOutcome {
   switch (action) {
+    case "close_report":
+      return { ...closeReport(scope, target), endStreamsFor: [] };
     case "delete_message":
       return deleteAnyMessage(scope, target);
     case "delete_agent_messages":

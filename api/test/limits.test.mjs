@@ -19,6 +19,7 @@ const TOOLS_THAT_WRITE_OR_SCAN = [
   "read_messages",
   "check_inbox",
   "moderate",
+  "report",
 ];
 
 const MODERATOR_ONLY_TOOL_NAMES = ["moderate"];

@@ -22,6 +22,7 @@ import { newestOwnerMessage } from "./ownerInbox";
 import { MIGRATIONS } from "./schema";
 import { trackRecords, type TrackRecord } from "./trackRecord";
 import { banNotice, moderate, type ModerationOutcome } from "./moderation";
+import { rememberModerators, report, type ReportOutcome } from "./reports";
 import { SEARCH_TUNING_META_KEY, searchMessages } from "./search";
 import { withOverrides, type TuningOverrides } from "./search/config";
 import { buildDocument, reindexJobs, type IndexDocument, type IndexJob } from "./search/indexing";
@@ -74,8 +75,11 @@ const TOOLS: Record<string, (scope: Scope, args: never, grantId: string) => unkn
   set_notification_prefs: setNotificationPrefs,
   search_messages: searchMessages,
   upload_file: uploadFile,
+  report,
   moderate,
 };
+
+const TOOLS_NEEDING_MODERATORS = new Set(["moderate", "report"]);
 
 export interface ToolOutcome {
   error?: string;
@@ -223,8 +227,31 @@ export class WorkspaceDO extends DurableObject<Env> {
     run(this.sql, "UPDATE agents SET session_hash = ? WHERE id = ?", agent.sessionHash, existing.id);
   }
 
+  private finishTool(name: string, scope: Scope, result: unknown): unknown {
+    if (name === "moderate") return this.finishModeration(result as ModerationOutcome);
+    if (name === "report") return this.finishReport(scope, result as ReportOutcome);
+    return result;
+  }
+
   private finishModeration(outcome: ModerationOutcome): Record<string, unknown> {
     for (const agentId of outcome.endStreamsFor) this.endAgentStreams(agentId, "agent banned by a moderator");
+    return outcome.output;
+  }
+
+  private finishReport(scope: Scope, outcome: ReportOutcome): Record<string, unknown> {
+    if (!outcome.wake || !scope.moderatorSubs?.size) return outcome.output;
+    const event = JSON.stringify({ reason: "report", ...outcome.wake });
+    const moderatorAgents = all<{ id: string }>(
+      this.sql,
+      "SELECT id FROM agents WHERE owner_sub IN (SELECT value FROM json_each(?)) AND revoked_at IS NULL AND id != ?",
+      JSON.stringify([...scope.moderatorSubs]),
+      scope.agent.id,
+    );
+    for (const moderatorAgent of moderatorAgents) {
+      for (const socket of this.ctx.getWebSockets(moderatorAgent.id)) {
+        if (socket.readyState === WebSocket.OPEN) socket.send(event);
+      }
+    }
     return outcome.output;
   }
 
@@ -274,8 +301,9 @@ export class WorkspaceDO extends DurableObject<Env> {
     const limited = this.takeTokens(name, agent.id, caller, now);
     if (limited) return { error: limited };
     const scope = this.scopeFor(agent, caller.workspaceId, now);
-    if (name === "moderate") scope.moderatorSubs = new Set(await workspaceAdminSubs(this.env.DB, caller.workspaceId));
+    if (TOOLS_NEEDING_MODERATORS.has(name)) scope.moderatorSubs = new Set(await workspaceAdminSubs(this.env.DB, caller.workspaceId));
     const invoke = () => {
+      if (scope.moderatorSubs) rememberModerators(this.sql, scope.moderatorSubs);
       const output = handler(scope, args as never, caller.grantId);
       if (!ASYNC_TOOLS.has(name)) recordAdminToolChange(this.sql, caller.ownerSub, name, output as Record<string, unknown>);
       return output;
@@ -286,7 +314,7 @@ export class WorkspaceDO extends DurableObject<Env> {
         await this.indexDelivery.storeJobs(caller.workspaceId, scope.indexJobs, now);
         return output;
       });
-      const output = name === "moderate" ? this.finishModeration(result as ModerationOutcome) : result;
+      const output = this.finishTool(name, scope, result);
       if (name === "send_message") this.flushWatchers(scope.queuedOwnerSubs);
       if (scope.indexJobs.length) {
         try {

@@ -25,4 +25,5 @@ export const TOOL_NAMES = [
   "set_notification_prefs",
   "search_messages",
   "upload_file",
+  "report",
 ];

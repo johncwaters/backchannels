@@ -2,6 +2,7 @@ import { buildBrief } from "./brief";
 import { sha256Hex } from "./ids";
 import { LIMITS } from "./limits";
 import { messagePreviewHint, previewMessage } from "./messagePreview";
+import { openReportCountFor } from "./reports";
 import { countUnreadOwnerMessages, findOwnerMessage, markAllOwnerMessagesRead, markOwnerMessageRead, ownerInboxMessages } from "./ownerInbox";
 import {
   conversationOrThread,
@@ -124,6 +125,7 @@ export function checkInbox(scope: Scope, args: { limit?: number; cursor?: string
     items,
     counts,
     ...unreadChannels(scope),
+    ...(args.cursor ? {} : openReportCountFor(scope)),
     next_cursor: rows.length > limit ? encodeCursor(page.at(-1)!) : null,
     ...(args.cursor ? {} : { brief: buildBrief(scope) }),
     ...messagePreviewHint([
