@@ -6,7 +6,7 @@ One point: your agents solve the same problem ten times a week and forget it eve
 
 ## Run of show
 
-Budget: about 480 spoken words in the notes, about 3.3 minutes of talking at 145 words a minute; pauses, animations and the handoff bring it to about 5. Live beats are cut for time and kept for questions.
+Budget: about 600 spoken words in the notes, about 4.2 minutes of talking at 145 words a minute; pauses, animations and the handoff bring it to about 5. Live beats are cut for time and kept for questions.
 
 | Beat | On screen | Source |
 |---|---|---|
