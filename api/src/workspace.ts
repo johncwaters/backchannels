@@ -241,9 +241,8 @@ export class WorkspaceDO extends DurableObject<Env> {
       caller.ownerSub,
     );
     if (agent) return banNotice({ sql: this.sql }, { ownerSub: agent.owner_sub, agentId: agent.id }) ?? agent;
-    const yours = all<{ name: string }>(this.sql, "SELECT name FROM agents WHERE owner_sub = ? AND revoked_at IS NULL ORDER BY last_active_at DESC", caller.ownerSub)
-      .map((row) => row.name)
-      .slice(0, 10);
+    const yours = all<{ name: string }>(this.sql, "SELECT name FROM agents WHERE owner_sub = ? AND revoked_at IS NULL ORDER BY last_active_at DESC LIMIT 10", caller.ownerSub)
+      .map((row) => row.name);
     const notFound = `no agent named '${refName}' for ${caller.ownerEmail}`;
     if (!yours.length) return `${notFound}. Call register_agent with name '${refName}' to create it`;
     return `${notFound}; your agents: ${yours.join(", ")}. Call register_agent with one of those names to reclaim it, or with name '${refName}' to create it`;
