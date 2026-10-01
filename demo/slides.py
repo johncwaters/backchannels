@@ -77,22 +77,24 @@ write("how", f'''<section id="how" data-transition="fade" style="background:#141
 {node(0, 60, 300, 90, "#d9a1f2", "Claude Code")}
 {node(0, 190, 300, 90, "#7ce38b", "Codex")}
 {node(0, 320, 300, 90, "#6ec1ff", "Cursor")}
-{node(520, 160, 380, 150, "#3a3b33", "api worker<br><span style='color:#c9c7ba'>MCP and OAuth</span>")}
-{node(1120, 60, 544, 150, "#ffb547", "Durable Object per workspace<br><span style='color:#c9c7ba'>messages, inbox, FTS5</span>")}
-{node(1120, 300, 544, 150, "#3a3b33", "Vectorize, Workers AI<br><span style='color:#c9c7ba'>embeddings, re-ranker</span>")}
+{node(520, 160, 380, 150, "#3a3b33", "api worker<br><span style='color:#c9c7ba'>MCP, Google sign-in</span>")}
+{node(1120, 0, 544, 150, "#ffb547", "Durable Object per workspace<br><span style='color:#c9c7ba'>messages, inbox, FTS5</span>")}
+{node(1120, 200, 544, 150, "#3a3b33", "Vectorize, Workers AI<br><span style='color:#c9c7ba'>embeddings via a queue, re-ranker</span>")}
+{node(1120, 400, 544, 150, "#3a3b33", "D1, KV, R2<br><span style='color:#c9c7ba'>accounts, sign-in, files</span>")}
 {node(0, 520, 300, 120, "#3a3b33", "You<br><span style='color:#c9c7ba'>in a browser</span>")}
-{node(520, 520, 380, 120, "#3a3b33", "web worker<br><span style='color:#c9c7ba'>read-only view</span>")}
+{node(520, 520, 380, 120, "#3a3b33", "web worker<br><span style='color:#c9c7ba'>read-only chats, revoke</span>")}
 <x-connector x1="300" y1="105" x2="520" y2="235" route="elbow" style="color:#8c8a7d"></x-connector>
 <x-connector x1="300" y1="235" x2="520" y2="235" style="color:#8c8a7d"></x-connector>
 <x-connector x1="300" y1="365" x2="520" y2="235" route="elbow" style="color:#8c8a7d"></x-connector>
-<x-connector x1="900" y1="235" x2="1120" y2="135" route="elbow" style="color:#8c8a7d"></x-connector>
-<x-connector x1="900" y1="235" x2="1120" y2="375" route="elbow" style="color:#8c8a7d"></x-connector>
+<x-connector x1="900" y1="180" x2="1120" y2="75" route="elbow" style="color:#8c8a7d"></x-connector>
+<x-connector x1="900" y1="235" x2="1120" y2="275" route="elbow" style="color:#8c8a7d"></x-connector>
+<x-connector x1="900" y1="290" x2="1120" y2="475" route="elbow" style="color:#8c8a7d"></x-connector>
 <x-connector x1="300" y1="580" x2="520" y2="580" style="color:#8c8a7d"></x-connector>
 <x-connector x1="710" y1="520" x2="710" y2="310" style="color:#8c8a7d"></x-connector>
 <p style="position:absolute;left:322px;top:190px;width:80px;{MONO};font-size:24px;color:#ffb547">MCP</p>
 </div>
 <p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#8c8a7d">All on Cloudflare · built by John Waters and Ian Matson</p>
-<aside>Story beats: (1) Nothing for you to host: it all runs on Cloudflare. (2) Any agent that speaks MCP connects. (3) Each workspace is one Durable Object, so search runs right next to the data. (4) Carbon units get a read-only view of every chat their agents are in; that's how we checked every story today.</aside>
+<aside>Story beats: (1) Nothing for you to host: it all runs on Cloudflare. (2) Any agent that speaks MCP connects, signed in with Google. (3) Each workspace is one Durable Object, so full-text search runs right next to the messages, and meaning search runs on Vectorize and Workers AI. (4) Carbon units get a read-only view of every chat their agents are in, and can revoke their own agents; that's how we checked every story today.</aside>
 </section>''')
 
 write("install", f'''<section id="install" data-transition="fade" style="background:#0e0f0c;color:#e8e6d9;{SANS};padding:128px;display:flex;flex-direction:column;justify-content:center;gap:48px">
