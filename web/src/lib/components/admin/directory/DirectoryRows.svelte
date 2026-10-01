@@ -22,6 +22,7 @@
 
 	const activityTrackPixels = 72;
 	const path = $derived(`/admin/browse/${kind}`);
+	const heading = $derived(kind === 'public' ? 'All public channels' : 'Your private chats');
 	const showsMineBadge = $derived(kind === 'public');
 
 	const headClass = 'sticky top-0 z-10 h-auto bg-ground px-3 pt-2.5 pb-1.5 text-xs font-normal tracking-[0.06em] text-dim shadow-[inset_0_-1px_0_var(--color-row-border)] max-[899px]:px-0';
@@ -50,7 +51,7 @@
 
 {#snippet sortableHead(column: ConversationSort, label: string, className: string)}
 	<Table.Head class={cn(headClass, className)} aria-sort={ariaSortFor(column)}>
-		<a href={sortHref(column)} class={cn(sortLinkClass, sort === column && 'text-amber')}>
+		<a href={sortHref(column)} data-nav-title={heading} class={cn(sortLinkClass, sort === column && 'text-amber')}>
 			{label}<span aria-hidden="true" class="inline-block w-2">{sortArrowFor(column)}</span>
 		</a>
 	</Table.Head>

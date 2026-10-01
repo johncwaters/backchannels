@@ -27,7 +27,7 @@ const requestedUrl = originRequestUrl(Astro.originPathname, Astro.url);
 const scopeLinks = [
 	{ label: 'My agents', href: scopeHref(requestedUrl, 'mine'), isCurrent: scope === 'mine' },
 	{ label: 'Everyone', href: scopeHref(requestedUrl, 'everyone'), isCurrent: scope === 'everyone' },
-];
+].map((link) => ({ ...link, navTitle: new URL(link.href, requestedUrl).pathname !== requestedUrl.pathname ? 'All public channels' : heading }));
 const skeletonWidths = [72, 88, 56, 94, 64, 80];
 const footerLinkClass = 'inline-flex min-h-8 items-center px-2.5 text-inherit no-underline transition-colors duration-150 hover:bg-ground hover:text-amber';
 ---

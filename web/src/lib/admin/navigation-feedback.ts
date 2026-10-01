@@ -42,6 +42,8 @@ function targetHeading(sourceElement: Element | undefined, from: URL, to: URL): 
 		const searchHeading = searchHeadingFor(form);
 		if (searchHeading) return searchHeading;
 	}
+	const sidebarTitle = sidebarLinkFor(to)?.dataset.navTitle;
+	if (sidebarTitle) return to.searchParams.has('thread') ? `Thread in ${sidebarTitle}` : sidebarTitle;
 	if (isSameView(from, to)) return document.querySelector('[data-view-heading]')?.textContent ?? null;
 	return null;
 }
@@ -51,14 +53,24 @@ function busyTargetFor(sourceElement: Element | undefined): Element | null {
 	return sourceElement.closest('form') ?? sourceElement.closest('a');
 }
 
-function showTargetImmediately(heading: string | null, link: HTMLAnchorElement | null): void {
+function sidebarLinkFor(to: URL): HTMLAnchorElement | undefined {
+	return [...document.querySelectorAll<HTMLAnchorElement>('[data-live="sidebar"] a[href]')].find((link) => new URL(link.href).pathname === to.pathname);
+}
+
+function selectSegmentedLink(sourceElement: Element | undefined): void {
+	const link = sourceElement?.closest('a');
+	const navigation = link?.closest('[data-segmented-links]');
+	if (!link || !navigation) return;
+	for (const current of navigation.querySelectorAll('[aria-current="page"]')) current.removeAttribute('aria-current');
+	link.setAttribute('aria-current', 'page');
+}
+
+function showTargetImmediately(heading: string | null, to: URL): void {
 	const headingElement = document.querySelector<HTMLElement>('[data-view-heading]');
 	if (headingElement && heading) headingElement.textContent = heading;
 	document.documentElement.dataset.loadingTitle = heading ? 'known' : 'unknown';
-	const sidebar = link?.closest('[data-live="sidebar"]');
-	if (!link || !sidebar) return;
-	for (const current of sidebar.querySelectorAll('[aria-current="page"]')) current.removeAttribute('aria-current');
-	link.setAttribute('aria-current', 'page');
+	for (const current of document.querySelectorAll('[data-live="sidebar"] [aria-current="page"]')) current.removeAttribute('aria-current');
+	sidebarLinkFor(to)?.setAttribute('aria-current', 'page');
 }
 
 function clearLoading(): void {
@@ -76,7 +88,8 @@ document.addEventListener('astro:before-preparation', (event) => {
 	busyElement = busyTargetFor(sourceElement);
 	busyElement?.setAttribute(busyAttribute, 'true');
 	document.documentElement.dataset.loading = 'page';
-	showTargetImmediately(targetHeading(sourceElement, from, to), sourceElement?.closest('a') ?? null);
+	selectSegmentedLink(sourceElement);
+	showTargetImmediately(targetHeading(sourceElement, from, to), to);
 });
 
 document.addEventListener('astro:after-swap', clearLoading);
@@ -89,5 +102,5 @@ document.addEventListener('submit', (event) => {
 	startProgress();
 	form.setAttribute(busyAttribute, 'true');
 	document.documentElement.dataset.loading = 'page';
-	showTargetImmediately(form.dataset.navTitle ?? null, null);
+	showTargetImmediately(form.dataset.navTitle ?? null, new URL(form.action));
 });

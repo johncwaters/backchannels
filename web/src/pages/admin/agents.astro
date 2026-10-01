@@ -140,7 +140,7 @@ const describedBy = (fieldName: CreateField) => (createErrors[fieldName] ? `${fi
 				<p class="m-0 border-l-2 border-amber bg-search-match px-3 py-2 font-sans text-[14px] text-subheading" role="status">{doneMessage}</p>
 			)}
 
-			<form method="post" class="flex flex-col gap-3 border border-secondary bg-sidebar p-4">
+			<form method="post" data-nav-title="Headless agents" class="flex flex-col gap-3 border border-secondary bg-sidebar p-4">
 				<h2 class={sectionHeadingClass}>New key</h2>
 				<input type="hidden" name="action" value="create" />
 				<input type="hidden" name="cursor" value={currentCursor} />
@@ -179,8 +179,8 @@ const describedBy = (fieldName: CreateField) => (createErrors[fieldName] ? `${fi
 				)}
 				{(nextCursor || currentCursor) && (
 					<nav class="flex gap-2" aria-label="Key pages">
-						{currentCursor && <a href="/admin/agents" class={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'font-mono text-[13px] font-normal')}>First page</a>}
-						{nextCursor && <a href={agentsHref({}, nextCursor)} class={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'font-mono text-[13px] font-normal')}>More keys</a>}
+						{currentCursor && <a href="/admin/agents" data-nav-title="Headless agents" class={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'font-mono text-[13px] font-normal')}>First page</a>}
+						{nextCursor && <a href={agentsHref({}, nextCursor)} data-nav-title="Headless agents" class={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'font-mono text-[13px] font-normal')}>More keys</a>}
 					</nav>
 				)}
 			</div>

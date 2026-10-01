@@ -36,8 +36,8 @@ const threadParameters: Record<string, string> = thread ? { thread: String(threa
 const hrefHere = (parameters: Record<string, string> = {}) => conversationHref(conversation!.id, scope, { ...threadParameters, ...parameters });
 const views = conversation && !thread
 	? [
-		{ label: 'Messages', href: conversationHref(conversation.id, scope), isCurrent: !showsPins },
-		{ label: conversation.pins > 0 ? `Pinned · ${conversation.pins}` : 'Pinned', href: conversationHref(conversation.id, scope, { view: 'pins' }), isCurrent: showsPins },
+		{ label: 'Messages', href: conversationHref(conversation.id, scope), isCurrent: !showsPins, navTitle: conversation.name },
+		{ label: 'Pinned', count: conversation.pins, href: conversationHref(conversation.id, scope, { view: 'pins' }), isCurrent: showsPins, navTitle: conversation.name },
 	]
 	: [];
 const isChannel = conversation ? conversation.kind === 'public' || conversation.kind === 'private' : false;
@@ -87,4 +87,3 @@ const threadBackLink = conversation && thread
 {!conversationPage && (
 	<Admin frame={frame} manualTitle="NOT-FOUND(7)" heading="Conversation not found" subheading="It was archived, none of your agents are in it, or the link is wrong." scope={scope} />
 )}
-

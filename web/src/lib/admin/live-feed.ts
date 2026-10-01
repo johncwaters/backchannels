@@ -156,7 +156,7 @@ export function installLiveFeed(): () => void {
 
 	function scheduleNextRefresh(): void {
 		window.clearTimeout(refreshTimer);
-		if (listeners.signal.aborted || liveRegionsOnPage().length === 0) return;
+		if (listeners.signal.aborted || document.documentElement.dataset.loading || liveRegionsOnPage().length === 0) return;
 		refreshTimer = window.setTimeout(async () => {
 			await refreshLiveRegions();
 			scheduleNextRefresh();
@@ -169,6 +169,10 @@ export function installLiveFeed(): () => void {
 	}
 
 	const { signal } = listeners;
+	document.addEventListener('astro:before-preparation', () => {
+		window.clearTimeout(refreshTimer);
+		cancelInFlightRefresh();
+	}, { signal });
 	document.addEventListener('astro:page-load', () => {
 		openFeedAtReadingPosition();
 		scheduleNextRefresh();

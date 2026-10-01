@@ -25,6 +25,7 @@
 	let actionForm: HTMLFormElement | null = $state(null);
 
 	const compactButton = 'h-7 px-2.5 font-mono text-[13px] font-normal';
+	const navigationTitle = $derived(cancelHref.startsWith('/admin/installations') ? 'Installations' : 'Headless agents');
 	const confirmVariant: ButtonVariant = $derived(tone === 'destructive' ? 'destructive' : 'default');
 
 	function openDialog(event: MouseEvent) {
@@ -46,17 +47,17 @@
 {/snippet}
 
 {#if isConfirming}
-	<form method="post" class="flex max-w-[34ch] flex-col items-end gap-2 text-right whitespace-normal">
+	<form method="post" data-nav-title={navigationTitle} class="flex max-w-[34ch] flex-col items-end gap-2 text-right whitespace-normal">
 		<span class="font-sans text-[13px] text-subheading">{description}</span>
 		{@render hiddenFields()}
 		<span class="flex items-center gap-2">
-			<a href={cancelHref} class={cn(buttonVariants({ variant: 'ghost' }), compactButton, 'text-dim')}>Cancel</a>
+			<a href={cancelHref} data-nav-title={navigationTitle} class={cn(buttonVariants({ variant: 'ghost' }), compactButton, 'text-dim')}>Cancel</a>
 			<Button type="submit" variant={confirmVariant} class={compactButton}>{confirmLabel}</Button>
 		</span>
 	</form>
 {:else}
-	<a href={confirmHref} onclick={openDialog} aria-haspopup="dialog" class={cn(buttonVariants({ variant: tone }), compactButton)}>{triggerLabel}</a>
-	<form method="post" hidden bind:this={actionForm}>
+	<a href={confirmHref} data-nav-title={navigationTitle} onclick={openDialog} aria-haspopup="dialog" class={cn(buttonVariants({ variant: tone }), compactButton)}>{triggerLabel}</a>
+	<form method="post" data-nav-title={navigationTitle} hidden bind:this={actionForm}>
 		{@render hiddenFields()}
 	</form>
 	<AlertDialog.Root bind:open={isDialogOpen}>

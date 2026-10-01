@@ -21,6 +21,7 @@ interface Props {
 
 const { conversations, kind, scope, sort, filter, busiest, nowMs, nextCursor, isLaterPage, viewerEmail } = Astro.props;
 const path = `/admin/browse/${kind}`;
+const heading = kind === 'public' ? 'All public channels' : 'Your private chats';
 const filterParameters: Record<string, string> = filter ? { filter } : {};
 const sortOptions: { id: ConversationSort; label: string }[] = [
 	{ id: 'active', label: 'Most active' },
@@ -31,6 +32,7 @@ const sortLinks = sortOptions.map((option) => ({
 	label: option.label,
 	href: adminHref(path, scope, { sort: option.id, ...filterParameters }),
 	isCurrent: option.id === sort,
+	navTitle: heading,
 }));
 const clearFilterHref = adminHref(path, scope, { sort });
 const firstPageHref = adminHref(path, scope, { sort, ...filterParameters });
@@ -45,7 +47,7 @@ const shownCount = `${conversations.length}${nextCursor ? '+' : ''} ${filter ? '
 			<input type="hidden" name="sort" value={sort} />
 			<span aria-hidden="true" class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-dim">#</span>
 			<Input type="search" name="filter" value={filter} aria-label={`Filter ${nounPlural} by name or topic`} placeholder="Filter by name or topic" class="h-8 bg-ground pl-6 font-mono text-[13px] dark:bg-ground" />
-			{filter && <a href={clearFilterHref} class="shrink-0 text-[13px] whitespace-nowrap text-dim underline-offset-2 hover:text-foreground hover:underline">Clear</a>}
+			{filter && <a href={clearFilterHref} data-nav-title={heading} class="shrink-0 text-[13px] whitespace-nowrap text-dim underline-offset-2 hover:text-foreground hover:underline">Clear</a>}
 		</form>
 		<SegmentedLinks links={sortLinks} label="Sort" />
 		<span class="ml-auto text-[13px] whitespace-nowrap text-dim tabular-nums">{shownCount}</span>
@@ -58,7 +60,7 @@ const shownCount = `${conversations.length}${nextCursor ? '+' : ''} ${filter ? '
 				{filter ? (
 					<>
 						<p class="m-0">No {nounPlural} match <span class="font-mono text-amber">{filter}</span>.</p>
-						<PageLink href={clearFilterHref}>Clear filter</PageLink>
+						<PageLink href={clearFilterHref} navTitle={heading}>Clear filter</PageLink>
 					</>
 				) : (
 					<p class="m-0">{kind === 'public' ? 'There are no public channels yet.' : 'Your agents are not in any private chats yet.'}</p>
@@ -67,8 +69,8 @@ const shownCount = `${conversations.length}${nextCursor ? '+' : ''} ${filter ? '
 		)}
 		{(nextCursor || isLaterPage) && (
 			<div class="flex flex-wrap gap-2 px-3 pt-4 max-[899px]:px-0">
-				{isLaterPage && <PageLink href={firstPageHref}>First page</PageLink>}
-				{nextCursor && <PageLink href={adminHref(path, scope, { sort, ...filterParameters, cursor: nextCursor })}>More</PageLink>}
+				{isLaterPage && <PageLink href={firstPageHref} navTitle={heading}>First page</PageLink>}
+				{nextCursor && <PageLink href={adminHref(path, scope, { sort, ...filterParameters, cursor: nextCursor })} navTitle={heading}>More</PageLink>}
 			</div>
 		)}
 	</div>

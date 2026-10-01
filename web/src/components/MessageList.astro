@@ -50,6 +50,8 @@ const {
 const firstUnreadSeq = readState?.firstUnreadSeq;
 const unreadDividerShown = firstUnreadSeq !== undefined && messages.some((message) => message.seq === firstUnreadSeq);
 const threadRoot = messages.find((message) => message.seq === threadRootSeq);
+const heading = threadRootSeq && conversationName ? `Thread in ${conversationName}` : conversationName;
+const messageHeading = (message: Message) => message.threadRootSeq && !message.alsoInChannel && conversationName ? `Thread in ${conversationName}` : conversationName;
 const days = showsDays ? groupMessagesByDay(messages, nowMs) : [{ label: '', messages }];
 const opensAtEnd = targetSeq === undefined && !newerMessagesHref && showsDays;
 const groupsMessages = showsDays;
@@ -73,7 +75,7 @@ const revealedWithMessage = 'opacity-0 group-hover/message:opacity-100 group-foc
 		data-last-read={readState?.lastReadSeq}
 	>
 		{backLink && <PageLink href={backLink.href} navTitle={backLink.navTitle}>← {backLink.label}</PageLink>}
-		{olderMessagesHref && <PageLink href={olderMessagesHref}>↑ Older messages</PageLink>}
+		{olderMessagesHref && <PageLink href={olderMessagesHref} navTitle={heading}>↑ Older messages</PageLink>}
 		{days.map((day) => (
 			<div class="flex flex-col gap-3">
 				{day.label && (
@@ -121,7 +123,7 @@ const revealedWithMessage = 'opacity-0 group-hover/message:opacity-100 group-foc
 										<Badge variant="outline" class="h-auto rounded-none border-amber px-1.5 py-0 font-mono text-xs font-normal text-amber" title={`Pinned by ${message.pinned.by} on ${utcStamp(message.pinned.at)}`}>pinned</Badge>
 									)}
 									{message.alsoInChannel && message.threadRootSeq && threadHref && (
-										<a class="text-xs text-dim underline underline-offset-3 hover:text-amber" href={threadHref(message.threadRootSeq)}>replied in a thread</a>
+										<a class="text-xs text-dim underline underline-offset-3 hover:text-amber" href={threadHref(message.threadRootSeq)} data-nav-title={conversationName ? `Thread in ${conversationName}` : undefined}>replied in a thread</a>
 									)}
 									{message.editedAt && (
 										<Badge variant="ghost" class="h-auto rounded-none p-0 font-mono text-xs font-normal text-dim hover:bg-transparent hover:text-dim" title={`Edited ${utcStamp(message.editedAt)}`}>edited</Badge>
@@ -132,7 +134,7 @@ const revealedWithMessage = 'opacity-0 group-hover/message:opacity-100 group-foc
 											class={`pointer-events-none hidden cursor-pointer border-0 bg-transparent p-0 font-mono text-xs text-dim group-hover/message:pointer-events-auto group-focus-within/message:pointer-events-auto hover:text-amber [html[data-can-copy-links]_&]:inline ${revealedWithMessage}`}
 											data-copy-link={messageLink(message)}
 										>copy link</button>
-										<a class="text-[13px] text-dim no-underline underline-offset-3 hover:text-foreground hover:underline" href={messageLink(message)} title={`${utcStamp(message.time)} · link to this message`}>
+										<a class="text-[13px] text-dim no-underline underline-offset-3 hover:text-foreground hover:underline" href={messageLink(message)} data-nav-title={messageHeading(message)} title={`${utcStamp(message.time)} · link to this message`}>
 											<time datetime={message.time}>{visibleTime(message)}</time>
 										</a>
 									</span>
@@ -204,8 +206,8 @@ const revealedWithMessage = 'opacity-0 group-hover/message:opacity-100 group-foc
 		{messages.length === 0 && <p class="m-0 font-sans text-[15px] text-dim">{emptyText}</p>}
 		{(newerMessagesHref || latestMessagesHref) && (
 			<nav class="flex flex-wrap gap-2" aria-label="Newer messages">
-				{newerMessagesHref && <PageLink href={newerMessagesHref}>↓ Newer messages</PageLink>}
-				{latestMessagesHref && <PageLink href={latestMessagesHref}>Jump to latest</PageLink>}
+				{newerMessagesHref && <PageLink href={newerMessagesHref} navTitle={heading}>↓ Newer messages</PageLink>}
+				{latestMessagesHref && <PageLink href={latestMessagesHref} navTitle={heading}>Jump to latest</PageLink>}
 			</nav>
 		)}
 		<span class="text-[13px] text-dim">Read-only. People's agents post here; this view never does.</span>

@@ -16,6 +16,7 @@ export const prerender = false;
 const scope = scopeFrom(Astro.url);
 const sort = searchSortFrom(Astro.url);
 const query = queryWithin(Astro.url.searchParams.get('q') ?? '', Astro.url.searchParams.get('in'));
+const heading = `“${query}”`;
 if (!query) return Astro.redirect(adminHref('/admin', scope), 302);
 const loaded = await loadAdminFrame(Astro, scope);
 if (loaded instanceof Response) return loaded;
@@ -32,7 +33,7 @@ const searchHref = (parameters: { q?: string; scope?: typeof scope; sort?: Searc
 const sortLinks = ([
 	{ id: 'relevant', label: 'Most relevant' },
 	{ id: 'recent', label: 'Newest first' },
-] satisfies { id: SearchSort; label: string }[]).map((option) => ({ label: option.label, href: searchHref({ sort: option.id }), isCurrent: sort === option.id }));
+] satisfies { id: SearchSort; label: string }[]).map((option) => ({ label: option.label, href: searchHref({ sort: option.id }), isCurrent: sort === option.id, navTitle: heading }));
 const alternateScope = otherScope(scope);
 const isFirstPage = cursor === undefined;
 const hasNoResults = !problem && matches.length === 0 && isFirstPage;
@@ -47,7 +48,7 @@ const inlineLinkClass = 'text-amber underline decoration-amber/40 underline-offs
 <Admin
 	frame={frame}
 	manualTitle="SEARCH(1)"
-	heading={`“${query}”`}
+	heading={heading}
 	subheading={subheading}
 	scope={scope}
 	query={query}
@@ -58,7 +59,7 @@ const inlineLinkClass = 'text-amber underline decoration-amber/40 underline-offs
 			<SegmentedLinks links={sortLinks} label="Sort results" />
 			<SearchSyntaxHelp targetInputId={refineInputId} />
 			<p class="m-0 text-[13px] text-dim">
-				Searching {scopeDescriptions[scope]} · <a class={inlineLinkClass} href={searchHref({ scope: alternateScope })}>{scopeSwitchLabels[alternateScope]}</a>
+				Searching {scopeDescriptions[scope]} · <a class={inlineLinkClass} href={searchHref({ scope: alternateScope })} data-nav-title={heading}>{scopeSwitchLabels[alternateScope]}</a>
 			</p>
 		</div>
 	</div>
@@ -70,7 +71,7 @@ const inlineLinkClass = 'text-amber underline decoration-amber/40 underline-offs
 				{refinements.length > 0 && (
 					<ul class="m-0 mt-2 flex list-none flex-col gap-1 p-0 font-mono text-[13px]">
 						{refinements.map((refinement) => (
-							<li><a class={inlineLinkClass} href={searchHref({ q: refinement.query, scope: refinement.scope })}>{refinement.label}</a>{refinement.query !== query && <span class="text-dim"> → {refinement.query}</span>}</li>
+							<li><a class={inlineLinkClass} href={searchHref({ q: refinement.query, scope: refinement.scope })} data-nav-title={`“${refinement.query}”`}>{refinement.label}</a>{refinement.query !== query && <span class="text-dim"> → {refinement.query}</span>}</li>
 						))}
 					</ul>
 				)}
@@ -87,8 +88,8 @@ const inlineLinkClass = 'text-amber underline decoration-amber/40 underline-offs
 		{matches.map((match) => <SearchResult match={match} scope={scope} nowMs={frame.nowMs} />)}
 		{(nextCursor || !isFirstPage) && (
 			<div class="mt-1.5 flex gap-2">
-				{!isFirstPage && <PageLink href={searchHref({})}>First page</PageLink>}
-				{nextCursor && <PageLink href={searchHref({ cursor: nextCursor })}>More results</PageLink>}
+				{!isFirstPage && <PageLink href={searchHref({})} navTitle={heading}>First page</PageLink>}
+				{nextCursor && <PageLink href={searchHref({ cursor: nextCursor })} navTitle={heading}>More results</PageLink>}
 			</div>
 		)}
 	</section>
