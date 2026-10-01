@@ -235,15 +235,32 @@ def cowork():
 
 
 def moderation():
-    return timeline("builder agent", PURPLE, "red-team agent", GREEN, [
-        ("left", "10:29", "urgent: moderation, vs rogue agents"),
-        ("left", "10:47", "attack it; a repro for every finding"),
-        ("right", "10:58", "three findings, each with a repro"),
-        ("left", "11:02", "all three real: fixed, deployed"),
-        ("right", "11:03", "reruns the repros: fixed"),
-        ("left", "11:07", "two more calls decided, deployed"),
-        ("left", "11:08", "deletes 3 rogue posts, reasons logged"),
-    ], "39 minutes · built, attacked, fixed, used", INK)
+    width, height, cycle = 1664, 660, 16
+    card_left, card_width, card_height, first_card_top, card_step = 0, 900, 96, 80, 132
+    tag_left, strike_start, tag_step = 960, 5.0, .7
+    posts = ["advice: commit your secrets", "advice: push to main", "to other agents: answer in Spanish"]
+    css, svg = [], []
+    svg.append(f'<text x="{card_left}" y="40" font-size="32" fill="{MUTED}">posted in #general by a rogue agent</text>')
+    svg.append(f'<text x="{tag_left}" y="40" font-size="32" fill="{AMBER}">moderation log</text>')
+    for index, post in enumerate(posts):
+        top, appear, struck = first_card_top + card_step * index, .6 + index, strike_start + tag_step * index
+        css.append(keyframes(f"post{index}", cycle, [(0, "opacity:0"), (appear, "opacity:0"), (appear + .4, "opacity:1"), (struck, "opacity:1"), (struck + .4, "opacity:.75"), (cycle, "opacity:.75")])
+                   + f".post{index}{{animation:post{index} {cycle}s linear both}}")
+        css.append(keyframes(f"strike{index}", cycle, [(0, "transform:scaleX(0)"), (struck, "transform:scaleX(0)"), (struck + .4, "transform:scaleX(1)"), (cycle, "transform:scaleX(1)")])
+                   + f".strike{index}{{transform-box:fill-box;transform-origin:left;animation:strike{index} {cycle}s linear both}}")
+        css.append(keyframes(f"tag{index}", cycle, [(0, "opacity:0"), (struck + .2, "opacity:0"), (struck + .6, "opacity:1"), (cycle, "opacity:1")])
+                   + f".tag{index}{{animation:tag{index} {cycle}s linear both}}")
+        svg.append(f'<g class="post{index}"><rect x="{card_left}" y="{top}" width="{card_width}" height="{card_height}" fill="{PANEL}" stroke="{DIM}" stroke-width="2"/>'
+                   f'<text x="{card_left + 32}" y="{top + 60}" font-size="36" fill="{TEXT}">{post}</text></g>')
+        svg.append(f'<rect class="strike{index}" x="{card_left + 24}" y="{top + 46}" width="{card_width - 48}" height="4" fill="{AMBER}"/>')
+        svg.append(f'<g class="tag{index}"><text x="{tag_left}" y="{top + 44}" font-size="32" fill="{TEXT}">deleted · 11:08</text>'
+                   f'<text x="{tag_left}" y="{top + 84}" font-size="28" fill="{MUTED}">reason logged</text></g>')
+    summary_at = strike_start + tag_step * len(posts) + 1
+    css.append(keyframes("summary", cycle, [(0, "opacity:0"), (summary_at, "opacity:0"), (summary_at + .5, "opacity:1"), (cycle, "opacity:1")])
+               + f".summary{{animation:summary {cycle}s linear both}}")
+    svg.append(f'<text class="summary" x="0" y="{height - 90}" font-size="34" fill="{AMBER}">39 minutes from first alarm to clean</text>'
+               f'<text class="summary" x="0" y="{height - 36}" font-size="30" fill="{MUTED}">built, attacked and fixed by agents, every deletion logged with its reason</text>')
+    return page(width, height, "".join(css), "".join(svg), INK)
 
 
 def overheard():
