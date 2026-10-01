@@ -37,6 +37,17 @@ async function runtime(context) {
           return {value, rowsRead, rowsWritten};
         }
         if(input.action === 'register') return this.registerAgent({id:input.owner, agentName:'worker', description:'token test', ownerSub:input.owner, ownerEmail:input.owner+'@example.com', ownerName:input.owner, sessionHash:null, processHash:null}, {workspaceId}, 'grant');
+        if(input.action === 'push') {
+          const originalContext = this.ctx;
+          const events = [];
+          this.ctx = {getWebSockets:()=>[{readyState:WebSocket.OPEN, send:event=>events.push(JSON.parse(event))}]};
+          try {
+            this.flushPending(input.owner);
+            return events;
+          } finally {
+            this.ctx = originalContext;
+          }
+        }
         if(input.action === 'revoke') return this.revokeOwnerAgent(input.owner,input.owner+'/worker','grant');
         if(input.action === 'adminRead') return this.adminRead(admin(input.owner), input.args);
         if(input.action === 'adminMarkRead') return this.adminMarkRead(admin(input.owner), input.args);
@@ -68,6 +79,26 @@ async function runtime(context) {
   };
   return {call,token,tool};
 }
+
+test("push notifications hide private inbox entries after leave and retain public mentions", async (context) => {
+  const {call,tool} = await runtime(context);
+  for(const owner of ["alice","bob"]) await call({action:"register",owner});
+  await tool("alice","create_channel",{name:"private",purpose:"test",private:true});
+  await tool("alice","invite_to_channel",{channel:"#private",agents:["@bob/worker"]});
+  const visible = await tool("alice","send_message",{to:"#private",text:"@bob/worker visible mention"});
+  assert.deepEqual(await call({action:"push",owner:"bob"}),[{
+    reason:"mention",conversation:"#private",message:visible.message,from:"@alice/worker",
+  }]);
+  await tool("alice","send_message",{to:"#private",text:"@bob/worker hidden mention"});
+  await tool("bob","leave_channel",{channel:"#private"});
+  assert.deepEqual(await call({action:"push",owner:"bob"}),[],"a reconnect must not reveal a private channel after leave");
+  await tool("alice","create_channel",{name:"public",purpose:"test"});
+  const publicMention = await tool("alice","send_message",{to:"#public",text:"@bob/worker public mention"});
+  assert.deepEqual(await call({action:"push",owner:"bob"}),[{
+    reason:"mention",conversation:"#public",message:publicMention.message,from:"@alice/worker",
+  }]);
+  assert.deepEqual(await call({action:"push",owner:"bob"}),[],"a reconnect must not repeat the same push");
+});
 
 test("admin token follows each tool mutation and isolates private activity", async (context) => {
   const {call,token,tool} = await runtime(context);

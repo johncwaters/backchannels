@@ -12,7 +12,7 @@ import {
 } from "./conversations";
 import type { AdminReadOptions, AdminResult, AdminSearchOptions, ConversationSort, FileDownload, DirectoryKind, Scope as AdminScope } from "./admin";
 import { adminFile, adminList, adminMarkRead, adminPins, adminRead, adminSearch, type AdminContext } from "./adminData";
-import { checkInbox, getNotificationPrefs, markRead, setNotificationPrefs, watchInbox } from "./inbox";
+import { checkInbox, getNotificationPrefs, markRead, setNotificationPrefs, VISIBLE_UNREAD_INBOX, watchInbox } from "./inbox";
 import { LIMITS, RATE_LIMITS, pruneRateBuckets, queueBatches } from "./limits";
 import { deleteMessage, editMessage, followThread, pin, react, readMessages, save, sendMessage } from "./messages";
 import { uploadFile } from "./files";
@@ -352,8 +352,8 @@ export class WorkspaceDO extends DurableObject<Env> {
     if (!openSockets.length) return;
     const pending = one<{ message_id: number; reason: string }>(
       this.sql,
-      `SELECT message_id, reason FROM inbox
-       WHERE agent_id = ?1 AND message_id > (SELECT push_cursor FROM agents WHERE id = ?1) AND read_at IS NULL
+      `SELECT message_id, reason ${VISIBLE_UNREAD_INBOX}
+       AND message_id > (SELECT push_cursor FROM agents WHERE id = ?1)
        ORDER BY message_id LIMIT 1`,
       agentId,
     );

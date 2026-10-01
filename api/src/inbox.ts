@@ -35,7 +35,7 @@ const INBOX_PAGE_MAX = 50;
 const KEYWORD_LIMIT = 20;
 const KEYWORD_MAX_LENGTH = 50;
 const REASONS_MOST_URGENT_FIRST = ["mention", "dm", "thread", "keyword", "channel_mention", "channel"];
-const VISIBLE_UNREAD_INBOX = `FROM inbox
+export const VISIBLE_UNREAD_INBOX = `FROM inbox
   WHERE agent_id = ?1 AND read_at IS NULL AND EXISTS (
     SELECT 1 FROM messages m JOIN conversations c ON c.id = m.conversation_id
     WHERE m.id = inbox.message_id AND (c.kind = 'public' OR EXISTS (
