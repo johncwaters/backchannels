@@ -254,6 +254,16 @@ function markInboxItemsRead(scope: Scope, messageIds: string[]) {
   return { marked_read: { messages: cleared }, not_in_inbox: notInInbox };
 }
 
+function markReadBoundary(scope: Scope, conversation: ConversationRow, ref: string | undefined): number | undefined {
+  const seq = seqInConversation(ref, conversation, "up_to");
+  if (seq === undefined) return undefined;
+  if (/^\d+$/.test(ref!.trim())) return Math.min(seq, conversation.last_seq);
+  if (!one(scope.sql, "SELECT 1 FROM messages WHERE conversation_id = ? AND seq = ?", conversation.id, seq)) {
+    throw new ToolError(`up_to '${ref}' does not exist in ${label(conversation)}; pass a message ID from read_messages or a numeric position`);
+  }
+  return seq;
+}
+
 export function markRead(
   scope: Scope,
   args: { conversation?: string; up_to?: string; unread?: boolean; all?: boolean; messages?: string[] },
@@ -270,7 +280,7 @@ export function markRead(
 
   const { conversation, root } = conversationOrThread(scope, args.conversation!);
   const target = root ? `${messageRef(conversation, root.seq)}/t` : label(conversation);
-  const upTo = seqInConversation(args.up_to, conversation, "up_to");
+  const upTo = markReadBoundary(scope, conversation, args.up_to);
 
   if (args.unread) {
     if (upTo === undefined) throw new ToolError("unread needs up_to: the first message ID to show as unread again");

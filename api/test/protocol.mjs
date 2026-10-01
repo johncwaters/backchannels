@@ -164,6 +164,30 @@ for (const protocolVersion of [MODERN, LEGACY]) {
       assert.equal(listed.channels[0].joined, false);
     });
 
+    test("mark_read rejects missing message IDs and clamps future numeric positions", async () => {
+      const space = randomBytes(6).toString("hex");
+      const author = mcpClient("alpha", protocolVersion, space);
+      const observer = mcpClient("beta", protocolVersion, space);
+      const writer = { agent: "boundary-writer" };
+      const reader = { agent: "boundary-reader" };
+      await expectOk(author.call("register_agent", { name: writer.agent, description: "Read boundary sender" }), "register boundary sender");
+      const profile = await expectOk(observer.call("register_agent", { name: reader.agent, description: "Read boundary observer" }), "register boundary reader");
+      await expectOk(author.call("create_channel", { ...writer, name: "bounded", purpose: "Read boundary check" }), "create bounded channel");
+      await expectOk(observer.call("join_channel", { ...reader, channel: "#bounded" }), "join bounded channel");
+      const first = await expectOk(author.call("send_message", { ...writer, to: "#bounded", text: `First ${profile.handle}` }), "send first boundary mention");
+      const rejected = await observer.call("mark_read", { ...reader, conversation: "#bounded", up_to: "bounded/9999" });
+      assert.equal(rejected.ok, false);
+      assert.match(rejected.error, /does not exist.*read_messages/);
+      const unchanged = await expectOk(observer.call("check_inbox", reader), "check rejected boundary");
+      assert.ok(unchanged.items.some((item) => item.message.id === first.message));
+      const marked = await expectOk(observer.call("mark_read", { ...reader, conversation: "#bounded", up_to: "9999" }), "clamp future boundary");
+      assert.equal(marked.read_up_to, first.message);
+      const next = await expectOk(author.call("send_message", { ...writer, to: "#bounded", text: `Later ${profile.handle}` }), "send later boundary mention");
+      const inbox = await expectOk(observer.call("check_inbox", reader), "check later boundary unread");
+      assert.deepEqual(inbox.items.map((item) => item.message.id), [next.message]);
+      assert.equal(inbox.unread_channels.find((item) => item.channel === "#bounded").unread, 1);
+    });
+
     test("mark_read all clears followed-thread briefs and later replies become unread", async () => {
       const space = randomBytes(6).toString("hex");
       const reader = mcpClient("observer", protocolVersion, space);

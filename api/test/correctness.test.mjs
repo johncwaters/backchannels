@@ -365,6 +365,60 @@ describe("mark_read validates modes before state changes", () => {
   });
 });
 
+describe("mark_read positions stay within current history", () => {
+  for (const thread of [false, true]) {
+    test(`numeric future positions clamp and later ${thread ? "thread replies" : "channel posts"} remain unread`, (testContext) => {
+      const { database, scopeFor, createConversation, addMessage } = createWorkspace(testContext);
+      const conversationId = createConversation("bounds");
+      const rootId = addMessage(conversationId, 1);
+      addMessage(conversationId, 2, { rootId: thread ? rootId : null });
+      if (thread) database.prepare("INSERT INTO thread_follows VALUES ('reader', ?, 'on')").run(rootId);
+      const conversation = thread ? "bounds/1/t" : "#bounds";
+      const scope = scopeFor("reader");
+      assert.equal(markRead(scope, { conversation, up_to: "9999" }).read_up_to, "bounds/2");
+      assert.equal(markRead(scope, { conversation, up_to: "9999", unread: true }).unread_from, "bounds/2");
+      assert.equal(markRead(scope, { conversation, up_to: "2" }).read_up_to, "bounds/2");
+      const table = thread ? "thread_reads" : "read_markers";
+      assert.equal(database.prepare(`SELECT last_read_seq FROM ${table} WHERE agent_id = 'reader'`).get().last_read_seq, 2);
+      addMessage(conversationId, 3, { rootId: thread ? rootId : null });
+      if (thread) assert.equal(buildBrief(scope).threads.find((item) => item.thread === "bounds/1/t").unread_replies, 1);
+      else assert.equal(checkInbox(scope, {}).unread_channels.find((item) => item.channel === "#bounds").unread, 1);
+    });
+
+    for (const upTo of ["bounds/2", "bounds/9999"]) {
+      test(`missing qualified ${upTo} changes no ${thread ? "thread" : "channel"} read state`, (testContext) => {
+        const { database, scopeFor, createConversation, addMessage } = createWorkspace(testContext);
+        const conversationId = createConversation("bounds");
+        const rootId = addMessage(conversationId, 1);
+        const latestId = addMessage(conversationId, 3);
+        database.prepare("INSERT INTO read_markers VALUES ('reader', ?, 0)").run(conversationId);
+        database.prepare("INSERT INTO inbox (agent_id,message_id,reason,created_at) VALUES ('reader',?,'mention',3)").run(latestId);
+        const conversation = thread ? "bounds/1/t" : "#bounds";
+        for (const unread of [false, true]) {
+          assert.throws(() => markRead(scopeFor("reader"), { conversation, up_to: upTo, unread }), /does not exist.*read_messages/);
+          assert.equal(database.prepare("SELECT last_read_seq FROM read_markers WHERE agent_id = 'reader'").get().last_read_seq, 0);
+          assert.equal(database.prepare("SELECT read_at FROM inbox").get().read_at, null);
+          assert.equal(database.prepare("SELECT count(*) AS n FROM thread_reads").get().n, 0);
+          assert.equal(database.prepare("SELECT count(*) AS n FROM thread_follows WHERE root_id = ?").get(rootId).n, 0);
+        }
+      });
+    }
+  }
+
+  test("zero, numeric gaps and existing qualified positions stay valid", (testContext) => {
+    const { database, scopeFor, createConversation, addMessage } = createWorkspace(testContext);
+    const conversationId = createConversation("bounds");
+    addMessage(conversationId, 1);
+    addMessage(conversationId, 3);
+    const scope = scopeFor("reader");
+    assert.equal(markRead(scope, { conversation: "#bounds", up_to: "0" }).read_up_to, null);
+    assert.equal(markRead(scope, { conversation: "#bounds", up_to: "bounds/1" }).read_up_to, "bounds/1");
+    assert.equal(markRead(scope, { conversation: "#bounds", up_to: "2" }).read_up_to, "bounds/2");
+    database.prepare("UPDATE messages SET deleted_at = 4 WHERE conversation_id = ? AND seq = 3").run(conversationId);
+    assert.equal(markRead(scope, { conversation: "#bounds", up_to: "bounds/3" }).read_up_to, "bounds/3");
+  });
+});
+
 describe("mark_read all clears followed thread state", () => {
   test("clears public and archived thread counts and later replies become unread", testContext => {
     const { database, scopeFor, createConversation, addMessage } = createWorkspace(testContext);
