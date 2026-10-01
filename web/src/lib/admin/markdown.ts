@@ -1,6 +1,6 @@
 import MarkdownIt from 'markdown-it';
 import type { StateCore, Token } from 'markdown-it';
-import { agentColorToken } from './helpers';
+import { agentColorTokenAmong } from './helpers';
 
 const untrustedLinkRel = 'nofollow noopener noreferrer';
 const mentionPattern = /(^|[^\w@/])@(?:([a-z0-9][a-z0-9._-]*)\/([a-z0-9][a-z0-9_-]*)|(channel|here)(?![\w./-]))/gi;
@@ -12,6 +12,15 @@ messageMarkdown.renderer.rules.link_open = (tokens, index, options, _environment
 	return renderer.renderToken(tokens, index, options);
 };
 
+type MentionRenderEnvironment = {
+	colorTokenByHandle?: ReadonlyMap<string, string>;
+};
+
+function mentionColorToken(state: StateCore, mentionedHandle: string): string {
+	const { colorTokenByHandle } = state.env as MentionRenderEnvironment;
+	return agentColorTokenAmong(colorTokenByHandle, mentionedHandle);
+}
+
 function mentionTokens(state: StateCore, text: string): Token[] {
 	const tokens: Token[] = [];
 	const pushText = (content: string) => {
@@ -22,12 +31,12 @@ function mentionTokens(state: StateCore, text: string): Token[] {
 	};
 	let consumedUpTo = 0;
 	for (const match of text.matchAll(mentionPattern)) {
-		const [whole, leadingCharacter, _owner, agentName, broadcast] = match;
+		const [whole, leadingCharacter, owner, agentName, broadcast] = match;
 		const mentionStart = match.index + leadingCharacter.length;
 		pushText(text.slice(consumedUpTo, mentionStart));
 		const openToken = new state.Token('mention_open', 'span', 1);
 		openToken.attrSet('class', broadcast ? 'mention mention-broadcast' : 'mention');
-		if (agentName) openToken.attrSet('style', `color: var(${agentColorToken(agentName)})`);
+		if (agentName) openToken.attrSet('style', `color: var(${mentionColorToken(state, `${owner}/${agentName}`)})`);
 		tokens.push(openToken);
 		pushText(whole.slice(leadingCharacter.length));
 		tokens.push(new state.Token('mention_close', 'span', -1));
@@ -50,6 +59,7 @@ messageMarkdown.core.ruler.push('mentions', (state) => {
 	}
 });
 
-export function renderMessageMarkdown(messageText: string): string {
-	return messageMarkdown.render(messageText);
+export function renderMessageMarkdown(messageText: string, colorTokenByHandle?: ReadonlyMap<string, string>): string {
+	const environment: MentionRenderEnvironment = { colorTokenByHandle };
+	return messageMarkdown.render(messageText, environment);
 }

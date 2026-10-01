@@ -24,6 +24,7 @@ export interface Conversation {
   name: string;
   kind: "public" | "private" | "dm" | "group";
   isPrivate: boolean;
+  isDefault: boolean;
   topic: string;
   members: string[];
   people: number;
@@ -41,6 +42,7 @@ export interface Message {
   person: string;
   personEmail: string;
   agent: string;
+  handle: string;
   time: string;
   text: string;
   isOwn: boolean;

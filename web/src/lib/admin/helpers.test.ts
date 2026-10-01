@@ -2,7 +2,9 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
 	agentColorToken,
-	agentNameFromHandle,
+	agentColorTokenAmong,
+	distinctAgentColorTokens,
+	hiddenConversationsLabel,
 	buildSidebarGroups,
 	dayLabel,
 	deployedVersion,
@@ -41,6 +43,7 @@ function conversationNamed(name: string, messagesToday: number, lastActivity: st
 		name,
 		kind: 'public',
 		isPrivate: false,
+		isDefault: false,
 		topic: '',
 		members: [],
 		people: 1,
@@ -61,6 +64,7 @@ function messageAt(time: string): Message {
 		person: 'maya',
 		personEmail: 'maya@example.com',
 		agent: 'claude-code',
+		handle: 'maya/claude-code',
 		time,
 		text: '',
 		isOwn: false,
@@ -116,12 +120,29 @@ describe('message times and day dividers', () => {
 
 describe('agentColorToken', () => {
 	it('gives the same handle the same agent color every time', () => {
-		expect(agentColorToken('deploy-bot')).toBe(agentColorToken('deploy-bot'));
+		expect(agentColorToken('ian.m/deploy-bot')).toBe(agentColorToken('@ian.m/deploy-bot'));
 	});
 
-	it('always picks one of the three agent color tokens', () => {
-		const tokens = new Set(['maya-claude', 'dan-codex', 'priya-cursor', 'a', ''].map(agentColorToken));
-		for (const token of tokens) expect(['--agent-claude-code', '--agent-codex', '--agent-cursor']).toContain(token);
+	it('always picks one of the agent color tokens', () => {
+		const agentColorTokens = ['--agent-claude-code', '--agent-codex', '--agent-cursor', '--agent-pink', '--agent-teal', '--agent-lime'];
+		for (const handle of ['maya/claude', 'dan/codex', 'priya/cursor', 'a', '']) expect(agentColorTokens).toContain(agentColorToken(handle));
+	});
+});
+
+describe('distinctAgentColorTokens', () => {
+	it('gives every author in a conversation its own color', () => {
+		const handles = ['ian.m/backchannels-maintainer', 'john.w/backchannel-dev-iksxop', 'ian.m/posthog-web', 'john.w/backchannel-dev', 'maya/claude', 'dan/codex'];
+		const tokenByHandle = distinctAgentColorTokens([...handles, ...handles]);
+		expect(new Set(tokenByHandle.values()).size).toBe(handles.length);
+	});
+
+	it('keeps an author on its hashed color when nobody else claims it', () => {
+		expect(distinctAgentColorTokens(['ian.m/deploy-bot']).get('ian.m/deploy-bot')).toBe(agentColorToken('ian.m/deploy-bot'));
+	});
+
+	it('resolves a handle written with a leading @ or different case to its mapped author color', () => {
+		const tokenByHandle = distinctAgentColorTokens(['ian.m/deploy-bot', 'maya/claude']);
+		expect(agentColorTokenAmong(tokenByHandle, '@IAN.M/Deploy-Bot')).toBe(tokenByHandle.get('ian.m/deploy-bot'));
 	});
 });
 
@@ -191,6 +212,13 @@ describe('buildSidebarGroups', () => {
 		expect(privateGroup.total).toBe(3);
 	});
 
+	it('lists default channels first, then the three highest ranked other channels', () => {
+		const defaultChannels = ['#general', '#help'].map((name) => conversationNamed(name, 0, isoMinutesAgo(60), { isDefault: true }));
+		const [publicGroup] = buildSidebarGroups({ public: [...publicConversations, ...defaultChannels], private: [] }, { public: 10, publicMine: 10, private: 0 }, 'everyone', nowMs);
+		expect(publicGroup.conversations.map((conversation) => conversation.name)).toEqual(['#general', '#help', '#channel-7', '#channel-6', '#channel-5']);
+		expect(publicGroup.hiddenCount).toBe(5);
+	});
+
 	it('counts every public channel under everyone', () => {
 		const [publicGroup] = buildSidebarGroups({ public: publicConversations, private: [] }, { public: 40, publicMine: 8, private: 0 }, 'everyone', nowMs);
 		expect(publicGroup.total).toBe(40);
@@ -210,6 +238,13 @@ describe('buildSidebarGroups', () => {
 		expect(everyoneGroups.map((group) => group.kind)).toEqual(['public']);
 		expect(mineGroups.map((group) => group.kind)).toEqual(['public', 'private']);
 		expect(mineGroups[1].title).toBe('PRIVATE · YOUR AGENTS ARE IN');
+	});
+});
+
+describe('hiddenConversationsLabel', () => {
+	it('names how many channels or chats the sidebar leaves out', () => {
+		expect(hiddenConversationsLabel('public', 1)).toBe('+1 more channel');
+		expect(hiddenConversationsLabel('private', 4)).toBe('+4 more chats');
 	});
 });
 
@@ -382,12 +417,6 @@ describe('positiveIntegerFrom', () => {
 		for (const parameter of [null, '', '0', '-3', '1.5', 'abc', '9007199254740993']) {
 			expect(positiveIntegerFrom(parameter)).toBeUndefined();
 		}
-	});
-});
-
-describe('agentNameFromHandle', () => {
-	it('drops the owner part of a handle', () => {
-		expect(agentNameFromHandle('@john.w/backchannels-builder')).toBe('backchannels-builder');
 	});
 });
 

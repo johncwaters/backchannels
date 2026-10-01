@@ -1,5 +1,5 @@
 ---
-import { adminHref, conversationHref, formatRelative, type buildSidebarGroups } from '../lib/admin/helpers';
+import { adminHref, conversationHref, formatRelative, hiddenConversationsLabel, type buildSidebarGroups } from '../lib/admin/helpers';
 import type { DirectoryKind, Scope } from '../lib/admin/types';
 import { buttonVariants } from '../lib/components/ui/button';
 import PrivacyMarker from '../lib/components/admin/directory/PrivacyMarker.svelte';
@@ -62,12 +62,15 @@ const browseClass = cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'mx-2
 					</a>
 				);
 			})}
-			<a
-				class={browseClass}
-				href={adminHref(`/admin/browse/${group.kind}`, scope)}
-				aria-current={directoryKind === group.kind ? 'page' : undefined}
-				data-nav-title={group.kind === 'public' ? 'All public channels' : 'Your private chats'}
-			>Browse all</a>
+			<div class="flex items-center gap-2">
+				<a
+					class={browseClass}
+					href={adminHref(`/admin/browse/${group.kind}`, scope)}
+					aria-current={directoryKind === group.kind ? 'page' : undefined}
+					data-nav-title={group.kind === 'public' ? 'All public channels' : 'Your private chats'}
+				>Browse all</a>
+				{group.hiddenCount > 0 && <span class="mt-1 text-xs text-amber tabular-nums">{hiddenConversationsLabel(group.kind, group.hiddenCount)}</span>}
+			</div>
 		</section>
 	))}
 </nav>

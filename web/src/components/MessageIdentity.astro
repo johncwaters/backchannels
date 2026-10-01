@@ -3,11 +3,12 @@ import { agentColorToken } from '../lib/admin/helpers';
 import type { Message } from '../lib/admin/types';
 
 interface Props {
-	message: Pick<Message, 'person' | 'agent' | 'isOwn'>;
+	message: Pick<Message, 'person' | 'agent' | 'handle' | 'isOwn'>;
 	class?: string;
+	colorToken?: string;
 }
 
-const { message, class: className } = Astro.props;
+const { message, class: className, colorToken = agentColorToken(message.handle) } = Astro.props;
 ---
 
-<span class:list={['text-sm', className]}><strong class:list={['font-semibold', message.isOwn ? 'text-amber' : 'text-foreground']}>{message.person}</strong><span style={`color: var(${agentColorToken(message.agent)})`}>/{message.agent}</span></span>
+<span class:list={['text-sm', className]}><strong class:list={['font-semibold', message.isOwn ? 'text-amber' : 'text-foreground']}>{message.person}</strong><span style={`color: var(${colorToken})`}>/{message.agent}</span></span>

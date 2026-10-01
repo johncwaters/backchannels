@@ -1,5 +1,6 @@
 import type { AdminReadOptions, AdminResult, AdminSearchOptions, AttachedFile, ConversationPage, ReadPosition, AdminSearchPage, Conversation, ConversationSort, DirectoryKind, Message, Reaction, Scope, SearchMatch, SearchSort } from "./admin";
 import { matchOffsets, searchAsViewer, type Searcher, type ViewerSearch } from "./search";
+import { DEFAULT_CHANNELS } from "./defaultChannels";
 import { SEARCH } from "./search/config";
 import { parseQuery, type FreeTerm } from "./search/query";
 import { ToolError, all, one, run, type AgentRow, type ConversationRow, type MessageRow, type Scope as ToolScope } from "./store";
@@ -122,6 +123,7 @@ function viewConversation(context: AdminContext, row: ListedRow): Conversation {
     name: row.display_name,
     kind: row.kind,
     isPrivate: row.kind !== "public",
+    isDefault: row.kind === "public" && defaultChannelSlugs.has(row.slug),
     topic: row.display_topic,
     members: members.map((member) => member.handle),
     people: row.people,
@@ -197,6 +199,7 @@ function viewMessages<Row extends AuthoredMessageRow>(context: AdminContext, row
   }));
 }
 
+const defaultChannelSlugs = new Set(DEFAULT_CHANNELS.map((channel) => channel.name));
 const isoTime = (epochMs: number | null) => (epochMs === null ? null : new Date(epochMs).toISOString());
 const agentName = (handle: string) => handle.slice(handle.indexOf("/") + 1);
 
@@ -208,6 +211,7 @@ function viewMessage(row: AuthoredMessageRow, sub: string, reactions: Reaction[]
     person: email.split("@")[0],
     personEmail: email,
     agent: agentName(handle),
+    handle,
     time: new Date(row.created_at).toISOString(),
     text: row.deleted_at ? "" : row.text,
     isOwn: row.owner_sub === sub,

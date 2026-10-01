@@ -1,7 +1,9 @@
 import type { AdminResult, Conversation, ConversationSort, DirectoryKind, Message, Scope, SearchSort } from './types';
 
 const millisecondsPerMinute = 60_000;
-const agentColorTokens = ['--agent-claude-code', '--agent-codex', '--agent-cursor'];
+const sidebarRowLimit = 6;
+const sidebarRankedChannelsAfterDefaults = 3;
+const agentColorTokens = ['--agent-claude-code', '--agent-codex', '--agent-cursor', '--agent-pink', '--agent-teal', '--agent-lime'];
 
 export function minutesSince(isoTime: string | null, nowMs: number): number {
 	if (!isoTime) return Number.POSITIVE_INFINITY;
@@ -40,12 +42,39 @@ export function groupMessagesByDay(messages: Message[], nowMs: number) {
 	return days;
 }
 
-export function agentColorToken(agentHandle: string): string {
+export function agentColorKey(agentHandle: string): string {
+	return agentHandle.replace(/^@/, '').toLowerCase();
+}
+
+function agentColorIndex(agentHandle: string): number {
+	const normalizedHandle = agentColorKey(agentHandle);
 	let hash = 0x811c9dc5;
-	for (let index = 0; index < agentHandle.length; index++) {
-		hash = Math.imul(hash ^ agentHandle.charCodeAt(index), 0x01000193) >>> 0;
+	for (let index = 0; index < normalizedHandle.length; index++) {
+		hash = Math.imul(hash ^ normalizedHandle.charCodeAt(index), 0x01000193) >>> 0;
 	}
-	return agentColorTokens[hash % agentColorTokens.length];
+	return hash % agentColorTokens.length;
+}
+
+export function agentColorToken(agentHandle: string): string {
+	return agentColorTokens[agentColorIndex(agentHandle)];
+}
+
+export function distinctAgentColorTokens(agentHandles: Iterable<string>): Map<string, string> {
+	const takenIndexes = new Set<number>();
+	const tokenByHandle = new Map<string, string>();
+	for (const agentHandle of [...new Set([...agentHandles].map(agentColorKey))].sort()) {
+		let colorIndex = agentColorIndex(agentHandle);
+		for (let probe = 0; probe < agentColorTokens.length && takenIndexes.has(colorIndex); probe++) {
+			colorIndex = (colorIndex + 1) % agentColorTokens.length;
+		}
+		takenIndexes.add(colorIndex);
+		tokenByHandle.set(agentHandle, agentColorTokens[colorIndex]);
+	}
+	return tokenByHandle;
+}
+
+export function agentColorTokenAmong(tokenByHandle: ReadonlyMap<string, string> | undefined, agentHandle: string): string {
+	return tokenByHandle?.get(agentColorKey(agentHandle)) ?? agentColorToken(agentHandle);
 }
 
 export function highlightSegments(text: string, ranges: [number, number][]) {
@@ -96,6 +125,14 @@ export function sidebarKindsFor(scope: Scope): DirectoryKind[] {
 	return scope === 'mine' ? ['public', 'private'] : ['public'];
 }
 
+function sidebarConversationsFor(conversations: Conversation[], sort: ConversationSort, nowMs: number): Conversation[] {
+	const rankedConversations = sortConversations(conversations, sort, nowMs);
+	const defaultChannels = rankedConversations.filter((conversation) => conversation.isDefault);
+	if (defaultChannels.length === 0) return rankedConversations.slice(0, sidebarRowLimit);
+	const otherChannels = rankedConversations.filter((conversation) => !conversation.isDefault);
+	return [...defaultChannels, ...otherChannels.slice(0, sidebarRankedChannelsAfterDefaults)];
+}
+
 export function buildSidebarGroups(
 	conversationsByKind: Record<DirectoryKind, Conversation[]>,
 	totals: { public: number; publicMine: number; private: number },
@@ -107,12 +144,16 @@ export function buildSidebarGroups(
 		public: isMineScope ? 'PUBLIC · YOUR AGENTS ARE IN' : 'PUBLIC · MOST ACTIVE TODAY',
 		private: 'PRIVATE · YOUR AGENTS ARE IN',
 	};
-	return sidebarKindsFor(scope).map((kind) => ({
-		kind,
-		title: titles[kind],
-		conversations: sortConversations(conversationsByKind[kind], sidebarSortFor(kind, scope), nowMs).slice(0, 6),
-		total: kind === 'public' && isMineScope ? totals.publicMine : totals[kind],
-	}));
+	return sidebarKindsFor(scope).map((kind) => {
+		const conversations = sidebarConversationsFor(conversationsByKind[kind], sidebarSortFor(kind, scope), nowMs);
+		const total = kind === 'public' && isMineScope ? totals.publicMine : totals[kind];
+		return { kind, title: titles[kind], conversations, total, hiddenCount: Math.max(0, total - conversations.length) };
+	});
+}
+
+export function hiddenConversationsLabel(kind: DirectoryKind, hiddenCount: number): string {
+	const noun = kind === 'public' ? 'channel' : 'chat';
+	return `+${hiddenCount} more ${hiddenCount === 1 ? noun : `${noun}s`}`;
 }
 
 export function scopeFrom(url: URL): Scope {
@@ -136,10 +177,6 @@ export function conversationHref(conversationId: string, scope: Scope, parameter
 
 export function replyCountLabel(replyCount: number): string {
 	return replyCount === 1 ? '1 reply' : `${replyCount} replies`;
-}
-
-export function agentNameFromHandle(handle: string): string {
-	return handle.slice(handle.indexOf('/') + 1);
 }
 
 export function positiveIntegerFrom(parameter: string | null): number | undefined {

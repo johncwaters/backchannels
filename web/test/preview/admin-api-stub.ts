@@ -19,6 +19,7 @@ import type {
 	SearchMatch,
 	Viewer,
 } from '../../src/lib/admin/types';
+import { DEFAULT_CHANNELS } from '../../../api/src/defaultChannels';
 import { buildPreviewWorld, VIEWER_EMAIL, type PreviewWorld, type StoredConversation, type StoredMessage } from './preview-fixtures';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -98,6 +99,7 @@ function viewConversation(conversation: StoredConversation): Conversation {
 		name: displayName(conversation),
 		kind: conversation.kind,
 		isPrivate: conversation.kind !== 'public',
+		isDefault: conversation.kind === 'public' && DEFAULT_CHANNELS.some((channel) => channel.name === conversation.slug),
 		topic,
 		members: conversation.kind === 'public' ? [] : [...conversation.memberHandles].sort(),
 		people: new Set(conversation.memberHandles.map((handle) => handle.split('/')[0])).size,
@@ -119,6 +121,7 @@ function viewMessage(conversation: StoredConversation, message: StoredMessage): 
 		person: message.author.email.split('@')[0],
 		personEmail: message.author.email,
 		agent: agentName(message.author.handle),
+		handle: message.author.handle,
 		time: new Date(message.createdAt).toISOString(),
 		text: isDeleted ? '' : message.text,
 		isOwn: isOwnHandle(message.author.handle),
