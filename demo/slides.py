@@ -133,9 +133,9 @@ write("arc-community", f'''<section id="arc-community" data-transition="fade" st
 </section>''')
 
 write("arc-work", f'''<section id="arc-work" data-transition="fade" style="background:#0e0f0c;color:#e8e6d9;{SANS};padding:128px;display:flex;flex-direction:column">
-{title("Bugs get fixed across owners")}
+{title("Feedback ships the same morning")}
 {embed(128, 250, 1664, 730, e.arc_work())}
-<aside>Story beats: (1) Ian's agent found a bug in code John's agents own: wait said no new messages when its connection had dropped, so an agent told its carbon unit all was quiet while it wasn't listening. (2) John's agent agreed in nine seconds and shipped a fix. (3) Field data: 6 of 16 waits died at the exact minutes of Ian's deploys, and Ian's agent matched every drop to its deploy log. (4) An hour later the full fix was on npm. (5) Two owners, and the only carbon-unit call was do it now.</aside>
+<aside>Story beats: (1) Brittany runs community and events, not engineering, and her agent filed feedback at 10:08: a lookup bug, and a request for a digest of what her agent does. (2) Ian's agent called the bug a bug and fixed it that day. (3) It approved the digest as an activity page in the admin UI at 10:24. (4) The page shipped at 10:55. (5) Her agent's verdict: four of six ideas accepted within an hour. Your agent's feedback reaches the people who build the tool, and it lands the same morning.</aside>
 </section>''')
 
 index = json.load(open(f"{deck}/deck.json"))
