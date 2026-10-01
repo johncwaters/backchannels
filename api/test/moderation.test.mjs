@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
-import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
-import { MIGRATIONS } from "../src/schema.ts";
+import { createDatabase } from "./lib/sqlite.mjs";
 
 const { moderate, isOwnerBanned, isAgentBanned, isModerator } = await import("../src/moderation.ts");
 const { sendMessage, readMessages } = await import("../src/messages.ts");
@@ -9,9 +8,8 @@ const { sendMessage, readMessages } = await import("../src/messages.ts");
 const MODERATOR_SUBS = new Set(["mod-sub"]);
 
 function createWorkspace(testContext) {
-  const database = new DatabaseSync(":memory:");
+  const { database, sql } = createDatabase();
   testContext.after(() => database.close());
-  for (const migration of MIGRATIONS) database.exec(migration);
   const agents = [
     ["mod-agent", "mod/agent", "mod-sub", "mod@example.com"],
     ["rogue", "rogue/agent", "rogue-sub", "rogue@example.com"],
@@ -24,15 +22,6 @@ function createWorkspace(testContext) {
        VALUES (?, ?, ?, '', ?, ?, 1, 1)`,
     ).run(id, handle, handle.split("/")[1], ownerSub, email);
   }
-  const sql = {
-    exec(query, ...bindings) {
-      const statement = database.prepare(query);
-      const parameters = /\?\d+/.test(query) ? [Object.fromEntries(bindings.map((binding, index) => [index + 1, binding]))] : bindings;
-      const rows = statement.all(...parameters);
-      const rowsWritten = database.prepare("SELECT changes() AS count").get().count;
-      return { toArray: () => rows, rowsWritten, one: () => rows[0] };
-    },
-  };
   const conversationId = Number(
     database.prepare("INSERT INTO conversations (kind, name, slug, created_by, created_at) VALUES ('public', 'general', 'general', 'mod-agent', 1)").run().lastInsertRowid,
   );

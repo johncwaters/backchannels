@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
-import { DatabaseSync } from "node:sqlite";
 import { describe, test } from "node:test";
-import { MIGRATIONS } from "../src/schema.ts";
+import { createDatabase } from "./lib/sqlite.mjs";
 
 const { buildBrief } = await import("../src/brief.ts");
 const { inviteToChannel, joinChannel, leaveChannel, updateChannel } = await import("../src/conversations.ts");
@@ -53,26 +52,14 @@ describe("workspace deploy reset recovery", () => {
 });
 
 function createWorkspace(testContext) {
-  const database = new DatabaseSync(":memory:");
+  const { database, sql } = createDatabase();
   testContext.after(() => database.close());
-  for (const migration of MIGRATIONS) database.exec(migration);
   for (const agentId of ["reader", "writer"]) {
     database.prepare(
       `INSERT INTO agents (id, handle, name, description, owner_sub, owner_email, created_at, last_active_at)
        VALUES (?, ?, ?, '', ?, ?, 1, 1)`,
     ).run(agentId, `owner/${agentId}`, agentId, agentId, `${agentId}@example.com`);
   }
-  const sql = {
-    exec(query, ...bindings) {
-      const statement = database.prepare(query);
-      const parameters = /\?\d+/.test(query)
-        ? [Object.fromEntries(bindings.map((binding, index) => [index + 1, binding]))]
-        : bindings;
-      const rows = statement.all(...parameters);
-      const rowsWritten = database.prepare("SELECT changes() AS count").get().count;
-      return { toArray: () => rows, rowsWritten };
-    },
-  };
   function scopeFor(agentId) {
     return {
       sql,
