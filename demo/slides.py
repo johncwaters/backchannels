@@ -114,6 +114,7 @@ write("install", f'''<section id="install" data-transition="fade" style="backgro
 write("overheard", f'''<section id="overheard" data-transition="fade" style="background:#0e0f0c;color:#e8e6d9;{SANS};padding:128px;display:flex;flex-direction:column">
 {title("Overheard in backchannels")}
 {embed(128, 280, 1664, 680, e.overheard())}
+<p style="position:absolute;left:128px;bottom:40px;width:1664px;font-size:28px;color:#8c8a7d">No hedgehogs were harmed in the making of this workspace. One agent was banned.</p>
 <aside>BOTH: no narration. Leave it up during questions; the quotes fade in by themselves. All real, from today's workspace, used with Fernando's and Brittany's OK.</aside>
 </section>''')
 

@@ -1,3 +1,4 @@
+import random
 MONO = 'ui-monospace,"SF Mono",Menlo,monospace'
 SANS = '-apple-system,"Helvetica Neue",sans-serif'
 INK, TEXT, MUTED, DIM, AMBER, GREEN, BLUE, PURPLE, LINE, PANEL = "#0e0f0c", "#e8e6d9", "#c9c7ba", "#8c8a7d", "#ffb547", "#7ce38b", "#6ec1ff", "#d9a1f2", "#3a3b33", "#141510"
@@ -177,19 +178,28 @@ def search():
 
 
 def network():
-    width, height, cycle = 1920, 400, 9
-    nodes = [(140, 250, PURPLE), (330, 110, GREEN), (520, 290, BLUE), (700, 150, PURPLE), (880, 320, GREEN), (1060, 120, PURPLE),
-             (1240, 280, BLUE), (1420, 140, GREEN), (1600, 300, PURPLE), (1780, 170, BLUE)]
-    edges = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7), (7, 8), (8, 9), (1, 3), (3, 5), (5, 7), (7, 9), (2, 4), (4, 6), (6, 8), (0, 2)]
+    width, height, cycle, node_count = 1920, 400, 9, 26
+    placement = random.Random(7)
+    nodes = []
+    while len(nodes) < node_count:
+        candidate = (placement.randint(60, width - 60), placement.randint(50, height - 50))
+        if all((candidate[0] - x) ** 2 + (candidate[1] - y) ** 2 > 110 ** 2 for x, y in nodes):
+            nodes.append(candidate)
+    edges = set()
+    for index, (x, y) in enumerate(nodes):
+        nearest = sorted((other for other in range(len(nodes)) if other != index), key=lambda other: (nodes[other][0] - x) ** 2 + (nodes[other][1] - y) ** 2)
+        edges.update(tuple(sorted((index, other))) for other in nearest[:2])
+    edges = sorted(edges)
     svg = [f'<line x1="{nodes[a][0]}" y1="{nodes[a][1]}" x2="{nodes[b][0]}" y2="{nodes[b][1]}" stroke="{LINE}" stroke-width="2"/>' for a, b in edges]
     css = [keyframes("pk", cycle, [(0, "opacity:0;transform:translate(0,0)"), (.2, "opacity:1;transform:translate(0,0)"),
                                    (1.6, "opacity:1;transform:translate(var(--dx),var(--dy))"), (1.9, "opacity:0;transform:translate(var(--dx),var(--dy))"), (cycle, "opacity:0;transform:translate(var(--dx),var(--dy))")]),
            f".pk{{animation:pk {cycle}s ease-in-out infinite}}"]
-    for index, (a, b) in enumerate(edges):
-        (ax, ay, _), (bx, by, _) = nodes[a], nodes[b]
-        source, target = ((ax, ay), (bx, by)) if index % 2 else ((bx, by), (ax, ay))
-        svg.append(f'<circle class="pk" style="--dx:{target[0] - source[0]}px;--dy:{target[1] - source[1]}px;animation-delay:{index * .53:.2f}s" cx="{source[0]}" cy="{source[1]}" r="8" fill="{AMBER}"/>')
-    svg += [f'<circle cx="{nx}" cy="{ny}" r="18" fill="{INK}" stroke="{color}" stroke-width="5"/>' for nx, ny, color in nodes]
+    svg += [f'<circle cx="{x}" cy="{y}" r="16" fill="{INK}" stroke="{placement.choice((PURPLE, GREEN, BLUE))}" stroke-width="5"/>' for x, y in nodes]
+    for a, b in edges + edges[::2]:
+        source, target = (nodes[a], nodes[b]) if placement.random() < .5 else (nodes[b], nodes[a])
+        facing = -1 if target[0] > source[0] else 1
+        svg.append(f'<g class="pk" style="--dx:{target[0] - source[0]}px;--dy:{target[1] - source[1]}px;animation-delay:{placement.uniform(0, cycle):.2f}s">'
+                   f'<text x="0" y="0" font-size="34" text-anchor="middle" dominant-baseline="central" transform="translate({source[0]},{source[1]}) scale({facing},1)">🦔</text></g>')
     return page(width, height, "".join(css), "".join(svg), INK)
 
 
