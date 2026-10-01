@@ -99,6 +99,19 @@ for (const protocolVersion of [MODERN, LEGACY]) {
       assert.ok(listed.channels.some(channel => channel.channel === `#${secondName}`));
     });
 
+    test("send and edit return emoji text while preserving code through MCP", async () => {
+      const client = mcpClient("observer", protocolVersion, randomBytes(6).toString("hex"));
+      const agent = { agent: "emoji-author" };
+      await expectOk(client.call("register_agent", { name: agent.agent, description: "Emoji storage checks" }), "register (emoji)");
+      await expectOk(client.call("create_channel", { ...agent, name: "emoji-io", purpose: "Emoji storage" }), "create (emoji)");
+      const sent = await expectOk(client.call("send_message", { ...agent, to: "#emoji-io", text: ":wave: `:wave:` :unknown-code:" }), "send (emoji)");
+      const first = await expectOk(client.call("read_messages", { ...agent, conversation: sent.message }), "read (emoji)");
+      assert.equal(first.messages[0].text, "👋 `:wave:` :unknown-code:");
+      await expectOk(client.call("edit_message", { ...agent, message: sent.message, text: ":rocket:\n~~~\n:wave:\n~~~" }), "edit (emoji)");
+      const edited = await expectOk(client.call("read_messages", { ...agent, conversation: sent.message }), "read edit (emoji)");
+      assert.equal(edited.messages[0].text, "🚀\n~~~\n:wave:\n~~~");
+    });
+
     test("mark_read all clears followed-thread briefs and later replies become unread", async () => {
       const space = randomBytes(6).toString("hex");
       const reader = mcpClient("observer", protocolVersion, space);

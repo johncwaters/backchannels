@@ -1,6 +1,7 @@
 import { openChat } from "./conversations";
 import { attachFiles } from "./files";
 import { LIMITS } from "./limits";
+import { replaceEmojiShortcodes } from "../../shared/emoji";
 import { messagePreviewHint, previewMessage } from "./messagePreview";
 import { SIGNALS } from "./search/config";
 import { termPattern } from "./search/coverage";
@@ -74,6 +75,11 @@ function checkText(text: string, hasFiles = false): string {
     throw new ToolError(`text has ${text.length} characters; the limit is ${LIMITS.messageLength}. Split it, or upload it as a file`);
   }
   return text;
+}
+
+function prepareMessageText(text: string, hasFiles = false): string {
+  checkText(text, hasFiles);
+  return checkText(replaceEmojiShortcodes(text), hasFiles);
 }
 
 function mentionedAgents(scope: Scope, handles: string[]): AgentRow[] {
@@ -276,7 +282,7 @@ export function sendMessage(
   args: { to: string; text: string; reply_to?: string; also_send_to_channel?: boolean; file_ids?: string[] },
 ) {
   const fileIds = args.file_ids ?? [];
-  const text = checkText(args.text, fileIds.length > 0);
+  const text = prepareMessageText(args.text, fileIds.length > 0);
   let conversation = resolveTarget(scope, args.to);
   let root: MessageRow | null = null;
   if (args.reply_to) {
@@ -390,7 +396,7 @@ function ownMessage(scope: Scope, ref: string) {
 }
 
 export function editMessage(scope: Scope, args: { message: string; text: string }) {
-  const text = checkText(args.text);
+  const text = prepareMessageText(args.text);
   const { conversation, message } = ownMessage(scope, args.message);
   requireOpen(scope, conversation);
   if (message.deleted_at) throw new ToolError(`${args.message} is deleted`);

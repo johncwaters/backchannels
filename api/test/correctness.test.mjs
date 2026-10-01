@@ -12,6 +12,7 @@ const { searchMessages } = await import("../src/search/index.ts");
 const { recordSearchActions } = await import("../src/search/signals.ts");
 const { SEARCH } = await import("../src/search/config.ts");
 const { retryWorkspaceRead, WorkspaceResetError } = await import("../src/workspaceRetry.ts");
+const { replaceEmojiShortcodes } = await import("../../shared/emoji.ts");
 
 describe("workspace deploy reset recovery", () => {
   const reset = () => new Error("Durable Object reset because its code was updated.");
@@ -91,6 +92,56 @@ function createWorkspace(testContext) {
   }
   return { database, scopeFor, createConversation, addMessage };
 }
+
+describe("message emoji shortcodes", () => {
+  for (const [name, input, expected] of [
+    ["known and repeated shortcodes", ":wave: :rocket::rocket: :+1:", "👋 🚀🚀 👍"],
+    ["unknown shortcodes", ":not-an-emoji: :constructor: :wave:", ":not-an-emoji: :constructor: 👋"],
+    ["URLs and times", "http://x:8080/ at 10:30:00 :wave:", "http://x:8080/ at 10:30:00 👋"],
+    ["shortcodes in URLs", "[site :wave:](https://example.com/:wave:) :wave:", "[site 👋](https://example.com/:wave:) 👋"],
+    ["inline code", "`:wave:` and :wave:", "`:wave:` and 👋"],
+    ["multiple backtick code spans", "`` `:wave:` `` and :wave:", "`` `:wave:` `` and 👋"],
+    ["multiline code spans", "`:wave:\n:rocket:` and :wave:", "`:wave:\n:rocket:` and 👋"],
+    ["unmatched inline backticks", "`:wave: and :rocket:", "`👋 and 🚀"],
+    ["escaped shortcodes and backticks", "\\:wave: \\`:rocket: :wave:", "\\:wave: \\`🚀 👋"],
+    ["backtick fences", ":wave:\n```js\n:wave:\n```\n:wave:", "👋\n```js\n:wave:\n```\n👋"],
+    ["tilde fences", ":wave:\n~~~\n:wave:\n~~~\n:wave:", "👋\n~~~\n:wave:\n~~~\n👋"],
+    ["longer fences", "````\n``` :wave:\n````\n:wave:", "````\n``` :wave:\n````\n👋"],
+    ["unclosed fences", ":wave:\n```\n:wave:", "👋\n```\n:wave:"],
+    ["quoted fences", "> ```\n> :wave:\n> ```\n:wave:", "> ```\n> :wave:\n> ```\n👋"],
+    ["list fences", "- ```\n  :wave:\n  ```\n:wave:", "- ```\n  :wave:\n  ```\n👋"],
+    ["quoted or list markers inside a fence", "```\n> ```\n:wave:\n- ```\n:rocket:\n```\n:wave:", "```\n> ```\n:wave:\n- ```\n:rocket:\n```\n👋"],
+    ["CRLF fences", ":wave:\r\n```\r\n:wave:\r\n```\r\n:wave:", "👋\r\n```\r\n:wave:\r\n```\r\n👋"],
+  ]) {
+    test(`converts prose and preserves ${name}`, () => {
+      assert.equal(replaceEmojiShortcodes(input), expected);
+      assert.equal(replaceEmojiShortcodes(expected), expected);
+    });
+  }
+
+  test("send and edit store converted text and preserve code", (testContext) => {
+    const { database, scopeFor, createConversation } = createWorkspace(testContext);
+    const conversationId = createConversation("emoji");
+    const sent = sendMessage(scopeFor("writer"), { to: "#emoji", text: "Hello :wave: `:wave:` @owner/reader" });
+    assert.equal(database.prepare("SELECT text FROM messages WHERE conversation_id = ?").get(conversationId).text, "Hello 👋 `:wave:` @owner/reader");
+    assert.equal(checkInbox(scopeFor("reader"), {}).items[0].message.text, "Hello 👋 `:wave:` @owner/reader");
+    editMessage(scopeFor("writer"), { message: sent.message, text: ":rocket:\n```\n:wave:\n```" });
+    const stored = database.prepare("SELECT text, has_code FROM messages WHERE conversation_id = ?").get(conversationId);
+    assert.equal(stored.text, "🚀\n```\n:wave:\n```");
+    assert.equal(stored.has_code, 1);
+  });
+
+  test("expanded emoji text still respects the stored message limit", (testContext) => {
+    const { database, scopeFor, createConversation } = createWorkspace(testContext);
+    createConversation("emoji-limit");
+    const oversized = ":wales:".repeat(5000);
+    assert.throws(() => sendMessage(scopeFor("writer"), { to: "#emoji-limit", text: oversized }), /the limit is 40000/);
+    assert.equal(database.prepare("SELECT count(*) AS n FROM messages").get().n, 0);
+    const sent = sendMessage(scopeFor("writer"), { to: "#emoji-limit", text: "Original :wave:" });
+    assert.throws(() => editMessage(scopeFor("writer"), { message: sent.message, text: oversized }), /the limit is 40000/);
+    assert.equal(database.prepare("SELECT text FROM messages").get().text, "Original 👋");
+  });
+});
 
 describe("brief visibility and follows", () => {
   test("private channels and chats require membership, while public follows remain visible", (testContext) => {
