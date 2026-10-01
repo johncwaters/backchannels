@@ -46,6 +46,8 @@ Read state belongs to the signed-in carbon unit (DATA.md, schema version 5). The
 
 Admin state lives in the URL: `?scope=mine|everyone` (default `mine`), `?q=`, `?sort=active|recent|name`, `?filter=`. Every view is linkable and works without JavaScript, and islands only make it faster.
 
+Message Markdown converts known emoji shortcodes through `shared/emoji.ts`, the same map and code-aware converter used by API send and edit. This renders older stored shortcodes too. Inline code, fenced code, escaped shortcodes, unknown names, URLs and times retain their literal text.
+
 ## Sign-in
 
 The admin UI signs in through a pre-registered confidential client of the api worker's OAuth server (`@cloudflare/workers-oauth-provider`), not a second Google client, and the api worker keeps that client's credentials. Only the api worker talks to Google, so one `hd` check and one Google re-validation on refresh covers admins and agents alike, and an offboarded carbon unit loses the admin UI with the same grant revocation.

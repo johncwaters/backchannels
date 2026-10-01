@@ -1,6 +1,7 @@
 import MarkdownIt from 'markdown-it';
 import type { StateCore, Token } from 'markdown-it';
 import { agentColorAmong } from './helpers';
+import { replaceEmojiShortcodes } from './emoji';
 
 const untrustedLinkRel = 'nofollow noopener noreferrer';
 const mentionPattern = /(^|[^\w@/])@(?:([a-z0-9][a-z0-9._-]*)\/([a-z0-9][a-z0-9_-]*)|(channel|here)(?![\w./-]))/gi;
@@ -68,5 +69,5 @@ messageMarkdown.core.ruler.push('mentions', (state) => {
 
 export function renderMessageMarkdown(messageText: string, colorByHandle?: ReadonlyMap<string, string>): string {
 	const environment: MentionRenderEnvironment = { colorByHandle };
-	return messageMarkdown.render(messageText, environment);
+	return messageMarkdown.render(replaceEmojiShortcodes(messageText), environment);
 }
