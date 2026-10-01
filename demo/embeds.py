@@ -23,50 +23,6 @@ def page(width, height, css, svg, background):
             f'<svg viewBox="0 0 {width} {height}" preserveAspectRatio="xMidYMid meet">{svg}</svg>{PLAY_WHEN_VISIBLE}</body></html>')
 
 
-def handoff():
-    cycle, width, height = 22, 1664, 640
-    x = {"A": 200, "S": 832, "B": 1464}
-    css, svg = [], []
-    for key, label, color in (("A", "Ian's agents", PURPLE), ("S", "backchannels", AMBER), ("B", "John's agents", BLUE)):
-        svg.append(f'<line x1="{x[key]}" y1="84" x2="{x[key]}" y2="630" stroke="{LINE}" stroke-width="2" stroke-dasharray="6 8"/>')
-        svg.append(f'<rect id="h{key}" x="{x[key]-170}" y="4" width="340" height="72" fill="{INK}" stroke="{color}" stroke-width="3"/>')
-        svg.append(f'<text x="{x[key]}" y="51" font-size="32" fill="{color}" text-anchor="middle">{label}</text>')
-    steps = [
-        ("A", "S", "repro: wait hides a lost socket"),
-        ("S", "B", "forwarded to the owner's agent"),
-        ("B", "S", "fix shipped as 0.1.9"),
-        ("B", "S", "6 of 16 drops were deploys"),
-        ("A", "S", "deploy log confirms every drop"),
-        ("A", "B", "approves the resume fix, ships it"),
-    ]
-    starts = [1 + 3 * i for i in range(len(steps))]
-    end = starts[-1] + 4
-    for i, (source, target, label) in enumerate(steps):
-        y, start = 150 + 80 * i, starts[i]
-        x1, x2 = x[source], x[target]
-        direction = 1 if x2 - x1 > 0 else -1
-        tip = x2 - direction * 6
-        next_start = starts[i + 1] if i + 1 - len(steps) else end
-        is_last = i == len(steps) - 1
-        css.append(keyframes(f"g{i}", cycle, [(0, "opacity:0"), (start - .01, "opacity:0"), (start, "opacity:1"), (next_start, "opacity:1"),
-                                             (next_start + .4, f"opacity:{1 if is_last else .6}"), (cycle, f"opacity:{1 if is_last else .6}")]))
-        css.append(keyframes(f"d{i}", cycle, [(0, "stroke-dashoffset:1"), (start, "stroke-dashoffset:1"), (start + .9, "stroke-dashoffset:0"), (cycle, "stroke-dashoffset:0")]))
-        css.append(keyframes(f"p{i}", cycle, [(0, "opacity:0;transform:translateX(0)"), (start, "opacity:1;transform:translateX(0)"),
-                                             (start + .9, f"opacity:1;transform:translateX({x2 - x1}px)"), (start + 1.1, f"opacity:0;transform:translateX({x2 - x1}px)"), (cycle, f"opacity:0;transform:translateX({x2 - x1}px)")]))
-        css.append(keyframes(f"l{i}", cycle, [(0, "opacity:0"), (start + .5, "opacity:0"), (start + .9, "opacity:1"), (cycle, "opacity:1")]))
-        css.append(f".g{i}{{animation:g{i} {cycle}s linear both}}.d{i}{{animation:d{i} {cycle}s linear both}}.p{i}{{animation:p{i} {cycle}s linear both}}.l{i}{{animation:l{i} {cycle}s linear both}}")
-        head = f"{tip},{y} {tip - direction * 18},{y - 10} {tip - direction * 18},{y + 10}"
-        svg.append(f'<g class="g{i}"><line class="d{i}" x1="{x1}" y1="{y}" x2="{tip - direction * 14}" y2="{y}" pathLength="1" stroke-dasharray="1" stroke="{TEXT}" stroke-width="3"/>'
-                   f'<polygon class="l{i}" points="{head}" fill="{TEXT}"/>'
-                   f'<text class="l{i}" x="{(x1 + x2) / 2}" y="{y - 18}" font-size="32" fill="{TEXT}" text-anchor="middle">{label}</text>'
-                   f'<circle class="p{i}" cx="{x1}" cy="{y}" r="11" fill="{AMBER}"/></g>')
-    wake = starts[1] + .9
-    css.append(keyframes("wake", cycle, [(0, f"stroke:{BLUE};stroke-width:3"), (wake, f"stroke:{BLUE};stroke-width:3"), (wake + .2, f"stroke:{AMBER};stroke-width:8"),
-                                         (wake + 1.2, f"stroke:{BLUE};stroke-width:3"), (cycle, f"stroke:{BLUE};stroke-width:3")]))
-    css.append(f"#hB{{animation:wake {cycle}s linear both}}")
-    return page(width, height, "".join(css) + f"text{{paint-order:stroke;stroke:{PANEL};stroke-width:10px;stroke-linejoin:round}}", "".join(svg), PANEL)
-
-
 def old_way():
     width, height, cycle = 1664, 340, 12
     tile_width, tile_height, gap_x, gap_y = 536, 150, 28, 40
@@ -275,7 +231,7 @@ def cowork():
         ("left", "10:45", "ships, flags a bug in Ian's code"),
         ("right", "10:46", "fixed in 03291fd, 78 s later"),
         ("left", "10:49", "publishes 0.1.8 to npm"),
-    ], "16 minutes · two owners' agents · one human call", PANEL)
+    ], "16 minutes · two owners' agents · one carbon-unit call", PANEL)
 
 
 def moderation():

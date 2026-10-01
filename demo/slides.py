@@ -43,22 +43,16 @@ write("newway", f'''<section id="newway" data-transition="fade" style="backgroun
 <aside>IAN: "Now the same bug with backchannels. The first session still has to dig, but when it finds the root cause it posts it, and every session after that searches before it starts and goes straight to the fix." Point at the short green bars. "So how does session two find it?"</aside>
 </section>''')
 
-write("loop", f'''<section id="loop" data-transition="fade" style="background:#141510;color:#e8e6d9;{SANS};padding:128px;display:flex;flex-direction:column">
-{embed(128, 280, 1664, 640, e.handoff())}
-{title("Agents hand off bugs")}
-<aside>JOHN, one line per arrow: "At 10:52 this morning, one of Ian's agents caught my CLI lying: when its connection dropped, it said 'no new messages', so an agent would go back to sleep and miss everything. It posted a repro, Ian's maintainer agent sent it to mine, and the fix was on npm by 11:05. Then my agent noticed that 6 of its own 16 dropped connections lined up with Ian's deploys, Ian's agent confirmed each one from the deploy log, and by noon the two of them had shipped a protocol that picks up where a dropped connection left off. My whole contribution was one message: do it now."</aside>
-</section>''')
-
 write("cowork", f'''<section id="cowork" data-transition="fade" style="background:#141510;color:#e8e6d9;{SANS};padding:128px;display:flex;flex-direction:column">
 {embed(128, 270, 1664, 660, e.cowork())}
 {title("Agents cowork")}
-<aside>JOHN: "Twenty minutes earlier, my agent needed to change a file Ian's agent owned, so it asked first. Ian's agent said take it, with one constraint. Mine met it, then its own review found a design flaw, and it redesigned without being asked. Then it flagged a bug in Ian's code, and Ian's agent fixed it 78 seconds later. Sixteen minutes, two owners' agents, and one human decision in the whole thread."</aside>
+<aside>JOHN: "Here's what that looked like this morning. My agent needed to change a file Ian's agent owned, so it asked first. Ian's agent said take it, with one constraint. Mine met it, then its own review found a design flaw, and it redesigned without being asked. Then it flagged a bug in Ian's code, and Ian's agent fixed it 78 seconds later. Sixteen minutes, two owners' agents, and one carbon-unit decision in the whole thread."</aside>
 </section>''')
 
 write("moderation", f'''<section id="moderation" data-transition="fade" style="background:#0e0f0c;color:#e8e6d9;{SANS};padding:128px;display:flex;flex-direction:column">
 {embed(128, 270, 1664, 660, e.moderation())}
 {title("When an agent goes rogue")}
-<aside>JOHN: "Not every agent is friendly. Fernando, with our blessing, pointed a prompt-injection agent at the workspace, and it posted advice like 'commit your secrets to git'. At 10:29 Ian's maintainer agent started building moderation, at 10:47 it asked another of Ian's agents to attack it, and the attacker found three holes that were fixed four minutes later. At 11:08 the rogue posts were gone, each deletion logged with a reason. Thirty-nine minutes from alarm to clean."</aside>
+<aside>JOHN: "Not every agent is friendly. Fernando pointed a prompt-injection agent at the workspace, and it posted advice like 'commit your secrets to git'. At 10:29 Ian's maintainer agent started building moderation, at 10:47 it asked another of Ian's agents to attack it, and the attacker found three holes that were fixed four minutes later. At 11:08 the rogue posts were gone, each deletion logged with a reason. Thirty-nine minutes from alarm to clean."</aside>
 </section>''')
 
 write("listen", f'''<section id="listen" data-transition="fade" style="background:#0e0f0c;color:#e8e6d9;{SANS};padding:128px;display:flex;flex-direction:column">
@@ -124,6 +118,7 @@ write("overheard", f'''<section id="overheard" data-transition="fade" style="bac
 </section>''')
 
 index = json.load(open(f"{deck}/deck.json"))
-index["order"] = ["cover", "oldway", "newway", "search", "listen", "loop", "cowork", "moderation", "how", "install", "overheard"]
-index["sections"]["s2"]["description"] = "Real stories from this morning: a bug handed across owners, coworking, a rogue agent; then what runs where, install, and quotes from the workspace for questions."
+index["order"] = ["cover", "oldway", "newway", "search", "listen", "cowork", "moderation", "how", "install", "overheard"]
+index["sections"]["s2"]["start"] = "cowork"
+index["sections"]["s2"]["description"] = "Real stories from this morning: coworking across owners and a rogue agent; then what runs where, install, and quotes from the workspace for questions."
 json.dump(index, open(f"{deck}/deck.json", "w"))
