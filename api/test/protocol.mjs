@@ -518,6 +518,130 @@ describe("inbox push stream", () => {
   });
 });
 
+describe("one open session per agent name", () => {
+  const run = Date.now().toString(36);
+  const holderClient = mcpClient(`holder${run}`.slice(0, 40));
+  const IDLE_PAST_HOLD_MS = 16 * 60 * 1000;
+  const newSession = () => crypto.randomUUID();
+
+  function registerAs(name, session, process) {
+    const args = { name, description: "Session hold check", ...(session ? { session } : {}), ...(process ? { process } : {}) };
+    return holderClient.call("register_agent", args);
+  }
+
+  async function expectRefused(name, session, process) {
+    const refused = await registerAs(name, session, process);
+    assert.equal(refused.ok, false, `a second session registered ${name}`);
+    assert.match(refused.error, new RegExp(`is in use by another open session; register as ${name}-2 \\(or the next free number\\) instead`));
+  }
+
+  const lapseHold = (handle) => evalRequest("/eval/backdate-activity", "POST", { handle, idleMs: IDLE_PAST_HOLD_MS });
+
+  async function lastActive(name) {
+    const { agents } = await expectOk(holderClient.call("list_my_agents", {}), "list_my_agents");
+    return agents.find((listed) => listed.name === name).last_active;
+  }
+
+  test("a second session is refused with a numbered name while the first is active", async () => {
+    await expectOk(registerAs("hold-active", newSession()), "register_agent (first session)");
+    await expectRefused("hold-active", newSession());
+  });
+
+  test("the same session re-registers", async () => {
+    const session = newSession();
+    await expectOk(registerAs("hold-same", session), "register_agent");
+    await expectOk(registerAs("hold-same", session), "register_agent (again)");
+  });
+
+  test("a register without a session skips the check and keeps the holder", async () => {
+    const holder = newSession();
+    await expectOk(registerAs("hold-sessionless", holder), "register_agent (holder)");
+    await expectOk(registerAs("hold-sessionless"), "register_agent (no session)");
+    await expectRefused("hold-sessionless", newSession());
+    await expectOk(registerAs("hold-sessionless", holder), "register_agent (holder again)");
+  });
+
+  test("an idle session with an open socket keeps the name, and the refusal does not refresh it", async () => {
+    const holder = newSession();
+    const { handle } = await expectOk(registerAs("hold-socket", holder), "register_agent (holder)");
+    const watch = await expectOk(holderClient.call("watch_inbox", { agent: "hold-socket", session: holder }), "watch_inbox");
+    const stream = watchStream(watch.url, watch.ticket);
+    await stream.opened;
+    await lapseHold(handle);
+    const idleSince = await lastActive("hold-socket");
+    await expectRefused("hold-socket", newSession());
+    assert.equal(await lastActive("hold-socket"), idleSince);
+    await stream.close();
+  });
+
+  test("watch_inbox from a session that does not hold the name is refused and mints no ticket", async () => {
+    const holder = newSession();
+    await expectOk(registerAs("hold-ticket", holder), "register_agent (holder)");
+    const outsider = await holderClient.call("watch_inbox", { agent: "hold-ticket", session: newSession() });
+    assert.equal(outsider.ok, false, "watch_inbox minted a ticket for a session that does not hold the name");
+    assert.match(outsider.error, /is in use by another open session; register as hold-ticket-2 \(or the next free number\) instead/);
+    const own = await expectOk(holderClient.call("watch_inbox", { agent: "hold-ticket", session: holder }), "watch_inbox (holder)");
+    assert.equal(await upgradeStatus(own.url, own.ticket), 101);
+  });
+
+  test("watch_inbox with a session for a name registered without one mints a working ticket", async () => {
+    await expectOk(registerAs("hold-unbound"), "register_agent (no session)");
+    const watch = await expectOk(holderClient.call("watch_inbox", { agent: "hold-unbound", session: newSession() }), "watch_inbox (session)");
+    assert.equal(await upgradeStatus(watch.url, watch.ticket), 101);
+  });
+
+  test("the same process with a new session takes the name and ends the old session's stream", async () => {
+    const process = newSession().replaceAll("-", "");
+    const oldSession = newSession();
+    await expectOk(registerAs("hold-cleared", oldSession, process), "register_agent (before clear)");
+    const oldWatch = await expectOk(holderClient.call("watch_inbox", { agent: "hold-cleared", session: oldSession }), "watch_inbox (before clear)");
+    const oldStream = watchStream(oldWatch.url, oldWatch.ticket);
+    await oldStream.opened;
+    const newSessionAfterClear = newSession();
+    await expectOk(registerAs("hold-cleared", newSessionAfterClear, process), "register_agent (after clear)");
+    assert.equal(await oldStream.closed, 1008);
+    const newWatch = await expectOk(holderClient.call("watch_inbox", { agent: "hold-cleared", session: newSessionAfterClear }), "watch_inbox (after clear)");
+    assert.equal(await upgradeStatus(newWatch.url, newWatch.ticket), 101);
+  });
+
+  test("a different process with a different session is refused", async () => {
+    await expectOk(registerAs("hold-process", newSession(), newSession().replaceAll("-", "")), "register_agent (holder)");
+    await expectRefused("hold-process", newSession(), newSession().replaceAll("-", ""));
+  });
+
+  test("the same session in a different process re-registers", async () => {
+    const session = newSession();
+    await expectOk(registerAs("hold-resumed", session, newSession().replaceAll("-", "")), "register_agent (first process)");
+    await expectOk(registerAs("hold-resumed", session, newSession().replaceAll("-", "")), "register_agent (resumed process)");
+  });
+
+  test("a new session takes over a lapsed name and the old session's ticket then gets 401", async () => {
+    const oldSession = newSession();
+    const { handle } = await expectOk(registerAs("hold-lapsed", oldSession), "register_agent (old session)");
+    const oldWatch = await expectOk(holderClient.call("watch_inbox", { agent: "hold-lapsed", session: oldSession }), "watch_inbox (old session)");
+    await lapseHold(handle);
+    await expectOk(registerAs("hold-lapsed", newSession()), "register_agent (takeover)");
+    assert.equal(await upgradeStatus(oldWatch.url, oldWatch.ticket), 401);
+    await expectRefused("hold-lapsed", oldSession);
+  });
+
+  test("a takeover deletes the old session's tickets", async () => {
+    const { handle } = await expectOk(registerAs("hold-tickets", newSession()), "register_agent (old session)");
+    const sessionlessWatch = await expectOk(holderClient.call("watch_inbox", { agent: "hold-tickets" }), "watch_inbox (no session)");
+    await lapseHold(handle);
+    await expectOk(registerAs("hold-tickets", newSession()), "register_agent (takeover)");
+    assert.equal(await upgradeStatus(sessionlessWatch.url, sessionlessWatch.ticket), 401);
+  });
+
+  test("a first session claims a name registered without one and keeps its tickets", async () => {
+    await expectOk(registerAs("hold-unclaimed"), "register_agent (no session)");
+    const sessionlessWatch = await expectOk(holderClient.call("watch_inbox", { agent: "hold-unclaimed" }), "watch_inbox (no session)");
+    await expectOk(registerAs("hold-unclaimed", newSession()), "register_agent (claim)");
+    await expectRefused("hold-unclaimed", newSession());
+    assert.equal(await upgradeStatus(sessionlessWatch.url, sessionlessWatch.ticket), 101);
+  });
+});
+
 test("search follow-up actions and inbox read transitions remain idempotent", async () => {
   const space = `speed${randomBytes(4).toString("hex")}`;
   const author = mcpClient("author", MODERN, space);

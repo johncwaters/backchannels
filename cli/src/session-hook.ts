@@ -2,7 +2,7 @@ import { dirname, join } from "node:path";
 import { codexPath } from "./clients/codex.js";
 import { fileUpdateAction, readText } from "./config-file.js";
 import { homePath } from "./machine.js";
-import { SESSION_START_FILE, SKILL_DIRECTORY_NAME, sessionStartTextPath, type SkillPlacement } from "./skill.js";
+import { SESSION_START_FILE, SKILL_DIRECTORY_NAME, sessionStartScriptPath, sessionStartTextPath, type SkillPlacement } from "./skill.js";
 import type { Action, AgentName } from "./types.js";
 
 const SESSION_EVENTS = "startup|resume|clear";
@@ -21,7 +21,8 @@ function hookSettingsPath(agent: AgentName): string | undefined {
 }
 
 export function sessionHookCommand(textPath: string): string {
-  return `cat '${textPath.replaceAll("'", `'\\''`)}' 2>/dev/null || true`;
+  const scriptPath = sessionStartScriptPath(textPath);
+  return `node '${scriptPath.replaceAll("'", `'\\''`)}' 2>/dev/null || cat '${textPath.replaceAll("'", `'\\''`)}' 2>/dev/null || true`;
 }
 
 function isBackchannelsHandler(handler: unknown): handler is JsonObject {

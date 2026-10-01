@@ -292,4 +292,9 @@ CREATE UNIQUE INDEX search_actions_unique ON search_actions(search_id, message_i
 CREATE INDEX thread_follows_root ON thread_follows(root_id);
 CREATE INDEX rate_buckets_updated ON rate_buckets(updated_at);
 `,
+  `
+ALTER TABLE agents ADD COLUMN session_hash TEXT;
+ALTER TABLE agents ADD COLUMN process_hash TEXT;
+ALTER TABLE stream_tickets ADD COLUMN session_hash TEXT;
+`,
 ];

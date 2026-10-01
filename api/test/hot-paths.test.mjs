@@ -8,6 +8,8 @@ const { recordSearchActions } = await import("../src/search/signals.ts");
 const { adminMarkRead, adminList } = await import("../src/adminData.ts");
 const { pruneRateBuckets, RATE_LIMITS } = await import("../src/limits.ts");
 
+const DEDUPLICATE_SEARCH_ACTIONS = MIGRATIONS.findIndex((migration) => migration.includes("search_actions_unique"));
+
 function fixture(context, members = ["author", "reader"], kind = "public") {
   const harness = createDatabase();
   context.after(() => harness.database.close());
@@ -36,11 +38,11 @@ function reportPlan(context, label, before, after) {
 }
 
 test("migration deduplicates action labels, keeps their earliest row and retains every search log", (context) => {
-  const { database } = createDatabase(MIGRATIONS.slice(0, -1));
+  const { database } = createDatabase(MIGRATIONS.slice(0, DEDUPLICATE_SEARCH_ACTIONS));
   context.after(() => database.close());
   database.exec(`INSERT INTO search_log VALUES (1, 'reader', 'old query', 'relevant', '[1]', 0), (2, 'reader', 'new query', 'recent', '[1]', 100);
     INSERT INTO search_actions VALUES (1, 1, 2, 'open', 10), (1, 1, 3, 'open', 20), (1, 1, 2, 'save', 30), (2, 1, 1, 'open', 40);`);
-  database.exec(MIGRATIONS.at(-1));
+  database.exec(MIGRATIONS[DEDUPLICATE_SEARCH_ACTIONS]);
   assert.equal(database.prepare("SELECT count(*) AS count FROM search_log").get().count, 2);
   assert.deepEqual(database.prepare("SELECT rank, action, created_at FROM search_actions ORDER BY rowid").all().map((row) => ({ ...row })), [
     { rank: 2, action: "open", created_at: 10 }, { rank: 2, action: "save", created_at: 30 }, { rank: 1, action: "open", created_at: 40 },
@@ -67,7 +69,7 @@ test("search actions reward each message once across searches and ignore duplica
 });
 
 test("search lookup plans bound the action window and index duplicate detection", (context) => {
-  const before = createDatabase(MIGRATIONS.slice(0, -1));
+  const before = createDatabase(MIGRATIONS.slice(0, DEDUPLICATE_SEARCH_ACTIONS));
   const after = createDatabase();
   context.after(() => { before.database.close(); after.database.close(); });
   const recent = { query: "SELECT id, results FROM search_log WHERE agent_id = ? AND created_at >= ? ORDER BY id DESC LIMIT ?", bindings: ["reader", 100, 20] };
@@ -268,7 +270,7 @@ test("rate bucket pruning is bounded, preserves refillable buckets and seeks by 
   assert.ok(database.prepare("SELECT key FROM rate_buckets WHERE key = 'active'").get());
   pruneRateBuckets(sql, scope.now);
   assert.deepEqual(database.prepare("SELECT key FROM rate_buckets").all().map((row) => row.key), ["active"]);
-  const before = createDatabase(MIGRATIONS.slice(0, -1));
+  const before = createDatabase(MIGRATIONS.slice(0, DEDUPLICATE_SEARCH_ACTIONS));
   context.after(() => before.database.close());
   const pruneQuery = queries.find(({ query }) => query.startsWith("DELETE FROM rate_buckets"));
   reportPlan(context, "rate bucket cleanup (previously absent)", before.explain(pruneQuery), explain(pruneQuery));

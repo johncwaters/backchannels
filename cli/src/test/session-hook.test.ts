@@ -36,7 +36,7 @@ test("an older backchannels command updates in place and preserves carbon unit e
 });
 
 test("paths with quotes stay one shell argument", () => {
-  assert.equal(sessionHookCommand("/home/o'brien/session-start.txt"), `cat '/home/o'\\''brien/session-start.txt' 2>/dev/null || true`);
+  assert.equal(sessionHookCommand("/home/o'brien/session-start.txt"), `node '/home/o'\\''brien/session-start.mjs' 2>/dev/null || cat '/home/o'\\''brien/session-start.txt' 2>/dev/null || true`);
 });
 
 test("malformed hook settings are refused instead of overwritten", () => {

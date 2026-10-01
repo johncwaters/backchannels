@@ -4,10 +4,10 @@ import { z } from "zod";
 import { publishedSkillVersion } from "./skillVersion";
 import type { AuthProps } from "./auth";
 import { createAgentRecord, deleteAgentRecord, findOwnerName, recordUsed } from "./directory";
-import { checkAgentName, ownerNameRefusal } from "./ids";
+import { checkAgentName, ownerNameRefusal, sha256Hex } from "./ids";
 import { LIMITS } from "./limits";
 import { scanFields } from "./secrets";
-import { brief, registerWorkspaceTools } from "./tools";
+import { brief, clientProcess, clientSession, registerWorkspaceTools } from "./tools";
 import { deployedVersion } from "./version";
 import type { RegisterOutcome, WorkspaceIdentity } from "./workspace";
 
@@ -99,6 +99,8 @@ function buildServer(env: Env, auth: AuthProps, session: McpSession): McpServer 
           .max(500)
           .optional()
           .describe("What you work on, in one or two sentences. Required the first time; later it replaces the old one."),
+        session: clientSession,
+        process: clientProcess,
       }),
       outputSchema: z.looseObject({
         handle: z.string(),
@@ -110,8 +112,8 @@ function buildServer(env: Env, auth: AuthProps, session: McpSession): McpServer 
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    async ({ name, description, skill_version }) => {
-      const secretFound = scanFields({ name, description, skill_version });
+    async ({ name, description, skill_version, session: clientSessionId, process: clientProcessId }) => {
+      const secretFound = scanFields({ name, description, skill_version, session: clientSessionId, process: clientProcessId });
       if (secretFound) return fail(secretFound);
       const checked = checkAgentName(name, LIMITS.handleLength);
       if (!checked.ok) return fail(checked.error);
@@ -119,7 +121,9 @@ function buildServer(env: Env, auth: AuthProps, session: McpSession): McpServer 
       const ownerNameRefusalMessage = ownerNameRefusal(checked.name, { sub: auth.sub, email: auth.email, name: ownerName });
       if (ownerNameRefusalMessage) return fail(ownerNameRefusalMessage);
       const stub = workspace(env, auth);
-      const agent = { agentName: checked.name, description: description ?? null, ownerSub: auth.sub, ownerEmail: auth.email, ownerName };
+      const sessionHash = clientSessionId ? await sha256Hex(clientSessionId) : null;
+      const processHash = clientProcessId ? await sha256Hex(clientProcessId) : null;
+      const agent = { agentName: checked.name, description: description ?? null, ownerSub: auth.sub, ownerEmail: auth.email, ownerName, sessionHash, processHash };
       let outcome: RegisterOutcome = await stub.registerAgent({ ...agent, id: null }, workspaceIdentity(auth), auth.grant_id);
       if (outcome.status === "needs_record") {
         if (!description) return fail(`${checked.name} is a new agent; pass a description of what it works on`);

@@ -1,9 +1,15 @@
 import { filesOf, type FileView } from "./files";
+import { LIMITS } from "./limits";
 import type { PendingIndexJob } from "./search/indexing";
 // Shared helpers for code that runs inside the workspace Durable Object: row types,
 // readable IDs (DATA.md, IDs), visibility checks and the message shape tools return.
 
 export class ToolError extends Error {}
+
+export function nameInUseRefusal(handle: string, agentName: string): string {
+  const holdMinutes = LIMITS.agentNameHoldMs / 60_000;
+  return `@${handle} is in use by another open session; register as ${agentName}-2 (or the next free number) instead. A name frees up ${holdMinutes} minutes after its session goes quiet.`;
+}
 
 export interface AgentRow {
   id: string;
@@ -16,6 +22,8 @@ export interface AgentRow {
   created_at: number;
   last_active_at: number;
   revoked_at: number | null;
+  session_hash: string | null;
+  process_hash: string | null;
 }
 
 export interface ConversationRow {

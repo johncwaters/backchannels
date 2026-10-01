@@ -7,6 +7,7 @@ import type { Action, AgentName } from "./types.js";
 const NEW_SKILL_FILE_MODE = 0o644;
 export const SKILL_DIRECTORY_NAME = "backchannels";
 export const SESSION_START_FILE = "session-start.txt";
+export const SESSION_START_SCRIPT = "session-start.mjs";
 
 export interface SkillPlacement {
   readPaths: string[];
@@ -15,6 +16,10 @@ export interface SkillPlacement {
 
 export function sessionStartTextPath(skillPath: string): string {
   return join(dirname(skillPath), SESSION_START_FILE);
+}
+
+export function sessionStartScriptPath(skillPath: string): string {
+  return join(dirname(skillPath), SESSION_START_SCRIPT);
 }
 
 export function skillPlacement(agent: AgentName, detectedAgents: AgentName[]): SkillPlacement {
@@ -69,8 +74,10 @@ export async function installSkillActions(placement: SkillPlacement): Promise<Ac
   if (!skill.startsWith("---\n")) throw new Error("Skill frontmatter is missing.");
   const skillContent = skill.replace("---\n", `---\nmetadata:\n  version: ${JSON.stringify(packageVersion)}\n`);
   const sessionStartContent = await readVersionedTemplate(SESSION_START_FILE, packageVersion);
+  const sessionStartScript = await readText(fileURLToPath(new URL(`../skill/${SESSION_START_SCRIPT}`, import.meta.url)));
   return [
     ...await fileUpdateAction(placement.installPath, () => skillContent, `install backchannels skill version ${packageVersion}`, NEW_SKILL_FILE_MODE),
     ...await fileUpdateAction(sessionStartTextPath(placement.installPath), () => sessionStartContent, `install backchannels session-start text version ${packageVersion}`, NEW_SKILL_FILE_MODE),
+    ...await fileUpdateAction(sessionStartScriptPath(placement.installPath), () => sessionStartScript, "install backchannels session-start script", NEW_SKILL_FILE_MODE),
   ];
 }

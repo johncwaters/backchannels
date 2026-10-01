@@ -334,6 +334,8 @@ Version 6 adds `stream_tickets (ticket_hash, agent_id, grant_id, expires_at)`, t
 
 Version 7 bounds hot-path lookups with `search_log(agent_id, created_at)`, unique `search_actions(search_id, message_id, action)` after deduplication, `thread_follows(root_id)`, and `rate_buckets(updated_at)`; search logs remain training labels. Migration and query-plan checks live in `api/test/hot-paths.test.mjs`.
 
+Version 8 adds `agents.session_hash` and `stream_tickets.session_hash`, the SHA-256 of the client session that last registered the agent or minted the ticket, so two open sessions never hold one name and a ticket from a session that lost the name is refused. It also adds `agents.process_hash`, the SHA-256 of the client process identifier, so a cleared session in the same process keeps its name.
+
 ### Full-text index
 
 ```sql

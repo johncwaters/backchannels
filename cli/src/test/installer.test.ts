@@ -6,6 +6,8 @@ import { join } from "node:path";
 import { run } from "../machine.js";
 import { createHarness } from "./harness.js";
 import { exists } from "../machine.js";
+import { readSessionHookInstalled, sessionHookCommand } from "../session-hook.js";
+import { sessionStartScriptPath, sessionStartTextPath } from "../skill.js";
 
 const packageVersion: string = JSON.parse(await readFile(new URL("../../package.json", import.meta.url), "utf8")).version;
 
@@ -56,6 +58,8 @@ test("fresh machine installs all three clients and the exact planned commands", 
       assert.ok(installedSkill.startsWith(`---\nmetadata:\n  version: "${packageVersion}"\n`));
       assert.ok(installedSkill.includes(`skill_version: "${packageVersion}"`));
       assert.ok(!installedSkill.includes("{{SKILL_VERSION}}"));
+      const scriptTemplate = await readFile(new URL("../../skill/session-start.mjs", import.meta.url));
+      assert.deepEqual(await readFile(sessionStartScriptPath(join(harness.home, skillPath))), scriptTemplate);
     }
     const mutations = (await harness.calls()).filter(call => ["remove", "add", "login"].includes(call[2]) && !call.includes("--help"));
     assert.deepEqual(mutations, [
@@ -94,6 +98,30 @@ test("a SessionStart hook whose text file is gone prints nothing and succeeds", 
     await rm(join(harness.home, ".claude/skills/backchannels"), { recursive: true });
     const hookOutput = await run(["/bin/sh", "-c", `PATH=/usr/bin:/bin; ${command}`]);
     assert.deepEqual([hookOutput.code, hookOutput.stdout, hookOutput.stderr], [0, "", ""]);
+  } finally { await harness.close(); }
+});
+
+test("the installer upgrades cat-only hooks and status recognizes the script command", async () => {
+  const harness = await createHarness();
+  try {
+    const placements = [
+      { agent: "claude" as const, skillPath: join(harness.home, claudeSkill), settingsPath: join(harness.home, claudeHookSettings) },
+      { agent: "codex" as const, skillPath: join(harness.home, sharedSkill), settingsPath: join(harness.codexConfig, "..", "hooks.json") },
+    ];
+    for (const { agent, skillPath, settingsPath } of placements) {
+      const oldCommand = `cat '${sessionStartTextPath(skillPath)}' 2>/dev/null || true`;
+      await seedFile(settingsPath, JSON.stringify({ hooks: { SessionStart: [{ matcher: "startup", hooks: [{ type: "command", command: oldCommand }, { type: "command", command: "echo foreign" }] }] } }));
+      assert.equal(await readSessionHookInstalled(agent, { readPaths: [skillPath], installPath: skillPath }), false);
+    }
+    assert.equal((await harness.invoke(["--yes"], terminalWithBrowser)).code, 0);
+    for (const { agent, skillPath, settingsPath } of placements) {
+      assert.deepEqual(await sessionStartCommands(settingsPath), [sessionHookCommand(sessionStartTextPath(skillPath)), "echo foreign"]);
+      assert.equal(await readSessionHookInstalled(agent, { readPaths: [skillPath], installPath: skillPath }), true);
+    }
+    const status = await harness.invoke(["status"]);
+    assert.equal(status.code, 0, status.stderr);
+    assert.match(status.stdout, /claude: .*session hook installed/);
+    assert.match(status.stdout, /codex: .*session hook installed/);
   } finally { await harness.close(); }
 });
 

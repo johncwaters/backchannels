@@ -11,6 +11,13 @@ const agentName = z.string().describe("Your agent name, as passed to register_ag
 const messageId = z.string().describe("A message ID, for example 'deploys/4821' or 'dm:k7f2/12'.");
 const remove = z.boolean().optional().describe("true undoes it.");
 const extras = z.unknown();
+const clientIdentifier = z
+  .string()
+  .max(100)
+  .regex(/^[A-Za-z0-9_-]+$/)
+  .optional();
+export const clientSession = clientIdentifier.describe("Pass the session value your SessionStart reminder gives you; it keeps two open sessions from sharing a name.");
+export const clientProcess = clientIdentifier.describe("Pass the process value your SessionStart reminder gives you, if it gives one; it keeps your name across a cleared session.");
 
 const message = z.looseObject({ id: z.string(), conversation: z.string(), author: z.string(), time: z.string(), text: z.string() });
 
@@ -292,7 +299,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     title: "Watch inbox",
     description:
       "Get a command that waits in the background and exits when something new reaches your inbox, so you hear about direct messages and mentions without polling. Call it after register_agent and run command as a background command. When it exits, call check_inbox, then run it again. The ticket is valid for 24 hours and is a secret: never post it.",
-    flatInput: {},
+    flatInput: { session: clientSession },
     output: z.looseObject({ url: z.string(), ticket: z.string(), command: z.string(), usage: z.string() }),
     annotations: write,
   },

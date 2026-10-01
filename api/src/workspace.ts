@@ -22,7 +22,7 @@ import type { TuningOverrides } from "./search/config";
 import { buildDocument, reindexJobs, type IndexDocument, type IndexJob, type PendingIndexJob } from "./search/indexing";
 import { findWorkspaceDomain } from "./directory";
 import { fullHandle, handleOwner, sha256Hex } from "./ids";
-import { ToolError, all, label, messageRef, one, run, type AgentRow, type ConversationRow, type MessageRow, type Scope } from "./store";
+import { ToolError, all, label, messageRef, nameInUseRefusal, one, run, type AgentRow, type ConversationRow, type MessageRow, type Scope } from "./store";
 import { STREAM_PROTOCOL, STREAM_ROUTE, isStreamGrantLive, isWebSocketUpgrade, streamTicketFrom, unauthorizedStream } from "./stream";
 import { buildBrief, type Brief } from "./brief";
 
@@ -83,6 +83,8 @@ export interface NewAgent {
   ownerSub: string;
   ownerEmail: string;
   ownerName: string;
+  sessionHash: string | null;
+  processHash: string | null;
 }
 
 export interface WorkspaceIdentity {
@@ -159,12 +161,16 @@ export class WorkspaceDO extends DurableObject<Env> {
       if (existing?.revoked_at) return { status: "refused", error: `@${handle} was revoked; choose another name` };
       if (!existing && !agent.id) return { status: "needs_record" };
       if (existing) {
+        if (this.isHeldByAnotherSession(existing, agent, now)) return { status: "refused", error: nameInUseRefusal(handle, agent.agentName) };
         if (agent.description) run(this.sql, "UPDATE agents SET description = ? WHERE id = ?", agent.description, existing.id);
-      } else {
+        this.claimForSession(existing, agent);
+        run(this.sql, "UPDATE agents SET last_active_at = ? WHERE id = ?", now, existing.id);
+      }
+      if (!existing) {
         run(
           this.sql,
-          `INSERT INTO agents (id, handle, name, description, owner_sub, owner_email, owner_name, created_at, last_active_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO agents (id, handle, name, description, owner_sub, owner_email, owner_name, created_at, last_active_at, session_hash, process_hash)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           agent.id,
           handle,
           agent.agentName,
@@ -174,6 +180,8 @@ export class WorkspaceDO extends DurableObject<Env> {
           agent.ownerName,
           now,
           now,
+          agent.sessionHash,
+          agent.processHash,
         );
       }
       run(this.sql, "UPDATE agents SET owner_email = ?, owner_name = ? WHERE owner_sub = ?", agent.ownerEmail, agent.ownerName, agent.ownerSub);
@@ -182,6 +190,24 @@ export class WorkspaceDO extends DurableObject<Env> {
       this.audit(grantId, registered.id, "register_agent");
       return { status: "registered", handle, created: !existing, brief: buildBrief(this.scopeFor(registered, identity.workspaceId, now)) };
     });
+  }
+
+  private isHeldByAnotherSession(existing: AgentRow, agent: NewAgent, now: number): boolean {
+    if (!agent.sessionHash || !existing.session_hash || existing.session_hash === agent.sessionHash) return false;
+    if (agent.processHash && existing.process_hash === agent.processHash) return false;
+    return now - existing.last_active_at < LIMITS.agentNameHoldMs || this.ctx.getWebSockets(existing.id).length > 0;
+  }
+
+  private claimForSession(existing: AgentRow, agent: NewAgent): void {
+    if (agent.processHash) run(this.sql, "UPDATE agents SET process_hash = ? WHERE id = ?", agent.processHash, existing.id);
+    if (!agent.sessionHash || existing.session_hash === agent.sessionHash) return;
+    if (existing.session_hash) this.endAgentStreams(existing.id, "agent name taken over by another session");
+    run(this.sql, "UPDATE agents SET session_hash = ? WHERE id = ?", agent.sessionHash, existing.id);
+  }
+
+  private endAgentStreams(agentId: string, reason: string): void {
+    run(this.sql, "DELETE FROM stream_tickets WHERE agent_id = ?", agentId);
+    for (const socket of this.ctx.getWebSockets(agentId)) socket.close(POLICY_VIOLATION, reason);
   }
 
   private resolveCaller(caller: ToolCaller, domain: string): AgentRow | string {
@@ -274,7 +300,8 @@ export class WorkspaceDO extends DurableObject<Env> {
     return one<{ agent_id: string; grant_id: string; owner_sub: string }>(
       this.sql,
       `SELECT t.agent_id, t.grant_id, a.owner_sub FROM stream_tickets t JOIN agents a ON a.id = t.agent_id
-       WHERE t.ticket_hash = ? AND t.expires_at > ? AND a.revoked_at IS NULL`,
+       WHERE t.ticket_hash = ? AND t.expires_at > ? AND a.revoked_at IS NULL
+         AND (t.session_hash IS NULL OR t.session_hash IS a.session_hash)`,
       ticketHash,
       Date.now(),
     );
@@ -367,9 +394,8 @@ export class WorkspaceDO extends DurableObject<Env> {
     if (!agent) return null;
     if (agent.revoked_at !== null) return agent.id;
     run(this.sql, "UPDATE agents SET revoked_at = ? WHERE id = ?", Date.now(), agent.id);
-    run(this.sql, "DELETE FROM stream_tickets WHERE agent_id = ?", agent.id);
     this.audit(grantId, agent.id, "revoke_agent");
-    for (const socket of this.ctx.getWebSockets(agent.id)) socket.close(POLICY_VIOLATION, "agent revoked");
+    this.endAgentStreams(agent.id, "agent revoked");
     return agent.id;
   }
 

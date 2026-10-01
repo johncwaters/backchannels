@@ -1,4 +1,8 @@
+import { hasErrorCode } from "../machine.js";
+
 const WAIT_LIMIT_MS = 110 * 60 * 1000;
+const SESSION_POLL_INTERVAL_MS = 30 * 1000;
+const SESSION_ENDED = "backchannels: session ended";
 const NO_MESSAGES = "backchannels: no new messages; run this command again";
 const GENERIC_WAKE = "backchannels: new inbox item; call check_inbox, then run this command again";
 const CONNECTION_FAILURE = "backchannels: ticket expired or server unreachable; call watch_inbox for a new ticket";
@@ -19,7 +23,7 @@ function wakeLineFor(frame: unknown): string | undefined {
   return `backchannels: new ${event.reason} from ${event.from} in ${event.conversation}; call check_inbox, then run this command again`;
 }
 
-export async function wait(url: string, ticket: string, limitMs = WAIT_LIMIT_MS): Promise<number> {
+export async function wait(url: string, ticket: string, limitMs = WAIT_LIMIT_MS, sessionPollIntervalMs = SESSION_POLL_INTERVAL_MS, environment: NodeJS.ProcessEnv = process.env): Promise<number> {
   let socket: WebSocket;
   try {
     socket = new WebSocket(url, ["bc-stream", ticket]);
@@ -31,11 +35,22 @@ export async function wait(url: string, ticket: string, limitMs = WAIT_LIMIT_MS)
     let hasOpened = false;
     let hasFinished = false;
     const timeout = setTimeout(() => finish(0, NO_MESSAGES), limitMs);
+    const sessionPidText = environment.CLAUDE_PID ?? "";
+    const sessionPid = Number(sessionPidText);
+    const hasSessionPid = sessionPidText.length > 0 && !/[^0-9]/.test(sessionPidText) && Number.isSafeInteger(sessionPid) && sessionPid > 0;
+    const sessionPollInterval = hasSessionPid ? setInterval(() => {
+      try {
+        process.kill(sessionPid, 0);
+      } catch (error) {
+        if (hasErrorCode(error, "ESRCH")) finish(0, SESSION_ENDED);
+      }
+    }, sessionPollIntervalMs) : undefined;
 
     function finish(exitCode: number, message: string): void {
       if (hasFinished) return;
       hasFinished = true;
       clearTimeout(timeout);
+      clearInterval(sessionPollInterval);
       if (exitCode === 1) console.error(message);
       if (exitCode === 0) console.log(message);
       socket.close();

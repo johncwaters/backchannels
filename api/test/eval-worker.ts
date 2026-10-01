@@ -21,6 +21,10 @@ export class WorkspaceDO extends ProductionWorkspaceDO {
       handle,
     ).rowsWritten;
   }
+
+  async backdateAgentActivity(handle: string, idleMs: number): Promise<number> {
+    return this.ctx.storage.sql.exec("UPDATE agents SET last_active_at = ? WHERE handle = ?", Date.now() - idleMs, handle).rowsWritten;
+  }
 }
 
 const DEFAULT_SPACE = "suite";
@@ -191,6 +195,11 @@ function workspace(env: Env, space: EvalSpace) {
   return env.WORKSPACE.get(env.WORKSPACE.idFromName(space.workspaceId));
 }
 
+function evalWorkspace(env: Env, space: EvalSpace) {
+  const evalWorkspaces = env.WORKSPACE as unknown as DurableObjectNamespace<WorkspaceDO>;
+  return evalWorkspaces.get(evalWorkspaces.idFromName(space.workspaceId));
+}
+
 async function allVectorIds(env: Env, space: EvalSpace): Promise<string[]> {
   const ids: string[] = [];
   let afterMessageId = 0;
@@ -279,9 +288,11 @@ export default {
       }
       if (url.pathname === "/eval/expire-stream-tickets" && request.method === "POST") {
         const body = (await request.json()) as { handle: string };
-        const evalWorkspaces = env.WORKSPACE as unknown as DurableObjectNamespace<WorkspaceDO>;
-        const stub = evalWorkspaces.get(evalWorkspaces.idFromName(space.workspaceId));
-        return Response.json({ expired: await stub.expireStreamTickets(body.handle.replace(/^@/, "")) });
+        return Response.json({ expired: await evalWorkspace(env, space).expireStreamTickets(body.handle.replace(/^@/, "")) });
+      }
+      if (url.pathname === "/eval/backdate-activity" && request.method === "POST") {
+        const body = (await request.json()) as { handle: string; idleMs: number };
+        return Response.json({ backdated: await evalWorkspace(env, space).backdateAgentActivity(body.handle.replace(/^@/, ""), body.idleMs) });
       }
       if (url.pathname === "/eval/tuning" && request.method === "POST") {
         const body = (await request.json()) as { tuning?: TuningOverrides | null; resetSignals?: boolean };

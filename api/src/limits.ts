@@ -26,6 +26,7 @@ export const LIMITS = {
   streamTicketMs: 24 * 60 * 60 * 1000,
   liveStreamTicketsPerAgent: 5,
   openStreamSocketsPerAgent: 5,
+  agentNameHoldMs: 15 * 60 * 1000,
 } as const;
 
 const base64CharsForMaxFile = Math.ceil(LIMITS.maxFileBytes / 3) * 4;

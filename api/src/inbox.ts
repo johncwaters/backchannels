@@ -12,6 +12,7 @@ import {
 import {
   ToolError,
   all,
+  nameInUseRefusal,
   findConversation,
   findMessage,
   isMember,
@@ -110,17 +111,23 @@ export function checkInbox(scope: Scope, args: { limit?: number; cursor?: string
   };
 }
 
-export async function watchInbox(scope: Scope, _args: unknown, grantId: string) {
+export async function watchInbox(scope: Scope, args: { session?: string }, grantId: string) {
+  const requestedSessionHash = args.session ? await sha256Hex(args.session) : null;
+  if (requestedSessionHash && scope.agent.session_hash && requestedSessionHash !== scope.agent.session_hash) {
+    throw new ToolError(nameInUseRefusal(scope.agent.handle, scope.agent.name));
+  }
+  const sessionHash = scope.agent.session_hash ? requestedSessionHash : null;
   const ticket = newStreamTicket();
   const ticketHash = await sha256Hex(ticket);
   run(scope.sql, "DELETE FROM stream_tickets WHERE expires_at <= ?", scope.now);
   run(
     scope.sql,
-    "INSERT INTO stream_tickets (ticket_hash, agent_id, grant_id, expires_at) VALUES (?, ?, ?, ?)",
+    "INSERT INTO stream_tickets (ticket_hash, agent_id, grant_id, expires_at, session_hash) VALUES (?, ?, ?, ?, ?)",
     ticketHash,
     scope.agent.id,
     grantId,
     scope.now + LIMITS.streamTicketMs,
+    sessionHash,
   );
   run(
     scope.sql,

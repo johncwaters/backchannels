@@ -1,9 +1,12 @@
 import { test, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { createServer, type IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import { fileURLToPath } from "node:url";
+import { setTimeout as delay } from "node:timers/promises";
 import { wait } from "../commands/wait.js";
 import { main } from "../main.js";
 import { run } from "../machine.js";
@@ -176,6 +179,91 @@ test("wait returns zero when its internal limit expires", { timeout: 5000 }, asy
   assert.deepEqual(output.stdout, [NO_MESSAGES_LINE]);
   assert.deepEqual(output.stderr, []);
 });
+
+test("wait returns zero and closes the socket when its Claude session pid is dead", { timeout: 5000 }, async context => {
+  const output = captureOutput(context);
+  const child = spawn(process.execPath, ["-e", ""], { stdio: "ignore" });
+  const sessionPid = child.pid;
+  assert.ok(sessionPid);
+  await once(child, "exit");
+  let closeObserved: Promise<void> | undefined;
+  const url = await createWebSocketServer(context, socket => {
+    closeObserved = new Promise(resolve => socket.once("end", resolve));
+  });
+  assert.equal(await wait(url, "test-ticket", 1000, 20, { CLAUDE_PID: String(sessionPid) }), 0);
+  await closeObserved;
+  assert.deepEqual(output.stdout, ["backchannels: session ended"]);
+  assert.deepEqual(output.stderr, []);
+});
+
+test("wait keeps waiting while its Claude session pid is alive and ends after it exits", { timeout: 5000 }, async context => {
+  const output = captureOutput(context);
+  const child = spawn(process.execPath, ["-e", "process.stdin.resume(); process.stdout.write('ready');"], { stdio: ["pipe", "pipe", "ignore"] });
+  context.after(async () => {
+    if (child.exitCode !== null || child.signalCode !== null) return;
+    const exited = once(child, "exit");
+    child.kill();
+    await exited;
+  });
+  await once(child.stdout, "data");
+  const sessionPid = child.pid;
+  assert.ok(sessionPid);
+  const originalKill = process.kill;
+  let pollCount = 0;
+  let reportPolls: () => void = () => {};
+  const pollsObserved = new Promise<void>(resolve => { reportPolls = resolve; });
+  context.mock.method(process, "kill", (pid: number, signal: number) => {
+    const isAlive = originalKill(pid, signal);
+    pollCount += 1;
+    if (pollCount === 3) reportPolls();
+    return isAlive;
+  });
+  const url = await createWebSocketServer(context, () => {});
+  let hasFinished = false;
+  const waiting = wait(url, "test-ticket", 1000, 10, { CLAUDE_PID: String(sessionPid) }).then(exitCode => {
+    hasFinished = true;
+    return exitCode;
+  });
+  await pollsObserved;
+  assert.equal(hasFinished, false);
+  assert.deepEqual(output.stdout, []);
+  const exited = once(child, "exit");
+  child.kill();
+  await exited;
+  assert.equal(await waiting, 0);
+  assert.deepEqual(output.stdout, ["backchannels: session ended"]);
+  assert.deepEqual(output.stderr, []);
+  const finishedPollCount = pollCount;
+  await delay(30);
+  assert.equal(pollCount, finishedPollCount);
+});
+
+test("wait treats EPERM as a live session", { timeout: 5000 }, async context => {
+  const output = captureOutput(context);
+  const kill = context.mock.method(process, "kill", () => {
+    throw Object.assign(new Error("permission denied"), { code: "EPERM" });
+  });
+  const url = await createWebSocketServer(context, () => {});
+  assert.equal(await wait(url, "test-ticket", 50, 5, { CLAUDE_PID: String(process.pid) }), 0);
+  assert.ok(kill.mock.callCount() > 0);
+  assert.deepEqual(output.stdout, [NO_MESSAGES_LINE]);
+  assert.deepEqual(output.stderr, []);
+  const finishedPollCount = kill.mock.callCount();
+  await delay(20);
+  assert.equal(kill.mock.callCount(), finishedPollCount);
+});
+
+for (const [name, sessionPid] of Object.entries({ missing: undefined, empty: "", zero: "0", negative: "-1", fractional: "1.5", invalid: "not-a-pid", whitespace: "1\n", unsafe: "9007199254740992" })) {
+  test(`wait does not poll with a ${name} Claude session pid`, { timeout: 5000 }, async context => {
+    const output = captureOutput(context);
+    const kill = context.mock.method(process, "kill", () => { throw new Error("unexpected poll"); });
+    const url = await createWebSocketServer(context, () => {});
+    assert.equal(await wait(url, "test-ticket", 20, 5, { CLAUDE_PID: sessionPid }), 0);
+    assert.equal(kill.mock.callCount(), 0);
+    assert.deepEqual(output.stdout, [NO_MESSAGES_LINE]);
+    assert.deepEqual(output.stderr, []);
+  });
+}
 
 test("wait reports constructor failures as unreachable", async context => {
   const output = captureOutput(context);
