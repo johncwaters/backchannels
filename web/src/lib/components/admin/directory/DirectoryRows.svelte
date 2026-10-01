@@ -5,6 +5,7 @@
 	import type { Conversation, ConversationSort, DirectoryKind, Scope } from '$lib/admin/types';
 	import { cn } from '$lib/utils';
 	import PrivacyMarker from './PrivacyMarker.svelte';
+	import ChatMembers from './ChatMembers.svelte';
 	import { aboutTextFor, conversationLabel, messagesTodayLabel, privacyMarkerFor, sortDirections } from './conversation-labels';
 
 	interface Props {
@@ -71,7 +72,7 @@
 		{#each conversations as conversation (conversation.id)}
 			{@const label = conversationLabel(conversation, viewerEmail)}
 			{@const about = aboutTextFor(conversation)}
-			<Table.Row class="group relative border-row-border hover:bg-secondary has-[a:focus-visible]:bg-secondary">
+			<Table.Row class="group relative border-row-border hover:bg-secondary has-[:focus-visible]:bg-secondary has-[details[open]]:bg-secondary">
 				<Table.Cell class="px-3 py-2 max-[899px]:px-0">
 					<span class="flex min-w-0 items-center gap-2">
 						<PrivacyMarker marker={privacyMarkerFor(conversation)} />
@@ -91,6 +92,9 @@
 				</Table.Cell>
 				<Table.Cell class="px-3 py-2 font-sans max-[899px]:px-2.5">
 					<span class={cn('block truncate', about.isTopic ? 'text-subheading' : 'text-preview')}>{about.text}</span>
+					{#if kind === 'private' && conversation.members.length > 0}
+						<ChatMembers members={conversation.members} />
+					{/if}
 				</Table.Cell>
 				<Table.Cell class={cn('px-3 py-2 text-foreground', peopleColumnClass)}>{conversation.people}</Table.Cell>
 				<Table.Cell class={cn('px-3 py-2 text-foreground', todayColumnClass)}>

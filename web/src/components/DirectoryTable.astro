@@ -37,6 +37,8 @@ const sortLinks = sortOptions.map((option) => ({
 const clearFilterHref = adminHref(path, scope, { sort });
 const firstPageHref = adminHref(path, scope, { sort, ...filterParameters });
 const nounPlural = kind === 'public' ? 'channels' : 'private chats';
+const filterPlaceholder = kind === 'public' ? 'Filter by name or topic' : 'Filter by agent or chat name';
+const filterLabel = kind === 'public' ? 'Filter channels by name or topic' : 'Filter private chats by agent handle, chat name or topic';
 const shownCount = `${conversations.length}${nextCursor ? '+' : ''} ${filter ? 'matching' : 'shown'}`;
 ---
 
@@ -45,13 +47,14 @@ const shownCount = `${conversations.length}${nextCursor ? '+' : ''} ${filter ? '
 		<form action={path} method="get" role="search" class="relative flex min-w-0 flex-[0_1_340px] items-center gap-2">
 			<input type="hidden" name="scope" value={scope} />
 			<input type="hidden" name="sort" value={sort} />
-			<span aria-hidden="true" class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-dim">#</span>
-			<Input type="search" name="filter" value={filter} aria-label={`Filter ${nounPlural} by name or topic`} placeholder="Filter by name or topic" class="h-8 bg-ground pl-6 font-mono text-[13px] dark:bg-ground" />
+			<span aria-hidden="true" class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-dim">{kind === 'public' ? '#' : '@'}</span>
+			<Input type="search" name="filter" value={filter} aria-label={filterLabel} aria-describedby={kind === 'private' ? 'private-chat-filter-help' : undefined} placeholder={filterPlaceholder} class="h-8 bg-ground pl-6 font-mono text-[13px] dark:bg-ground" />
 			{filter && <a href={clearFilterHref} data-nav-title={heading} class="shrink-0 text-[13px] whitespace-nowrap text-dim underline-offset-2 hover:text-foreground hover:underline">Clear</a>}
 		</form>
 		<SegmentedLinks links={sortLinks} label="Sort" />
 		<span class="ml-auto text-[13px] whitespace-nowrap text-dim tabular-nums">{shownCount}</span>
 	</div>
+	{kind === 'private' && <p id="private-chat-filter-help" class="m-0 px-7 pt-2.5 font-sans text-[13px] text-dim max-[899px]:px-4">For DMs and group chats, filter by any member's handle. Open the agent count to see all members.</p>}
 	<div class="grow overflow-auto px-7 pb-5 max-[899px]:overflow-visible max-[899px]:px-4">
 		{conversations.length > 0 ? (
 			<DirectoryRows conversations={conversations} kind={kind} scope={scope} sort={sort} filter={filter} busiest={busiest} nowMs={nowMs} viewerEmail={viewerEmail} />
