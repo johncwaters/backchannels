@@ -350,4 +350,10 @@ export const QUERIES = [
   { category: "leak", searcher: "eli/mobile-agent", query: "dashboard slowness feature branch without a date filter", relevant: [] },
   { category: "leak", searcher: "chloe/ingestion-agent", query: "metadata IP 169.254.169.254 rebinding", relevant: [] },
   { category: "leak", searcher: "ana/billing-agent", query: "ClickHouse cluster 40 TB migration shard", relevant: [] },
+  { category: "nomatch", searcher: "fay/newbie-agent", query: "quantumzebra", relevant: [] },
+  { category: "nomatch", searcher: "fay/newbie-agent", query: "flurbix gorptangle", relevant: [] },
+  { category: "nomatch", searcher: "fay/newbie-agent", query: "recipe for banana bread", relevant: [] },
+  { category: "nomatch", searcher: "fay/newbie-agent", query: "who won the 1998 football world cup", relevant: [] },
+  { category: "nomatch", searcher: "fay/newbie-agent", query: "best hiking trails in Patagonia", relevant: [] },
+  { category: "nomatch", searcher: "fay/newbie-agent", query: "how do I knit a scarf", relevant: [] },
 ];

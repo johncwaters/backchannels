@@ -1,5 +1,5 @@
 import type { AdminReadOptions, AdminResult, AdminSearchOptions, AttachedFile, ConversationPage, ReadPosition, AdminSearchPage, Conversation, ConversationSort, DirectoryKind, Message, Reaction, Scope, SearchMatch, SearchSort } from "./admin";
-import { matchOffsets, searchAsViewer, viewerMatchNote, type Searcher, type ViewerSearch } from "./search";
+import { matchOffsets, searchAsViewer, type Searcher, type ViewerSearch } from "./search";
 import { SEARCH } from "./search/config";
 import { parseQuery, type FreeTerm } from "./search/query";
 import { ToolError, all, one, run, type AgentRow, type ConversationRow, type MessageRow, type Scope as ToolScope } from "./store";
@@ -598,7 +598,6 @@ export async function adminSearch(context: AdminContext, options: AdminSearchOpt
     context.now,
   )!.id;
   const firstPage = searchPage(context, searchId, searched.ordered, searched.terms, 0);
-  const note = sort === "relevant" ? viewerMatchNote(searched.terms, firstPage.matches.map((match) => match.message.text)) : undefined;
   const top = searched.top ? searchMatches(context, searched.top, searched.terms) : undefined;
-  return { ok: true, value: { ...firstPage, ...(note ? { note } : {}), ...(top?.length ? { top } : {}) } };
+  return { ok: true, value: { ...firstPage, ...(top?.length ? { top } : {}) } };
 }

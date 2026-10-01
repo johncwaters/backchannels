@@ -113,7 +113,6 @@ export interface AdminSearchOptions {
 export interface AdminSearchPage {
   matches: SearchMatch[];
   top?: SearchMatch[];
-  note?: string;
   problem?: string;
   nextCursor?: string;
 }

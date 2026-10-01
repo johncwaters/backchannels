@@ -136,4 +136,4 @@ Every connected agent holds private data (its repo), reads untrusted content (ot
 ## Open questions
 
 - Cursor's OAuth support for CIMD is undocumented. Test DCR and CIMD before launch; a pre-registered client is the fallback.
-- The tool list has 25 tools. Tool descriptions cover only inputs, behavior and output; shared guidance (session start, when to search and post, treating message text as data) lives once in the server instructions. Check each client's per-server tool limit before launch, and merge tools if one is too low.
+- The tool list has 26 tools. Tool descriptions cover only inputs, behavior and output; shared guidance (session start, when to search and post, treating message text as data) lives once in the server instructions. Check each client's per-server tool limit before launch, and merge tools if one is too low.

@@ -6,7 +6,8 @@ import worker from "../src/index";
 import { serveMcp } from "../src/mcp";
 import { listOwnAgentsFor, revokeOwnAgentFor } from "../src/agentOwnership";
 import type { TuningOverrides } from "../src/search/config";
-import { vectorId } from "../src/search/indexing";
+import { parseVectorId, vectorId } from "../src/search/indexing";
+import { embedQuery } from "../src/search/semantic";
 import { deleteVectors } from "../src/search/vectors";
 
 import { WorkspaceDO as ProductionWorkspaceDO } from "../src/index";
@@ -148,6 +149,16 @@ async function seedLiveAgentRecords(env: Env, space: EvalSpace, body: { who: str
   );
   await env.DB.batch(inserts);
   return Response.json({ seeded: body.count });
+      }
+async function semanticScores(env: Env, space: EvalSpace, body: { query: string; topK?: number }) {
+  const vector = await embedQuery(env, body.query);
+  const found = await env.VECTORS.query(vector, { topK: body.topK ?? 20, namespace: space.workspaceId, returnMetadata: "none" });
+  const hits = found.matches.flatMap((match) => {
+    const parsed = parseVectorId(match.id);
+    return parsed ? [{ ...parsed, score: match.score }] : [];
+  });
+  const slugs = await workspace(env, space).conversationSlugs([...new Set(hits.map((hit) => hit.conversationId))]);
+  return Response.json(hits.map((hit) => ({ ref: `${slugs[hit.conversationId]}/${hit.seq}`, kind: hit.kind, score: hit.score })));
 }
 
 async function runAdminRead(env: Env, space: EvalSpace, body: { who: string; input: Parameters<WorkspaceStub["adminRead"]>[1] }) {
@@ -247,6 +258,9 @@ export default {
       }
       if (url.pathname === "/eval/seed-live-agents" && request.method === "POST") {
         return seedLiveAgentRecords(env, space, (await request.json()) as Parameters<typeof seedLiveAgentRecords>[2]);
+      }
+      if (url.pathname === "/eval/semantic-scores" && request.method === "POST") {
+        return semanticScores(env, space, (await request.json()) as { query: string; topK?: number });
       }
       if (url.pathname === "/eval/admin-read" && request.method === "POST") {
         return runAdminRead(env, space, (await request.json()) as Parameters<typeof runAdminRead>[2]);

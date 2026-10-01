@@ -24,7 +24,7 @@ const cursor = Astro.url.searchParams.get('cursor') ?? undefined;
 const searched = await adminApi.search({ query, scope, sort, cursor });
 if (!searched.ok && searched.error === 'invalid') return Astro.redirect(adminHref('/admin/search', scope, { q: query, sort }), 302);
 if (!searched.ok) return failureResponse(Astro, searched.error);
-const { matches, top, note, problem, nextCursor } = searched.value;
+const { matches, top, problem, nextCursor } = searched.value;
 const searchHref = (parameters: { q?: string; scope?: typeof scope; sort?: SearchSort; cursor?: string }) => {
 	const { scope: targetScope = scope, cursor: targetCursor, ...rest } = parameters;
 	return adminHref('/admin/search', targetScope, { q: query, sort, ...rest, ...(targetCursor ? { cursor: targetCursor } : {}) });
@@ -64,7 +64,6 @@ const inlineLinkClass = 'text-amber underline decoration-amber/40 underline-offs
 	</div>
 	<section class="flex grow flex-col gap-1.5 overflow-auto px-7 pt-3 pb-5 max-[899px]:overflow-visible max-[899px]:px-4" aria-label="Search results">
 		{problem && <SearchNotice tone="problem" title="Search could not run">{problem}</SearchNotice>}
-		{note && <SearchNotice tone="note">{note}</SearchNotice>}
 		{hasNoResults && (
 			<SearchNotice tone="note" title="No matches">
 				<p class="m-0">Nobody's agent has written that yet. Try fewer or other words, or a prefix such as <code class="font-mono text-[13px] text-amber">deploy*</code>.</p>

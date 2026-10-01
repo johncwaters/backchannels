@@ -7,7 +7,7 @@ import { AGENTS, PINS, PRIVATE_CHANNELS, PUBLIC_CHANNELS, PUBLIC_MEMBERS, QUERIE
 
 const ROUTINE_POST_COUNT = 220;
 const TOP_K = 10;
-const INDEX_WAIT_MS = 240_000;
+const INDEX_WAIT_MS = Number(process.env.EVAL_INDEX_WAIT_MS ?? 240_000);
 const INDEX_POLL_MS = 5_000;
 const RATE_LIMIT_PATTERN = /retry in (\d+)s/;
 const keepVectors = process.argv.includes("--keep");
@@ -120,9 +120,11 @@ async function evaluate(query) {
   );
   const latencyMs = Date.now() - started;
   const results = output.results;
-  const labels = results.map((result) => labelByMessageId.get(result.id) ?? result.id);
+  const labelOf = (result) => labelByMessageId.get(result.id) ?? result.id;
+  const labels = results.map(labelOf);
   const leaks = labels.filter((label) => !canSee(query.searcher, label));
   const evaluation = { ...query, labels, leaks, latencyMs };
+  if (query.category === "nomatch") evaluation.falsePositives = labels.length;
   if (query.everyResult) {
     const matching = results.filter((result) => matchesEveryResult(query.everyResult, result)).length;
     evaluation.precision = results.length ? matching / results.length : 0;
@@ -146,6 +148,7 @@ function summarize(evaluations) {
       category,
       queries: group.length,
       recallAt10: mean(group.filter((e) => e.recall !== undefined).map((e) => e.recall)),
+      falsePositives: mean(group.filter((e) => e.falsePositives !== undefined).map((e) => e.falsePositives)),
       mrr: mean(group.filter((e) => e.reciprocalRank !== undefined).map((e) => e.reciprocalRank)),
       precision: mean(group.filter((e) => e.precision !== undefined).map((e) => e.precision)),
       leaks: group.reduce((sum, e) => sum + e.leaks.length, 0),
@@ -156,10 +159,10 @@ function summarize(evaluations) {
 
 function printSummary(name, rows) {
   console.log(`\n== ${name}`);
-  console.log("category   queries  recall@10   MRR    precision  leaks  p50 ms");
+  console.log("category   queries  recall@10   MRR    precision  false+  leaks  p50 ms");
   for (const row of rows) {
     console.log(
-      `${row.category.padEnd(10)} ${String(row.queries).padStart(7)}  ${format(row.recallAt10)}  ${format(row.mrr)}  ${format(row.precision)}  ${String(row.leaks).padStart(5)}  ${String(row.p50LatencyMs).padStart(6)}`,
+      `${row.category.padEnd(10)} ${String(row.queries).padStart(7)}  ${format(row.recallAt10)}  ${format(row.mrr)}  ${format(row.precision)}  ${format(row.falsePositives)}  ${String(row.leaks).padStart(5)}  ${String(row.p50LatencyMs).padStart(6)}`,
     );
   }
 }
@@ -195,12 +198,44 @@ async function runExperiment(experiment) {
   return { name: experiment.name, tuning: experiment.tuning, summary, evaluations };
 }
 
+const percentile = (values, share) => {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.min(sorted.length - 1, Math.floor(share * sorted.length))];
+};
+
+async function calibrate() {
+  const relevantScores = [];
+  const bestIrrelevantScores = [];
+  const nomatchTopScores = [];
+  for (const query of QUERIES) {
+    const hits = await evalRequest(`/eval/semantic-scores?space=${space}`, "POST", { query: query.query, topK: 30 });
+    const labelled = hits.map((hit) => ({ ...hit, label: labelByMessageId.get(hit.ref) ?? hit.ref }));
+    if (query.category === "nomatch") {
+      nomatchTopScores.push(labelled[0]?.score ?? 0);
+      continue;
+    }
+    if (!query.relevant?.length) continue;
+    const relevantHits = labelled.filter((hit) => query.relevant.includes(hit.label));
+    for (const hit of relevantHits) relevantScores.push({ query: query.query, category: query.category, score: hit.score });
+    const bestIrrelevant = labelled.find((hit) => !query.relevant.includes(hit.label));
+    if (bestIrrelevant) bestIrrelevantScores.push(bestIrrelevant.score);
+  }
+  const describe = (name, values) =>
+    console.log(`${name.padEnd(28)} n=${String(values.length).padStart(3)}  min ${percentile(values, 0)?.toFixed(3)}  p10 ${percentile(values, 0.1)?.toFixed(3)}  p50 ${percentile(values, 0.5)?.toFixed(3)}  p90 ${percentile(values, 0.9)?.toFixed(3)}  max ${percentile(values, 1)?.toFixed(3)}`);
+  describe("relevant hits", relevantScores.map((entry) => entry.score));
+  describe("best irrelevant per query", bestIrrelevantScores);
+  describe("nomatch top score", nomatchTopScores);
+  for (const entry of relevantScores.sort((a, b) => a.score - b.score).slice(0, 8)) console.log(`  low relevant ${entry.score.toFixed(3)}  [${entry.category}] ${entry.query}`);
+}
+
 async function main() {
   console.log(`eval space ${space}`);
   const postCount = await seed();
   console.log(`seeded ${postCount} posts; waiting for the semantic index`);
   const index = await waitForIndex();
   console.log(`index ready: ${index.present} vectors`);
+  await calibrate();
   const onlyBaseline = process.argv.includes("--baseline");
   const runs = [];
   for (const experiment of onlyBaseline ? EXPERIMENTS.slice(0, 1) : EXPERIMENTS) runs.push(await runExperiment(experiment));

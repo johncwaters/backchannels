@@ -411,6 +411,15 @@ export class WorkspaceDO extends DurableObject<Env> {
     return jobs.map((job) => buildDocument(this.sql, workspaceId, job));
   }
 
+  async conversationSlugs(conversationIds: number[]): Promise<Record<number, string>> {
+    const rows = all<{ id: number; slug: string }>(
+      this.sql,
+      "SELECT id, slug FROM conversations WHERE id IN (SELECT value FROM json_each(?))",
+      JSON.stringify(conversationIds),
+    );
+    return Object.fromEntries(rows.map((row) => [row.id, row.slug]));
+  }
+
   async reindexBatch(afterMessageId: number, limit: number) {
     return reindexJobs(this.sql, afterMessageId, limit);
   }

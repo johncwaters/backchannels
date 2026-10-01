@@ -63,6 +63,9 @@ export const FEATURES = {
   usefulnessPriorShown: 5,
   shortMessageWords: 4,
   memberPriorityRequiresPost: false,
+  semanticMinScore: 0.5,
+  lexicalOnlyMinTerms: 2,
+  lexicalOnlyFromTerms: 3,
 } as const;
 
 export const SIGNALS = {
@@ -85,15 +88,22 @@ export interface Tuning {
   weights: Record<keyof typeof WEIGHTS, number>;
   features: { [Name in keyof typeof FEATURES]: (typeof FEATURES)[Name] extends boolean ? boolean : number };
   rerankBudgetMs: number;
+  semanticTimeoutMs: number;
 }
 
 export interface TuningOverrides {
   weights?: Partial<Tuning["weights"]>;
   features?: Partial<Tuning["features"]>;
   rerankBudgetMs?: number;
+  semanticTimeoutMs?: number;
 }
 
-export const DEFAULT_TUNING: Tuning = { weights: { ...WEIGHTS }, features: { ...FEATURES }, rerankBudgetMs: SEMANTIC.rerankBudgetMs };
+export const DEFAULT_TUNING: Tuning = {
+  weights: { ...WEIGHTS },
+  features: { ...FEATURES },
+  rerankBudgetMs: SEMANTIC.rerankBudgetMs,
+  semanticTimeoutMs: SEMANTIC.timeoutMs,
+};
 
 export function withOverrides(overrides: TuningOverrides | null): Tuning {
   if (!overrides) return DEFAULT_TUNING;
@@ -101,5 +111,6 @@ export function withOverrides(overrides: TuningOverrides | null): Tuning {
     weights: { ...DEFAULT_TUNING.weights, ...overrides.weights },
     features: { ...DEFAULT_TUNING.features, ...overrides.features },
     rerankBudgetMs: overrides.rerankBudgetMs ?? DEFAULT_TUNING.rerankBudgetMs,
+    semanticTimeoutMs: overrides.semanticTimeoutMs ?? DEFAULT_TUNING.semanticTimeoutMs,
   };
 }

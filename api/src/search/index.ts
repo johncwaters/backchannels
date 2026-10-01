@@ -1,6 +1,6 @@
 import { ToolError, all, label, messageRef, one, run, viewMessage, type ConversationRow, type MessageRow, type Scope } from "../store";
 import { SEARCH, SEMANTIC, withOverrides, type Tuning, type TuningOverrides } from "./config";
-import { missingTerms, termPattern, weakMatchNote } from "./coverage";
+import { missingTerms, termPattern } from "./coverage";
 import { buildFilters, type Filters } from "./filters";
 import { ftsMatch, parseQuery, withoutStopWords, type FreeTerm, type ParsedQuery, type SortOrder } from "./query";
 import { fuse, lexicalCandidates, messageIdsForVectorHits, privateConversationIds, recheckVisible, rerank, type Ranked } from "./rank";
@@ -45,13 +45,14 @@ async function semanticLeg(
   filters: Filters,
   excludeMatch: string | null,
   visibleIds: number[],
+  tuning: Tuning,
 ): Promise<number[]> {
   if (!parsed.freeText || filters.matchesNothing) return [];
   const search = searchVectors(scope.env, scope.workspaceId, parsed.freeText, filters.vector, visibleIds).catch((error) => {
     console.error("semantic leg failed; lexical results only", error);
     return [];
   });
-  const hits = await withTimeout(search, SEMANTIC.timeoutMs, []);
+  const hits = (await withTimeout(search, tuning.semanticTimeoutMs, [])).filter((hit) => hit.score >= tuning.features.semanticMinScore);
   const candidates = messageIdsForVectorHits(scope, hits);
   return recheckVisible(scope, candidates, visibleIds, { filters, excludeMatch });
 }
@@ -112,6 +113,22 @@ function searcherFilters(scope: Scope, parsed: ParsedQuery, searcher: Searcher):
   return filters;
 }
 
+function termsMatchedById(scope: Scope, ids: number[], terms: FreeTerm[]): Map<number, number> {
+  const textById = all<{ id: number; text: string }>(
+    scope.sql,
+    "SELECT id, text FROM messages WHERE id IN (SELECT value FROM json_each(?))",
+    JSON.stringify(ids),
+  );
+  return new Map(textById.map((row) => [row.id, terms.length - missingTerms(row.text, terms).length]));
+}
+
+function withoutWeakLexicalHits(scope: Scope, lexical: number[], semantic: Set<number>, terms: FreeTerm[], tuning: Tuning): number[] {
+  const { lexicalOnlyMinTerms, lexicalOnlyFromTerms } = tuning.features;
+  if (terms.length < lexicalOnlyFromTerms || !lexical.length) return lexical;
+  const matchedById = termsMatchedById(scope, lexical, terms);
+  return lexical.filter((id) => semantic.has(id) || (matchedById.get(id) ?? 0) >= lexicalOnlyMinTerms);
+}
+
 async function orderedIds(scope: Scope, parsed: ParsedQuery, sort: SortOrder, searcher: Searcher, tuning: Tuning): Promise<number[]> {
   const startedAt = Date.now();
   const visibleIds = searcher.privateIds;
@@ -126,7 +143,7 @@ async function orderedIds(scope: Scope, parsed: ParsedQuery, sort: SortOrder, se
       limit: SEARCH.recentCandidates,
     });
   }
-  const semantic = semanticLeg(scope, parsed, filters, excludeMatch, visibleIds);
+  const semantic = semanticLeg(scope, parsed, filters, excludeMatch, visibleIds, tuning);
   const lexical = lexicalCandidates(scope, visibleIds, {
     match: ftsMatch(withoutStopWords(parsed.include), "OR"),
     excludeMatch,
@@ -134,13 +151,18 @@ async function orderedIds(scope: Scope, parsed: ParsedQuery, sort: SortOrder, se
     order: "bm25",
     limit: SEARCH.lexicalCandidates,
   });
-  const ranked = rerank(scope, fuse([lexical, await semantic]), parsed.freeText, tuning);
+  const semanticHits = await semantic;
+  const lexicalKept = withoutWeakLexicalHits(scope, lexical, new Set(semanticHits), withoutStopWords(parsed.include), tuning);
+  const ranked = rerank(scope, fuse([lexicalKept, semanticHits]), parsed.freeText, tuning);
   return (await withCrossEncoder(scope, ranked, parsed.freeText, startedAt, tuning)).map((item) => item.id);
 }
 
 async function topForRecent(scope: Scope, parsed: ParsedQuery, recent: number[], searcher: Searcher, tuning: Tuning): Promise<number[] | undefined> {
   if (!parsed.include.length) return undefined;
-  const top = (await orderedIds(scope, parsed, "relevant", searcher, tuning)).slice(0, SEARCH.topForRecent);
+  const relevant = await orderedIds(scope, parsed, "relevant", searcher, tuning);
+  const counted = withoutStopWords(parsed.include);
+  const matchedById = termsMatchedById(scope, relevant, counted);
+  const top = relevant.filter((id) => matchedById.get(id) === counted.length).slice(0, SEARCH.topForRecent);
   const firstRecent = new Set(recent.slice(0, SEARCH.topHiddenWhenInFirstRecent));
   if (top.length < SEARCH.topForRecent || top.every((id) => firstRecent.has(id))) return undefined;
   return top;
@@ -198,10 +220,7 @@ function formatResult(scope: Scope, row: ResultRow, snippet: string | undefined,
     owner: row.owner_email,
     time: new Date(row.created_at).toISOString(),
     snippet: snippet ?? row.text.slice(0, SEARCH.snippetFallbackChars),
-    matches: matchOffsets(row.text, terms),
   };
-  const missing = missingTerms(row.text, withoutStopWords(terms));
-  if (missing.length) result.missing_terms = missing;
   if (row.thread_root_id) {
     const root = one<{ seq: number; text: string }>(scope.sql, "SELECT seq, text FROM messages WHERE id = ?", row.thread_root_id);
     if (root) {
@@ -331,13 +350,7 @@ export async function searchMessages(scope: Scope, args: SearchArgs) {
   const tuning = searchTuning(scope);
   const ordered = await orderedIds(scope, parsed, sort, searcher, tuning);
   const top = sort === "recent" ? await topForRecent(scope, parsed, ordered, searcher, tuning) : undefined;
-  const firstPage = page(scope, ordered, 0, limit, parsed, detail, { query, sort }, top);
-  if (sort === "relevant") {
-    const missingPerResult = firstPage.results.map((result) => (result.missing_terms as string[] | undefined) ?? []);
-    const note = weakMatchNote(withoutStopWords(parsed.include), missingPerResult);
-    if (note) return { note, ...firstPage };
-  }
-  return firstPage;
+  return page(scope, ordered, 0, limit, parsed, detail, { query, sort }, top);
 }
 
 export interface ViewerSearch {
@@ -355,9 +368,4 @@ export async function searchAsViewer(scope: Scope, searcher: Searcher, query: st
   const ordered = await orderedIds(scope, parsed, sort, searcher, tuning);
   const top = sort === "recent" ? await topForRecent(scope, parsed, ordered, searcher, tuning) : undefined;
   return { ordered, top, terms: parsed.include };
-}
-
-export function viewerMatchNote(terms: FreeTerm[], texts: string[]): string | undefined {
-  const counted = withoutStopWords(terms);
-  return weakMatchNote(counted, texts.map((text) => missingTerms(text, counted)));
 }

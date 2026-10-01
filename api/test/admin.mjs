@@ -197,8 +197,10 @@ function adminMarkRead(who, input) {
 describe("admin read state per person", () => {
   const run = Date.now().toString(36);
   const channel = `unread-${run}`;
-  const reader = mcpClient("unreadreader", undefined, SPACE);
-  const poster = mcpClient("unreadposter", undefined, SPACE);
+  const readerName = `unreadreader${run}`;
+  const posterName = `unreadposter${run}`;
+  const reader = mcpClient(readerName, undefined, SPACE);
+  const poster = mcpClient(posterName, undefined, SPACE);
   const readerAgent = { agent: `reader-${run}` };
   const posterAgent = { agent: `poster-${run}` };
   const seqOf = (ref) => Number(ref.split("/").at(-1));
@@ -210,7 +212,7 @@ describe("admin read state per person", () => {
     await expectOutput(reader.call("create_channel", { ...readerAgent, name: channel, purpose: "admin unread check" }));
     await expectOutput(poster.call("join_channel", { ...posterAgent, channel: `#${channel}` }));
     rootRef = (await expectOutput(poster.call("send_message", { ...posterAgent, to: `#${channel}`, text: "before the first visit" }))).message;
-    const firstVisit = await adminRead("unreadreader", { conversation: channel });
+    const firstVisit = await adminRead(readerName, { conversation: channel });
     assert.equal(firstVisit.value.conversation.unread, 0);
     assert.equal(firstVisit.value.firstUnreadSeq, undefined);
   });
@@ -220,28 +222,28 @@ describe("admin read state per person", () => {
     const fromPoster = (await expectOutput(poster.call("send_message", { ...posterAgent, to: `#${channel}`, text: "after the first visit" }))).message;
     await expectOutput(reader.call("send_message", { ...readerAgent, to: `#${channel}`, text: "my own agent" }));
     await expectOutput(poster.call("send_message", { ...posterAgent, to: `#${channel}`, text: "a reply", reply_to: rootRef }));
-    const page = await adminRead("unreadreader", { conversation: channel });
+    const page = await adminRead(readerName, { conversation: channel });
     assert.equal(page.value.conversation.unread, 1);
     assert.equal(page.value.firstUnreadSeq, seqOf(fromPoster));
     const root = page.value.messages.find((message) => message.seq === seqOf(rootRef));
     assert.equal(root.unreadReplies, 1);
 
-    const marked = await adminMarkRead("unreadreader", { conversation: channel, upToSeq: seqOf(fromPoster) });
+    const marked = await adminMarkRead(readerName, { conversation: channel, upToSeq: seqOf(fromPoster) });
     assert.deepEqual(marked, { ok: true, value: { unread: 0 } });
-    const backwards = await adminMarkRead("unreadreader", { conversation: channel, upToSeq: 1 });
+    const backwards = await adminMarkRead(readerName, { conversation: channel, upToSeq: 1 });
     assert.deepEqual(backwards, { ok: true, value: { unread: 0 } });
-    const afterReading = await adminRead("unreadreader", { conversation: channel });
+    const afterReading = await adminRead(readerName, { conversation: channel });
     assert.equal(afterReading.value.firstUnreadSeq, undefined);
     assert.ok(afterReading.value.lastReadSeq >= seqOf(fromPoster));
   });
 
   test("threads keep their own read position", async () => {
-    const thread = await adminRead("unreadreader", { conversation: channel, thread: seqOf(rootRef) });
+    const thread = await adminRead(readerName, { conversation: channel, thread: seqOf(rootRef) });
     assert.ok(thread.value.firstUnreadSeq > seqOf(rootRef));
-    await adminMarkRead("unreadreader", { conversation: channel, thread: seqOf(rootRef), upToSeq: thread.value.firstUnreadSeq });
-    const channelView = await adminRead("unreadreader", { conversation: channel });
+    await adminMarkRead(readerName, { conversation: channel, thread: seqOf(rootRef), upToSeq: thread.value.firstUnreadSeq });
+    const channelView = await adminRead(readerName, { conversation: channel });
     assert.equal(channelView.value.messages.find((message) => message.seq === seqOf(rootRef)).unreadReplies, 0);
-    const otherPerson = await adminRead("unreadposter", { conversation: channel });
+    const otherPerson = await adminRead(posterName, { conversation: channel });
     assert.equal(otherPerson.value.conversation.unread, 0);
   });
 });
@@ -310,5 +312,43 @@ describe("revoking your own agents", () => {
     assert.match(refused.error, new RegExp(`${liveAgentsPerCarbonUnit} live agents`));
     assert.deepEqual(await ownAgents("revoke", cappedWho, { handle: last.handle }), { ok: true, value: null });
     await expectOutput(capped.call("register_agent", { name: `over-${run}`, description: "Fits after revoking" }));
+  });
+});
+
+describe("search precision", () => {
+  const run = Date.now().toString(36);
+  const channel = `precision-${run}`;
+  const alpha = `alpha${run}`;
+  const beta = `beta${run}`;
+  const gamma = `gamma${run}`;
+  const searcher = mcpClient("precisionowner", undefined, SPACE);
+  const agent = { agent: `precise-${run}` };
+  const textsOf = (list) => (list ?? []).map((result) => result.text ?? result.snippet);
+
+  test("setup", async () => {
+    await expectOutput(searcher.call("register_agent", { name: agent.agent, description: "Search precision check" }));
+    await expectOutput(searcher.call("create_channel", { ...agent, name: channel, purpose: "search precision check" }));
+    await expectOutput(searcher.call("send_message", { ...agent, to: `#${channel}`, text: `only ${alpha} here` }));
+    await expectOutput(searcher.call("send_message", { ...agent, to: `#${channel}`, text: `${alpha} and ${beta} together` }));
+    await expectOutput(searcher.call("send_message", { ...agent, to: `#${channel}`, text: `${alpha} ${beta} ${gamma} all three` }));
+  });
+
+  test("a word nobody wrote returns nothing", async () => {
+    const found = await expectOutput(searcher.call("search_messages", { ...agent, query: `zqx${run}vw` }));
+    assert.deepEqual(found.results, []);
+    assert.equal(found.related, undefined);
+  });
+
+  test("with three or more words, a word-only hit needs two of them; the fullest match ranks first", async () => {
+    const found = await expectOutput(searcher.call("search_messages", { ...agent, query: `${alpha} ${beta} ${gamma}`, detail: "full" }));
+    const own = found.results.filter((result) => result.conversation === `#${channel}`);
+    assert.deepEqual(own.map((result) => result.text), [`${alpha} ${beta} ${gamma} all three`, `${alpha} and ${beta} together`]);
+    assert.ok(found.results.every((result) => result.matches === undefined && result.missing_terms === undefined));
+  });
+
+  test("recent top holds only messages with every word", async () => {
+    const found = await expectOutput(searcher.call("search_messages", { ...agent, query: `${alpha} ${beta}`, sort: "recent", detail: "full" }));
+    for (const best of found.top ?? []) assert.ok(best.text.includes(alpha) && best.text.includes(beta), best.text);
+    assert.deepEqual(textsOf(found.results), [`${alpha} ${beta} ${gamma} all three`, `${alpha} and ${beta} together`]);
   });
 });
