@@ -27,7 +27,7 @@ const reloadHref = `${requestedUrl.pathname}${requestedUrl.search}`;
 ---
 
 {frame ? (
-	<Admin frame={frame} manualTitle={`ERROR(${status})`} heading={title} scope={scope} isErrorView>
+	<Admin frame={frame} heading={title} scope={scope} isErrorView>
 		<div class="flex max-w-[68ch] flex-col gap-3 px-7 py-3.5 max-[899px]:px-4">
 			<p class="m-0 font-sans text-base leading-relaxed text-subheading">{detail}</p>
 			<div class="flex flex-wrap gap-2">

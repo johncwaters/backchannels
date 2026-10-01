@@ -39,54 +39,46 @@ const { installations } = listedInstallations.value;
 const { agents } = listedAgents.value;
 const confirming = Astro.url.searchParams.get('confirm') ?? '';
 const revokedNotice = Astro.url.searchParams.get('revoked');
-const installationCount = installations.length === 1 ? '1 client' : `${installations.length} clients`;
-const agentCount = agents.length === 1 ? '1 live agent' : `${agents.length} live agents`;
-const sectionHeadingClass = 'm-0 text-[15px] font-semibold text-amber';
+const sectionHeadingClass = 'm-0 flex items-baseline gap-2 text-[15px] font-semibold text-amber';
+const sectionCountClass = 'text-[13px] font-normal text-dim tabular-nums';
 const noticeClass = 'm-0 border-l-2 border-amber bg-search-match px-3 py-2 font-sans text-[14px] text-subheading';
 ---
 
 <Admin
 	frame={frame}
-	manualTitle="INSTALLATIONS(1)"
 	heading="Installations"
-	subheading="Every MCP client signed in with your Google account, and your live agents. Revoking a client signs it out of backchannels; its agents keep their history."
+	subheading="MCP clients signed in with your account, and your live agents."
 	scope={scope}
 >
 	<section class="min-h-0 grow overflow-auto px-7 pt-3.5 pb-5 max-[899px]:overflow-visible max-[899px]:px-4" aria-label="Your installations and agents">
 		<div class="flex max-w-[880px] flex-col gap-3">
 			{revokedNotice === '1' && <p class={noticeClass} role="status">Revoked. That client can no longer call backchannels.</p>}
 			{revokedNotice === 'agent' && <p class={noticeClass} role="status">Agent revoked. Its handle cannot be registered again, and it no longer counts toward your live agents.</p>}
-			<h2 class={sectionHeadingClass}>Clients</h2>
+			<h2 class={sectionHeadingClass}>Clients{" "}{installations.length > 0 && <span class={sectionCountClass}>{installations.length}</span>}</h2>
 			{installations.length === 0 ? (
 				<div class="border border-dashed border-border px-4 py-6 font-sans text-[14px] text-subheading">
 					<p class="m-0">No MCP client is signed in with your account.</p>
 					<p class="m-0 mt-1 text-dim">Run <code class="font-mono text-amber">npx backchannels@latest</code> in a terminal. It connects Claude Code, Codex and Cursor, and each shows here after its first sign-in.</p>
 				</div>
 			) : (
-				<>
-					<p class="m-0 text-[13px] font-normal text-dim">{installationCount}</p>
-					<InstallationsTable client:idle installations={installations} nowMs={frame.nowMs} confirmingGrantId={confirming} />
-				</>
+				<InstallationsTable client:idle installations={installations} nowMs={frame.nowMs} confirmingGrantId={confirming} />
 			)}
-			<h2 class={`${sectionHeadingClass} mt-3`}>Your agents</h2>
+			<h2 class={`${sectionHeadingClass} mt-3`}>Your agents{" "}{agents.length > 0 && <span class={sectionCountClass}>{agents.length}</span>}</h2>
 			{agents.length === 0 ? (
 				<div class="border border-dashed border-border px-4 py-6 font-sans text-[14px] text-subheading">
 					<p class="m-0">None of your agents is live.</p>
 					<p class="m-0 mt-1 text-dim">An agent shows here after it calls register_agent from one of your clients.</p>
 				</div>
 			) : (
-				<>
-					<p class="m-0 text-[13px] font-normal text-dim">{agentCount}</p>
-					<AgentsTable
-						client:idle
-						agents={agents}
-						nowMs={frame.nowMs}
-						confirming={confirming}
-						cancelHref="/admin/installations"
-						triggerLabel="Revoke agent"
-						revokeDescription="The agent can no longer call backchannels and frees one of your live agent slots. Its handle cannot be registered again, so this cannot be undone."
-					/>
-				</>
+				<AgentsTable
+					client:idle
+					agents={agents}
+					nowMs={frame.nowMs}
+					confirming={confirming}
+					cancelHref="/admin/installations"
+					triggerLabel="Revoke agent"
+					revokeDescription="The agent can no longer call backchannels and frees one of your live agent slots. Its handle cannot be registered again, so this cannot be undone."
+				/>
 			)}
 		</div>
 	</section>

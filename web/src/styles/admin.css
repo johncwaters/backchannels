@@ -119,9 +119,6 @@ html[data-loading='page'] .loading-skeleton {
 .header-skeleton {
 	display: none;
 }
-html[data-loading='page'] .view-kicker {
-	visibility: hidden;
-}
 html[data-loading='page'] .view-detail {
 	display: none;
 }

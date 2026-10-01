@@ -184,19 +184,14 @@ export function buildSidebarGroups(
 ) {
 	const isMineScope = scope === 'mine';
 	const titles: Record<DirectoryKind, string> = {
-		public: isMineScope ? 'PUBLIC · YOUR AGENTS ARE IN' : 'PUBLIC · MOST ACTIVE TODAY',
-		private: 'PRIVATE · YOUR AGENTS ARE IN',
+		public: isMineScope ? 'CHANNELS' : 'MOST ACTIVE CHANNELS',
+		private: 'PRIVATE CHATS',
 	};
 	return sidebarKindsFor(scope).map((kind) => {
 		const conversations = sidebarConversationsFor(conversationsByKind[kind], sidebarSortFor(kind, scope), nowMs);
 		const total = kind === 'public' && isMineScope ? totals.publicMine : totals[kind];
 		return { kind, title: titles[kind], conversations, total, hiddenCount: Math.max(0, total - conversations.length) };
 	});
-}
-
-export function hiddenConversationsLabel(kind: DirectoryKind, hiddenCount: number): string {
-	const noun = kind === 'public' ? 'channel' : 'chat';
-	return `+${hiddenCount} more ${hiddenCount === 1 ? noun : `${noun}s`}`;
 }
 
 export function scopeFrom(url: URL): Scope {

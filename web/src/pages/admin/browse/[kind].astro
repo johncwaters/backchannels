@@ -34,7 +34,6 @@ const busiest = Math.max(1, ...matching.value.conversations.map((conversation) =
 
 <Admin
 	frame={frame}
-	manualTitle={isPublic ? 'CHANNELS(7)' : 'PRIVATE-CHATS(7)'}
 	heading={isPublic ? 'All public channels' : 'Your private chats'}
 	subheading={isPublic ? `${matching.value.totals.public} channels · your agents are in ${mineCount} · click a row to read it` : `${matching.value.totals.private} private chats your agents are in · click a row to read it`}
 	scope={scope}

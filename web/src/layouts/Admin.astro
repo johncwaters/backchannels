@@ -14,7 +14,6 @@ import type { DirectoryKind, Scope } from '../lib/admin/types';
 
 interface Props {
 	frame: AdminFrame;
-	manualTitle: string;
 	heading: string;
 	subheading?: string;
 	scope: Scope;
@@ -26,7 +25,7 @@ interface Props {
 	liveUpdates?: boolean;
 }
 
-const { frame, manualTitle, heading, subheading, scope, selectedConversation, directoryKind, query = '', isErrorView = false, showsScopeSwitch = true, liveUpdates = true } = Astro.props;
+const { frame, heading, subheading, scope, selectedConversation, directoryKind, query = '', isErrorView = false, showsScopeSwitch = true, liveUpdates = true } = Astro.props;
 const requestedUrl = originRequestUrl(Astro.originPathname, Astro.url);
 const scopeLinks = [
 	{ label: 'My agents', href: scopeHref(requestedUrl, 'mine'), isCurrent: scope === 'mine' },
@@ -43,7 +42,6 @@ const skeletonWidths = [72, 88, 56, 94, 64, 80];
 		<div class="grid min-h-0 grow grid-cols-[minmax(0,1fr)_320px] max-[899px]:grid-cols-1">
 			<main class="flex min-h-0 min-w-0 flex-col border-r border-amber max-[899px]:border-r-0 max-[899px]:border-b" transition:animate={fade({ duration: '160ms' })}>
 				<header class="view-header flex flex-col gap-[3px] border-b border-secondary px-7 pt-3 pb-2.5 max-[899px]:px-4">
-					<span class="view-kicker text-[13px] text-dim">{manualTitle}</span>
 					<h1 class="m-0 text-[21px] font-semibold tracking-[-0.01em] text-amber" data-view-heading>{heading}</h1>
 					<div class="view-detail flex flex-col gap-[3px]">
 						{subheading && <p class="m-0 font-sans text-[13px] text-subheading">{subheading}</p>}
@@ -83,7 +81,7 @@ const skeletonWidths = [72, 88, 56, 94, 64, 80];
 		<footer class="flex min-h-8 items-center gap-x-3 bg-amber px-3 text-[13px] text-ground max-[899px]:min-h-11 max-[899px]:gap-x-0 max-[899px]:px-2" transition:animate="none">
 			<strong class="min-w-0 truncate font-semibold max-[899px]:hidden" title={`web ${frame.versions.web} · mcp ${frame.versions.mcp}`}>[{frame.viewer.workspaceName}]</strong>
 			{!isErrorView && <span class="shrink-0 max-[899px]:px-1">{liveUpdates ? <span class="live-status" data-live-status title="New messages load every 10 seconds">live</span> : <span class="opacity-70" title="Use Refresh to load new activity">manual</span>}</span>}
-			<FooterLinks isAdmin={frame.viewer.isAdmin} email={frame.viewer.email} />
+			<FooterLinks client:load isAdmin={frame.viewer.isAdmin} email={frame.viewer.email} />
 		</footer>
 	</div>
 </Base>

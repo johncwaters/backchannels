@@ -3,20 +3,43 @@
 	import PlugIcon from '@lucide/svelte/icons/plug';
 	import BotIcon from '@lucide/svelte/icons/bot';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
+	import * as Tooltip from '$lib/components/ui/tooltip';
 
 	let { isAdmin, email }: { isAdmin: boolean; email: string } = $props();
 
 	const iconSize = 16;
-	const iconClass = 'inline-flex size-8 shrink-0 items-center justify-center text-inherit no-underline transition-colors duration-150 hover:bg-ground hover:text-amber focus-visible:bg-ground focus-visible:text-amber max-[899px]:size-11';
+	const iconClass = 'inline-flex size-8 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent text-inherit no-underline transition-colors duration-150 hover:bg-ground hover:text-amber focus-visible:bg-ground focus-visible:text-amber max-[899px]:size-11';
+	const tooltipClass = 'rounded-none border border-amber bg-ground px-2 py-1 font-mono text-[12px] text-foreground shadow-lg';
+	const tooltipArrowClass = 'hidden';
+
+	let links = $derived([
+		{ href: '/admin/activity', label: 'Activity', navTitle: 'Your agents’ activity', Icon: ActivityIcon },
+		{ href: '/admin/installations', label: 'Installations', navTitle: 'Installations', Icon: PlugIcon },
+		...(isAdmin ? [{ href: '/admin/agents', label: 'Headless agents', navTitle: 'Headless agents', Icon: BotIcon }] : []),
+	]);
 </script>
 
-<nav class="ml-auto flex shrink-0 items-center gap-x-0.5" aria-label="Account">
-	<a href="/admin/activity" class={iconClass} data-nav-title="Your agents’ activity" aria-label="Activity" title="Activity"><ActivityIcon size={iconSize} aria-hidden="true" /></a>
-	<a href="/admin/installations" class={iconClass} data-nav-title="Installations" aria-label="Installations" title="Installations"><PlugIcon size={iconSize} aria-hidden="true" /></a>
-	{#if isAdmin}
-		<a href="/admin/agents" class={iconClass} data-nav-title="Headless agents" aria-label="Headless agents" title="Headless agents"><BotIcon size={iconSize} aria-hidden="true" /></a>
-	{/if}
-	<form action="/logout" method="post" data-astro-reload data-nav-title="Signing out…" class="contents">
-		<button type="submit" class={`${iconClass} cursor-pointer border-0 bg-transparent`} aria-label="Sign out" title={`Sign out ${email}`}><LogOutIcon size={iconSize} aria-hidden="true" /></button>
-	</form>
-</nav>
+<Tooltip.Provider delayDuration={150}>
+	<nav class="ml-auto flex shrink-0 items-center gap-x-0.5" aria-label="Account">
+		{#each links as link (link.href)}
+			<Tooltip.Root>
+				<Tooltip.Trigger>
+					{#snippet child({ props })}
+						<a {...props} href={link.href} class={iconClass} data-nav-title={link.navTitle} aria-label={link.label}><link.Icon size={iconSize} aria-hidden="true" /></a>
+					{/snippet}
+				</Tooltip.Trigger>
+				<Tooltip.Content side="top" sideOffset={6} class={tooltipClass} arrowClasses={tooltipArrowClass}>{link.label}</Tooltip.Content>
+			</Tooltip.Root>
+		{/each}
+		<form action="/logout" method="post" data-astro-reload data-nav-title="Signing out…" class="contents">
+			<Tooltip.Root>
+				<Tooltip.Trigger>
+					{#snippet child({ props })}
+						<button {...props} type="submit" class={iconClass} aria-label="Sign out"><LogOutIcon size={iconSize} aria-hidden="true" /></button>
+					{/snippet}
+				</Tooltip.Trigger>
+				<Tooltip.Content side="top" sideOffset={6} class={tooltipClass} arrowClasses={tooltipArrowClass}>Sign out {email}</Tooltip.Content>
+			</Tooltip.Root>
+		</form>
+	</nav>
+</Tooltip.Provider>

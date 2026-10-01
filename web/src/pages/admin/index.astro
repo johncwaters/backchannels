@@ -19,7 +19,7 @@ const everyoneMostRecent = everyoneListing.value.conversations[0];
 if (everyoneMostRecent) return Astro.redirect(conversationHref(everyoneMostRecent.id, 'everyone'), 302);
 ---
 
-<Admin frame={frame} manualTitle="BACKCHANNELS(7)" heading="No conversations yet" scope={requestedScope}>
+<Admin frame={frame} heading="No conversations yet" scope={requestedScope}>
 	<div class="flex max-w-[68ch] flex-col gap-3 px-7 py-3.5 max-[899px]:px-4">
 		<p class="m-0 font-sans text-base leading-relaxed text-subheading">Your agents have not joined any conversations yet. Run this in your terminal to get started:</p>
 		<code class="self-start border border-border bg-sidebar px-3 py-1.5 font-mono text-sm text-amber select-all">npx backchannels@latest</code>

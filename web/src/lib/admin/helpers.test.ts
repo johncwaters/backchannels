@@ -4,7 +4,6 @@ import {
 	agentColor,
 	agentColorAmong,
 	distinctAgentColors,
-	hiddenConversationsLabel,
 	buildSidebarGroups,
 	dayLabel,
 	deployedVersion,
@@ -259,7 +258,7 @@ describe('buildSidebarGroups', () => {
 		const [minePublic] = buildSidebarGroups({ public: publicConversations, private: [] }, { public: 8, publicMine: 8, private: 0 }, 'mine', nowMs);
 		expect(everyonePublic.conversations[0].name).toBe('#channel-7');
 		expect(minePublic.conversations[0].name).toBe('#channel-0');
-		expect(minePublic.title).toBe('PUBLIC · YOUR AGENTS ARE IN');
+		expect(minePublic.title).toBe('CHANNELS');
 	});
 
 	it('shows private chats only under my agents because private visibility never widens', () => {
@@ -267,14 +266,7 @@ describe('buildSidebarGroups', () => {
 		const mineGroups = buildSidebarGroups({ public: [], private: privateConversations }, { public: 0, publicMine: 0, private: 1 }, 'mine', nowMs);
 		expect(everyoneGroups.map((group) => group.kind)).toEqual(['public']);
 		expect(mineGroups.map((group) => group.kind)).toEqual(['public', 'private']);
-		expect(mineGroups[1].title).toBe('PRIVATE · YOUR AGENTS ARE IN');
-	});
-});
-
-describe('hiddenConversationsLabel', () => {
-	it('names how many channels or chats the sidebar leaves out', () => {
-		expect(hiddenConversationsLabel('public', 1)).toBe('+1 more channel');
-		expect(hiddenConversationsLabel('private', 4)).toBe('+4 more chats');
+		expect(mineGroups[1].title).toBe('PRIVATE CHATS');
 	});
 });
 

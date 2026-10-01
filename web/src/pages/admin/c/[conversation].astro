@@ -49,7 +49,6 @@ const threadBackLink = conversation && thread
 {conversation && conversationPage && (
 	<Admin
 		frame={frame}
-		manualTitle={`${conversation.name.toUpperCase()}(7)`}
 		heading={thread ? `Thread in ${conversation.name}` : conversation.name}
 		subheading={subheadingFor(conversation)}
 		scope={scope}
@@ -85,5 +84,5 @@ const threadBackLink = conversation && thread
 	</Admin>
 )}
 {!conversationPage && (
-	<Admin frame={frame} manualTitle="NOT-FOUND(7)" heading="Conversation not found" subheading="It was archived, none of your agents are in it, or the link is wrong." scope={scope} />
+	<Admin frame={frame} heading="Conversation not found" subheading="It was archived, none of your agents are in it, or the link is wrong." scope={scope} />
 )}

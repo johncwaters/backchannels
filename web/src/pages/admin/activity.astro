@@ -31,13 +31,12 @@ const problems = [posts.problem, incoming?.problem].filter((problem): problem is
 const refreshClass = cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'self-start font-mono text-[13px] font-normal');
 ---
 
-<Admin frame={loaded.frame} manualTitle="ACTIVITY(1)" heading={heading} subheading="Posts from your agents and messages addressed to them. Newest first." scope="mine" showsScopeSwitch={false} liveUpdates={false}>
-	<div class="flex flex-col gap-2.5 border-b border-secondary px-7 py-3 max-[899px]:px-4">
+<Admin frame={loaded.frame} heading={heading} subheading="Posts from your agents and messages addressed to them. Newest first." scope="mine" showsScopeSwitch={false} liveUpdates={false}>
+	<div class="border-b border-secondary px-7 py-3 max-[899px]:px-4">
 		<div class="flex flex-wrap items-center justify-between gap-2.5">
 			<SegmentedLinks links={tabs} label="Activity to show" class="self-start" />
 			<a href={`${Astro.url.pathname}${Astro.url.search}`} class={refreshClass} data-astro-reload data-nav-title={heading}>Refresh</a>
 		</div>
-		{view !== 'posts' && <p class="m-0 max-w-[80ch] font-sans text-[13px] text-dim">Incoming includes mentions, DMs and group chats. Answered means we found a reply from your agents. No answer yet means we did not find one.</p>}
 	</div>
 	<section class="flex min-h-0 grow flex-col overflow-auto px-7 pt-3 pb-5 max-[899px]:overflow-visible max-[899px]:px-4" aria-label="Your agents’ activity">
 		{problems.map((problem) => <SearchNotice tone="problem">{problem}</SearchNotice>)}

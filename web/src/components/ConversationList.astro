@@ -1,11 +1,9 @@
 ---
-import { adminHref, conversationHref, formatRelative, hiddenConversationsLabel, type buildSidebarGroups } from '../lib/admin/helpers';
+import { adminHref, conversationHref, formatRelative, type buildSidebarGroups } from '../lib/admin/helpers';
 import type { DirectoryKind, Scope } from '../lib/admin/types';
-import { buttonVariants } from '../lib/components/ui/button';
 import PrivacyMarker from '../lib/components/admin/directory/PrivacyMarker.svelte';
 import UnreadBadge from '../lib/components/admin/directory/UnreadBadge.svelte';
 import { conversationLabel, messagesTodayLabel, privacyMarkerFor } from '../lib/components/admin/directory/conversation-labels';
-import { cn } from '../lib/utils';
 import { conversationPreviewText } from '../lib/admin/emoji';
 import { messageCountText } from '../lib/admin/message-count';
 
@@ -20,7 +18,7 @@ interface Props {
 
 const { groups, nowMs, scope, selectedConversation, directoryKind, viewerEmail } = Astro.props;
 const rowClass = 'conversation group flex min-w-0 flex-col px-2.5 py-[5px] text-foreground no-underline shadow-[inset_0_0_0_var(--color-amber)] outline-none hover:bg-secondary focus-visible:bg-secondary focus-visible:shadow-[inset_0_0_0_1px_var(--color-amber)] aria-[current=page]:bg-secondary aria-[current=page]:shadow-[inset_2px_0_0_var(--color-amber)]';
-const browseClass = cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'mx-2.5 mt-1 self-start bg-transparent font-mono text-[13px] font-normal text-foreground dark:bg-transparent aria-[current=page]:border-amber aria-[current=page]:text-amber');
+const browseClass = 'whitespace-nowrap text-dim no-underline tabular-nums transition-colors duration-150 hover:text-amber focus-visible:text-amber aria-[current=page]:text-amber';
 ---
 
 <nav aria-label="Conversations" data-live="sidebar" class="flex grow flex-col gap-3.5 overflow-auto px-1.5 pt-2.5 pb-3.5 max-[899px]:overflow-visible">
@@ -28,7 +26,13 @@ const browseClass = cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'mx-2
 		<section class="flex min-w-0 flex-col gap-0.5">
 			<div class="flex items-baseline justify-between gap-2 px-2 pb-1.5 text-xs text-dim">
 				<h2 class="m-0 text-[length:inherit] font-normal tracking-[0.08em]">{group.title}</h2>
-				<span class="whitespace-nowrap tabular-nums">{group.conversations.length} of {group.total}</span>
+				<a
+					class={browseClass}
+					href={adminHref(`/admin/browse/${group.kind}`, scope)}
+					aria-current={directoryKind === group.kind ? 'page' : undefined}
+					aria-label={group.kind === 'public' ? `Browse all ${group.total} channels` : `Browse all ${group.total} private chats`}
+					data-nav-title={group.kind === 'public' ? 'All public channels' : 'Your private chats'}
+				>All {group.total} →</a>
 			</div>
 			{group.conversations.map((conversation) => {
 				const label = conversationLabel(conversation, viewerEmail);
@@ -60,15 +64,6 @@ const browseClass = cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'mx-2
 					</a>
 				);
 			})}
-			<div class="flex items-center gap-2">
-				<a
-					class={browseClass}
-					href={adminHref(`/admin/browse/${group.kind}`, scope)}
-					aria-current={directoryKind === group.kind ? 'page' : undefined}
-					data-nav-title={group.kind === 'public' ? 'All public channels' : 'Your private chats'}
-				>Browse all</a>
-				{group.hiddenCount > 0 && <span class="mt-1 text-xs text-amber tabular-nums">{hiddenConversationsLabel(group.kind, group.hiddenCount)}</span>}
-			</div>
 		</section>
 	))}
 </nav>

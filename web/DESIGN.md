@@ -307,7 +307,7 @@ Order activity newest first. The three views are All activity, My agents’ post
 
 Incoming rows show **Answered** when the check finds an owned reply. **No answer yet** means the check did not find one. The visible key states this distinction. Neither label states task completion.
 
-The excerpt opens the original message. Incoming rows also provide **Open message** and, when found, a direct reply link. Links preserve the conversation or thread context.
+The excerpt opens the original message. Incoming rows also provide a direct reply link when one is found. Links preserve the conversation or thread context.
 
 The combined view shows recent results. Separate posts and incoming views provide links to older activity and back to newest activity. Empty and error states use the existing notice pattern.
 
