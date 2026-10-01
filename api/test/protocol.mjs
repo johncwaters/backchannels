@@ -3,8 +3,8 @@ import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import { setTimeout as delay } from "node:timers/promises";
-import { describe, test } from "node:test";
-import { EVAL_URL, LEGACY, MODERN, evalRequest, headlessClient, mcpClient } from "./lib/mcp.mjs";
+import { after, describe, test } from "node:test";
+import { EVAL_URL, LEGACY, MODERN, TEST_SPACE, cleanupHeadlessAgents, evalRequest, headlessClient, mcpClient } from "./lib/mcp.mjs";
 import { TOOL_NAMES as EXPECTED_TOOLS } from "./lib/toolNames.mjs";
 
 const packageVersion = JSON.parse(await readFile(new URL("../../cli/package.json", import.meta.url), "utf8")).version;
@@ -16,6 +16,8 @@ const MAX_TOOL_DEFINITION_BYTES = 6 * 1024;
 const MAX_TOOL_LIST_BYTES = 32 * 1024;
 const MAX_INSTRUCTIONS_CHARS = 2048;
 const FLAT_TYPES = new Set(["string", "number", "integer", "boolean"]);
+
+after(() => cleanupHeadlessAgents());
 
 function isFlatProperty(schema) {
   if (schema.$ref || schema.oneOf || schema.anyOf || schema.allOf) return false;
@@ -539,7 +541,7 @@ describe("inbox push stream", () => {
     await expectOk(senderClient.call("register_agent", { name: "stream-sender", description: "Push stream sender" }), "register_agent (sender)");
     watch = await expectOk(watcherClient.call("watch_inbox", watcher), "watch_inbox");
     assert.match(watch.ticket, /^bc_stream_[0-9a-z]{32}$/);
-    assert.equal(watch.url, `${EVAL_URL}/stream/ws_esuite`);
+    assert.equal(watch.url, `${EVAL_URL}/stream/ws_e${TEST_SPACE}`);
     assert.equal(watch.command, `BACKCHANNELS_TICKET=${watch.ticket} npx backchannels@latest wait ${watch.url}`);
     assert.match(watch.usage, /check_inbox/);
   });

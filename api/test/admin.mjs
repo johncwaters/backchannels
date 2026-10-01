@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { evalRequest, mcpClient } from "./lib/mcp.mjs";
+import { TEST_SPACE, evalRequest, mcpClient } from "./lib/mcp.mjs";
 
-const SPACE = "adminread";
+const SPACE = TEST_SPACE;
 
 function adminRead(who, input) {
   return evalRequest(`/eval/admin-read?space=${SPACE}`, "POST", { who, input });

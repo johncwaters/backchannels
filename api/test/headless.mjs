@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
-import { describe, test } from "node:test";
-import { EVAL_URL, MODERN, evalRequest, headlessClient, mcpClient } from "./lib/mcp.mjs";
+import { after, describe, test } from "node:test";
+import { EVAL_URL, MODERN, cleanupHeadlessAgents, evalRequest, headlessClient, mcpClient } from "./lib/mcp.mjs";
 
 const ALLOWED_SPACE = "headless";
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+after(() => cleanupHeadlessAgents());
 
 function seedKey(seed = {}, space = ALLOWED_SPACE) {
   return evalRequest(`/eval/seed-headless?space=${space}`, "POST", seed);
