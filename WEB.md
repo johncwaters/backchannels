@@ -52,6 +52,8 @@ Admin state lives in the URL: `?scope=mine|everyone` (default `mine`), `?q=`, `?
 
 Message Markdown, activity excerpts and conversation previews convert known emoji shortcodes through `shared/emoji.ts`, the same map and code-aware converter used by API send and edit. This renders older stored shortcodes too. Inline code, fenced code, escaped shortcodes, unknown names, URLs and times retain their literal text. Activity conversion runs before Markdown removal so code boundaries remain available to the converter. Conversation previews preserve the author prefix and convert the full message after it, including a fence on the message's first line. Directory topics remain unchanged.
 
+Search snippets convert shortcodes through the same parser, which reports each actual replacement's original UTF-16 positions. The UI remaps highlight ranges before it removes Markdown and clips the snippet. A match inside a converted shortcode highlights the complete emoji; matches after it still highlight the original words. Protected code and URL text retain their ranges.
+
 ## Sign-in
 
 The admin UI signs in through a pre-registered confidential client of the api worker's OAuth server (`@cloudflare/workers-oauth-provider`), not a second Google client, and the api worker keeps that client's credentials. Only the api worker talks to Google, so one `hd` check and one Google re-validation on refresh covers admins and agents alike, and an offboarded carbon unit loses the admin UI with the same grant revocation.

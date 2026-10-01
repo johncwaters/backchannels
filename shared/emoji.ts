@@ -3,6 +3,14 @@ import { nameToEmoji } from "gemoji";
 const FENCE_LINE = /^([ \t]{0,3}(?:>[ \t]{0,3})*)((?:[-+*]|\d+[.)]) )?(`{3,}|~{3,})([^\r\n]*)\r?\n?$/;
 const INLINE_TOKEN = /https?:\/\/[^\s<>`]+|`+|:[a-z0-9_+-]+:/g;
 
+export interface EmojiShortcodeReplacement {
+  start: number;
+  end: number;
+  emoji: string;
+}
+
+type RecordReplacement = (replacement: EmojiShortcodeReplacement) => void;
+
 export function emojiForShortcode(shortcode: string): string | null {
   return Object.hasOwn(nameToEmoji, shortcode) ? nameToEmoji[shortcode] : null;
 }
@@ -13,7 +21,7 @@ function isEscaped(text: string, index: number): boolean {
   return slashes % 2 === 1;
 }
 
-function replaceInlineShortcodes(text: string): string {
+function replaceInlineShortcodes(text: string, sourceOffset: number, recordReplacement?: RecordReplacement): string {
   const tokens = [...text.matchAll(INLINE_TOKEN)];
   const nextBacktick = new Map<number, number>();
   const closingBacktick = new Map<number, number>();
@@ -37,6 +45,7 @@ function replaceInlineShortcodes(text: string): string {
     if (!token[0].startsWith(":")) continue;
     const emoji = emojiForShortcode(token[0].slice(1, -1));
     if (emoji === null) continue;
+    recordReplacement?.({ start: sourceOffset + token.index, end: sourceOffset + token.index + token[0].length, emoji });
     parts.push(text.slice(consumed, token.index), emoji);
     consumed = token.index + token[0].length;
   }
@@ -44,7 +53,7 @@ function replaceInlineShortcodes(text: string): string {
   return parts.join("");
 }
 
-export function replaceEmojiShortcodes(text: string): string {
+export function replaceEmojiShortcodes(text: string, recordReplacement?: RecordReplacement): string {
   const parts: string[] = [];
   let fence: { marker: string; quoteDepth: number } | undefined;
   let offset = 0;
@@ -66,11 +75,17 @@ export function replaceEmojiShortcodes(text: string): string {
         proseStart = offset + line.length;
       }
     } else if (match && (match[3][0] !== "`" || !match[4].includes("`"))) {
-      parts.push(replaceInlineShortcodes(text.slice(proseStart, offset)), line);
+      parts.push(replaceInlineShortcodes(text.slice(proseStart, offset), proseStart, recordReplacement), line);
       fence = { marker: match[3], quoteDepth };
     }
     offset += line.length;
   }
-  if (!fence) parts.push(replaceInlineShortcodes(text.slice(proseStart)));
+  if (!fence) parts.push(replaceInlineShortcodes(text.slice(proseStart), proseStart, recordReplacement));
   return parts.join("");
+}
+
+export function replaceEmojiShortcodesWithPositions(text: string): { text: string; replacements: EmojiShortcodeReplacement[] } {
+  const replacements: EmojiShortcodeReplacement[] = [];
+  const converted = replaceEmojiShortcodes(text, (replacement) => replacements.push(replacement));
+  return { text: converted, replacements };
 }

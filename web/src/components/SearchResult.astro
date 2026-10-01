@@ -3,6 +3,7 @@ import MessageIdentity from './MessageIdentity.astro';
 import { Badge } from '../lib/components/ui/badge';
 import { dayLabel, formatClockTime, highlightSegments, messageHref, plainSnippetText, replyCountLabel, snippetAround } from '../lib/admin/helpers';
 import type { Scope, SearchMatch } from '../lib/admin/types';
+import { searchEmojiText } from '../lib/admin/emoji';
 
 interface Props {
 	match: SearchMatch;
@@ -12,7 +13,8 @@ interface Props {
 
 const { match, scope, nowMs } = Astro.props;
 const { message, conversation } = match;
-const snippet = snippetAround(plainSnippetText(message.text), match.ranges);
+const converted = searchEmojiText(message.text, match.ranges);
+const snippet = snippetAround(plainSnippetText(converted.text), converted.ranges);
 const segments = highlightSegments(snippet.text, snippet.ranges);
 const threadNote = message.threadRootSeq ? 'reply in a thread' : message.threadReplies > 0 ? replyCountLabel(message.threadReplies) : null;
 const fileCount = message.files.length;
