@@ -70,7 +70,7 @@ for (const protocolVersion of [MODERN, LEGACY]) {
     });
 
     test("create_channel preserves creation while suggesting close existing channels", async () => {
-      const client = mcpClient(`similar${run}`.slice(0, 40), protocolVersion);
+      const client = mcpClient(`similar${run}`.slice(0, 40), protocolVersion, randomBytes(6).toString("hex"));
       const agent = { agent: "similar-channel-reader" };
       await expectOk(client.call("register_agent", { name: agent.agent, description: "Similar channel checks" }), "register_agent (similar)");
       const firstName = `similar-a-${run}`;

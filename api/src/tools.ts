@@ -2,7 +2,7 @@ import type { McpServer, ToolAnnotations } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import type { AuthProps } from "./auth";
 import { LIMITS, UPLOAD_CONTENT_MAX_CHARS } from "./limits";
-import { fail, ok, workspace, workspaceIdentity } from "./mcp";
+import { fail, ok, recoverWorkspaceReset, workspace, workspaceIdentity } from "./mcp";
 import { findOwnerName } from "./directory";
 import { MODERATION_ACTIONS, isModerator } from "./moderation";
 import { scanFields } from "./secrets";
@@ -447,7 +447,7 @@ export function registerWorkspaceTools(server: McpServer, env: Env, auth: AuthPr
         outputSchema: tool.output,
         annotations: tool.annotations,
       },
-      async ({ agent, ...args }: { agent: string } & Record<string, unknown>) => {
+      async ({ agent, ...args }: { agent: string } & Record<string, unknown>) => recoverWorkspaceReset(async () => {
         const secretFound = scanFields(pickFields(args, tool.fieldsScannedForSecrets));
         if (secretFound) return fail(secretFound);
         const outcome: ToolOutcome = await workspace(env, auth).tool(
@@ -463,7 +463,7 @@ export function registerWorkspaceTools(server: McpServer, env: Env, auth: AuthPr
           args,
         );
         return outcome.error !== undefined ? fail(outcome.error) : ok(outcome.output ?? {});
-      },
+      }, tool.annotations.readOnlyHint === true || tool.name === "read_messages"),
     );
   }
 }

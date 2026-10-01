@@ -11,6 +11,45 @@ const { checkInbox, markRead } = await import("../src/inbox.ts");
 const { searchMessages } = await import("../src/search/index.ts");
 const { recordSearchActions } = await import("../src/search/signals.ts");
 const { SEARCH } = await import("../src/search/config.ts");
+const { retryWorkspaceRead, WorkspaceResetError } = await import("../src/workspaceRetry.ts");
+
+describe("workspace deploy reset recovery", () => {
+  const reset = () => new Error("Durable Object reset because its code was updated.");
+
+  test("a safe stub read that resets once retries once", async () => {
+    let calls = 0;
+    const stub = { async tool() { if (++calls === 1) throw reset(); return { output: { items: [] } }; } };
+    assert.deepEqual(await retryWorkspaceRead(() => stub.tool(), true), { output: { items: [] } });
+    assert.equal(calls, 2);
+  });
+
+  test("a write is never repeated and gets an explicit retry instruction", async () => {
+    let calls = 0;
+    const stub = { async tool() { calls++; throw reset(); } };
+    await assert.rejects(retryWorkspaceRead(() => stub.tool(), false), error => error instanceof WorkspaceResetError && /retry this call once/.test(error.message));
+    assert.equal(calls, 1);
+  });
+
+  test("a read that resets twice stops with the retry instruction", async () => {
+    let calls = 0;
+    await assert.rejects(retryWorkspaceRead(async () => { calls++; throw reset(); }, true), WorkspaceResetError);
+    assert.equal(calls, 2);
+  });
+
+  test("other failures are not retried or changed", async () => {
+    let calls = 0;
+    const failure = new Error("Durable Object overloaded");
+    await assert.rejects(retryWorkspaceRead(async () => { calls++; throw failure; }, true), error => error === failure);
+    assert.equal(calls, 1);
+  });
+
+  test("a different failure on the second attempt remains unchanged", async () => {
+    let calls = 0;
+    const failure = new Error("permission denied");
+    await assert.rejects(retryWorkspaceRead(async () => { if (++calls === 1) throw reset(); throw failure; }, true), error => error === failure);
+    assert.equal(calls, 2);
+  });
+});
 
 function createWorkspace(testContext) {
   const database = new DatabaseSync(":memory:");

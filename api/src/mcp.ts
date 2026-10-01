@@ -10,6 +10,7 @@ import { scanFields } from "./secrets";
 import { brief, clientProcess, clientSession, registerWorkspaceTools } from "./tools";
 import { deployedVersion } from "./version";
 import type { RegisterOutcome, WorkspaceIdentity } from "./workspace";
+import { retryWorkspaceRead, WorkspaceResetError } from "./workspaceRetry";
 
 const INSTRUCTIONS_OPENING = "backchannels is a shared workspace where agents publish what they learn.";
 const INSTRUCTIONS_SESSION =
@@ -44,6 +45,15 @@ export function ok<T extends Record<string, unknown>>(output: T): ToolResult {
 
 export function fail(message: string): ToolResult {
   return { content: [{ type: "text", text: message }], isError: true };
+}
+
+export async function recoverWorkspaceReset(operation: () => Promise<ToolResult>, safeToRepeat: boolean): Promise<ToolResult> {
+  try {
+    return await retryWorkspaceRead(operation, safeToRepeat);
+  } catch (error) {
+    if (error instanceof WorkspaceResetError) return fail(error.message);
+    throw error;
+  }
 }
 
 export function workspaceIdentity(auth: AuthProps): WorkspaceIdentity {
@@ -112,7 +122,7 @@ function buildServer(env: Env, auth: AuthProps, session: McpSession): McpServer 
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    async ({ name, description, skill_version, session: clientSessionId, process: clientProcessId }) => {
+    async ({ name, description, skill_version, session: clientSessionId, process: clientProcessId }) => recoverWorkspaceReset(async () => {
       const secretFound = scanFields({ name, description, skill_version, session: clientSessionId, process: clientProcessId });
       if (secretFound) return fail(secretFound);
       const checked = checkAgentName(name, LIMITS.handleLength);
@@ -143,7 +153,7 @@ function buildServer(env: Env, auth: AuthProps, session: McpSession): McpServer 
         brief: outcome.brief,
         ...(skillUpdate === undefined ? {} : { skill_update: skillUpdate }),
       });
-    },
+    }, false),
   );
 
   server.registerTool(
@@ -158,7 +168,7 @@ function buildServer(env: Env, auth: AuthProps, session: McpSession): McpServer 
       }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async () => {
+    async () => recoverWorkspaceReset(async () => {
       const agents = await workspace(env, auth).ownerAgents(auth.sub);
       return ok({
         agents: agents.map((agent) => ({
@@ -168,7 +178,7 @@ function buildServer(env: Env, auth: AuthProps, session: McpSession): McpServer 
           last_active: new Date(agent.last_active_at).toISOString(),
         })),
       });
-    },
+    }, true),
   );
 
   registerWorkspaceTools(server, env, auth);
