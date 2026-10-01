@@ -18,21 +18,21 @@ def page(width, height, css, svg):
             f'<svg viewBox="0 0 {width} {height}" preserveAspectRatio="xMidYMid meet">{svg}</svg></body></html>')
 
 
-def sequence():
+def handoff():
     cycle, width, height = 22, 1664, 640
     x = {"A": 200, "S": 832, "B": 1464}
     css, svg = [], []
-    for key, label, color in (("A", "Ian's agent", PURPLE), ("S", "backchannels", AMBER), ("B", "John's agent", BLUE)):
+    for key, label, color in (("A", "Ian's agents", PURPLE), ("S", "backchannels", AMBER), ("B", "John's agents", BLUE)):
         svg.append(f'<line x1="{x[key]}" y1="84" x2="{x[key]}" y2="630" stroke="{LINE}" stroke-width="2" stroke-dasharray="6 8"/>')
         svg.append(f'<rect id="h{key}" x="{x[key]-170}" y="4" width="340" height="72" fill="{INK}" stroke="{color}" stroke-width="3"/>')
         svg.append(f'<text x="{x[key]}" y="51" font-size="32" fill="{color}" text-anchor="middle">{label}</text>')
     steps = [
-        ("A", "S", "posts the root cause"),
-        ("B", "S", "searches in plain English"),
-        ("S", "B", "Ian's post comes back first"),
-        ("B", "S", "private chat: a follow-up"),
-        ("S", "A", "watch_inbox wakes Ian's agent"),
-        ("A", "B", "answers in the chat"),
+        ("A", "S", "repro: wait hides a lost socket"),
+        ("S", "B", "forwarded to the owner's agent"),
+        ("B", "S", "fix shipped as 0.1.9"),
+        ("B", "S", "6 of 16 drops were deploys"),
+        ("A", "S", "deploy log confirms every drop"),
+        ("A", "B", "approves the resume fix, ships it"),
     ]
     starts = [1 + 3 * i for i in range(len(steps))]
     end = starts[-1] + 4
@@ -55,10 +55,10 @@ def sequence():
                    f'<polygon class="l{i}" points="{head}" fill="{TEXT}"/>'
                    f'<text class="l{i}" x="{(x1 + x2) / 2}" y="{y - 18}" font-size="32" fill="{TEXT}" text-anchor="middle">{label}</text>'
                    f'<circle class="p{i}" cx="{x1}" cy="{y}" r="11" fill="{AMBER}"/></g>')
-    wake = starts[4] + .9
-    css.append(keyframes("wake", cycle, [(0, f"stroke:{PURPLE};stroke-width:3"), (wake, f"stroke:{PURPLE};stroke-width:3"), (wake + .2, f"stroke:{AMBER};stroke-width:8"),
-                                         (wake + 1.2, f"stroke:{PURPLE};stroke-width:3"), (cycle, f"stroke:{PURPLE};stroke-width:3")]))
-    css.append(f"#hA{{animation:wake {cycle}s linear infinite}}")
+    wake = starts[1] + .9
+    css.append(keyframes("wake", cycle, [(0, f"stroke:{BLUE};stroke-width:3"), (wake, f"stroke:{BLUE};stroke-width:3"), (wake + .2, f"stroke:{AMBER};stroke-width:8"),
+                                         (wake + 1.2, f"stroke:{BLUE};stroke-width:3"), (cycle, f"stroke:{BLUE};stroke-width:3")]))
+    css.append(f"#hB{{animation:wake {cycle}s linear infinite}}")
     return page(width, height, "".join(css) + f"text{{paint-order:stroke;stroke:{PANEL};stroke-width:10px;stroke-linejoin:round}}", "".join(svg))
 
 
@@ -90,7 +90,7 @@ def listen():
     width, height, cycle = 1664, 600, 19
     gate_x, card_width, card_height, start_y = 960, 440, 72, 264
     cards = [("@mention", True), ("#general chatter", False), ("private chat", True),
-             ("reply in your thread", True), ("muted channel", False), ("keyword: hogli", True)]
+             ("reply in your thread", True), ("muted channel", False), ("keyword: deploy", True)]
     css, svg = [], []
     svg.append(f'<line x1="{gate_x}" y1="40" x2="{gate_x}" y2="560" stroke="{AMBER}" stroke-width="3" stroke-dasharray="10 10"/>')
     svg.append(f'<text x="{gate_x + 20}" y="40" font-size="32" fill="{AMBER}">its rules</text>')
@@ -133,11 +133,11 @@ def listen():
 def search():
     width, height, cycle = 1664, 680, 17
     css, svg = [], []
-    query = "local login blank after hogli sync"
+    query = "web build can't find a font after pull"
     svg.append(f'<rect x="232" y="0" width="1200" height="80" fill="{PANEL}" stroke="{LINE}" stroke-width="2"/>')
     svg.append(f'<text x="268" y="53" font-size="34" fill="{TEXT}">“{query}”</text>')
     css.append(keyframes("type", cycle, [(0, "transform:scaleX(1)"), (.4, "transform:scaleX(1)"), (2.4, "transform:scaleX(0)"), (15.6, "transform:scaleX(0)"), (16, "transform:scaleX(1)"), (cycle, "transform:scaleX(1)")])
-               + f"#mask{{transform-box:fill-box;transform-origin:right;animation:type {cycle}s steps(36,end) infinite}}")
+               + f"#mask{{transform-box:fill-box;transform-origin:right;animation:type {cycle}s steps({len(query) + 2},end) infinite}}")
     svg.append(f'<rect id="mask" x="250" y="10" width="1170" height="60" fill="{PANEL}"/>')
 
     def appear(name, at, until=15.6):
@@ -164,7 +164,7 @@ def search():
                    + f".{name}{{animation:{name} {cycle}s ease-in-out infinite}}")
         is_answer = item == 0
         fill = AMBER if is_answer else LINE
-        text = '<text x="24" y="35" font-size="30" fill="%s">Ian\'s agent: the root cause</text>' % INK if is_answer else ""
+        text = '<text x="24" y="35" font-size="30" fill="%s">Ian\'s agent: run pnpm install first</text>' % INK if is_answer else ""
         svg.append(f'<g class="{name}"><rect width="{widths[item] if not is_answer else 1000}" height="48" fill="{fill}"/>{text}{labels[item]}</g>')
     svg.append("</g>")
     signals = ["who you work with", "your channels", "recency", "engagement"]
