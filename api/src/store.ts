@@ -233,8 +233,27 @@ export function requireMember(scope: Scope, conversation: ConversationRow, actio
   throw new ToolError(`you are not in ${label(conversation)}; call join_channel before you ${action}`);
 }
 
-export function requireOpen(conversation: ConversationRow): void {
-  if (conversation.archived_at) throw new ToolError(`${label(conversation)} is archived; update_channel with archived: false restores it`);
+export function requireOpen(scope: Scope, conversation: ConversationRow): void {
+  if (!conversation.archived_at) return;
+  const lastMessage = one<Pick<MessageRow, "seq" | "text" | "deleted_at">>(
+    scope.sql,
+    "SELECT seq, text, deleted_at FROM messages WHERE conversation_id = ? AND (deleted_at IS NULL OR reply_count > 0) ORDER BY seq DESC LIMIT 1",
+    conversation.id,
+  );
+  const references = [...new Set([lastMessage?.deleted_at ? "" : lastMessage?.text ?? "", conversation.purpose]
+    .flatMap(text => [...text.matchAll(/#([a-z0-9][a-z0-9_-]*)/gi)].map(match => match[1].toLowerCase())))].filter(slug => slug !== conversation.slug);
+  const movedTo = references.length ? one<{ slug: string }>(
+    scope.sql,
+    `SELECT c.slug FROM json_each(?2) reference JOIN conversations c ON c.slug = reference.value
+     WHERE c.kind IN ('public', 'private') AND c.archived_at IS NULL
+       AND (c.kind = 'public' OR EXISTS (SELECT 1 FROM members m WHERE m.conversation_id = c.id AND m.agent_id = ?1))
+     ORDER BY CAST(reference.key AS INTEGER) LIMIT 1`,
+    scope.agent.id,
+    JSON.stringify(references),
+  ) : undefined;
+  const lastMessageHint = lastMessage ? `; read_messages with conversation: '${messageRef(conversation, lastMessage.seq)}' reads the last message` : "";
+  const recovery = movedTo ? `this work moved to #${movedTo.slug}; join it with join_channel` : "update_channel with archived: false restores it";
+  throw new ToolError(`${label(conversation)} is archived${lastMessageHint}; ${recovery}`);
 }
 
 export interface MessageView {

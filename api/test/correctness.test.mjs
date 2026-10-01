@@ -4,7 +4,8 @@ import { describe, test } from "node:test";
 import { MIGRATIONS } from "../src/schema.ts";
 
 const { buildBrief } = await import("../src/brief.ts");
-const { leaveChannel } = await import("../src/conversations.ts");
+const { inviteToChannel, joinChannel, leaveChannel, updateChannel } = await import("../src/conversations.ts");
+const { requireOpen } = await import("../src/store.ts");
 const { lookup } = await import("../src/agents.ts");
 const { deleteMessage, editMessage, keywordMatcher, pin, react, readMessages, sendMessage } = await import("../src/messages.ts");
 const { checkInbox, markRead } = await import("../src/inbox.ts");
@@ -148,6 +149,74 @@ describe("brief visibility and follows", () => {
     database.prepare("INSERT INTO thread_follows (agent_id, root_id, state) VALUES ('reader', ?, 'on'), ('reader', ?, 'off'), ('writer', ?, 'auto')").run(leftRoot, keptRoot, leftRoot);
     assert.equal(leaveChannel(scopeFor("reader"), { channel: "#left" }).left, true);
     assert.deepEqual(database.prepare("SELECT agent_id, root_id FROM thread_follows ORDER BY agent_id").all().map((row) => [row.agent_id, row.root_id]), [["reader", keptRoot], ["writer", leftRoot]]);
+  });
+});
+
+describe("archived channel recovery", () => {
+  test("posts, invites and updates name the last message and the visible move target", testContext => {
+    const { database, scopeFor, createConversation, addMessage } = createWorkspace(testContext);
+    const archivedId = createConversation("old-room");
+    createConversation("new-room");
+    createConversation("purpose-room");
+    addMessage(archivedId, 1, { text: "Early message" });
+    addMessage(archivedId, 2, { text: "This work moved to #new-room." });
+    database.prepare("UPDATE conversations SET archived_at = 1, purpose = 'Earlier destination #purpose-room' WHERE id = ?").run(archivedId);
+    const beforeMembers = database.prepare("SELECT count(*) AS n FROM members").get().n;
+    const scope = scopeFor("reader");
+    for (const operation of [
+      () => sendMessage(scope, { to: "#old-room", text: "New post" }),
+      () => inviteToChannel(scope, { channel: "#old-room", agents: ["@owner/writer"] }),
+      () => updateChannel(scope, { channel: "#old-room", topic: "New topic" }),
+    ]) {
+      assert.throws(operation, error => /#old-room is archived/.test(error.message)
+        && /conversation: 'old-room\/2'/.test(error.message)
+        && /this work moved to #new-room; join it/.test(error.message)
+        && !error.message.includes("#purpose-room"));
+    }
+    assert.equal(database.prepare("SELECT count(*) AS n FROM members").get().n, beforeMembers);
+    assert.equal(database.prepare("SELECT count(*) AS n FROM messages").get().n, 2);
+    assert.equal(database.prepare("SELECT topic FROM conversations WHERE id = ?").get(archivedId).topic, "");
+    assert.equal(updateChannel(scope, { channel: "#old-room", archived: false }).archived, false);
+    assert.ok(sendMessage(scope, { to: "#old-room", text: "Restored post" }).message);
+  });
+
+  test("purpose fallback skips missing, archived and hidden private destinations", testContext => {
+    const { database, scopeFor, createConversation, addMessage } = createWorkspace(testContext);
+    const archivedId = createConversation("old-room");
+    const alsoArchivedId = createConversation("also-old");
+    createConversation("hidden-room", "private", ["writer"]);
+    createConversation("live-room");
+    addMessage(archivedId, 1, { text: "Use #missing-room, #also-old or #hidden-room." });
+    database.prepare("UPDATE conversations SET archived_at = 1 WHERE id IN (?, ?)").run(archivedId, alsoArchivedId);
+    database.prepare("UPDATE conversations SET purpose = 'Work continues in #LIVE-ROOM' WHERE id = ?").run(archivedId);
+    const conversation = database.prepare("SELECT * FROM conversations WHERE id = ?").get(archivedId);
+    assert.throws(() => requireOpen(scopeFor("reader"), conversation), error => error.message.includes("this work moved to #live-room")
+      && !error.message.includes("hidden-room") && !error.message.includes("also-old") && !error.message.includes("missing-room"));
+  });
+
+  test("empty and deleted-only channels keep a restoration hint without an invalid message ID", testContext => {
+    const { database, scopeFor, createConversation, addMessage } = createWorkspace(testContext);
+    const archivedId = createConversation("old-room");
+    database.prepare("UPDATE conversations SET archived_at = 1 WHERE id = ?").run(archivedId);
+    const conversation = database.prepare("SELECT * FROM conversations WHERE id = ?").get(archivedId);
+    assert.throws(() => requireOpen(scopeFor("reader"), conversation), /^Error: #old-room is archived; update_channel with archived: false restores it$/);
+    const messageId = addMessage(archivedId, 1, { text: "Deleted #hidden-room directive" });
+    database.prepare("UPDATE messages SET deleted_at = 1 WHERE id = ?").run(messageId);
+    assert.throws(() => requireOpen(scopeFor("reader"), conversation), error => !error.message.includes("conversation:") && /archived: false/.test(error.message));
+  });
+
+  test("public nonmembers receive archive recovery and readable private destinations qualify", testContext => {
+    const { database, scopeFor, createConversation, addMessage } = createWorkspace(testContext);
+    const archivedId = createConversation("old-room", "public", ["writer"]);
+    createConversation("member-room", "private");
+    addMessage(archivedId, 1, { text: "Use #member-room now." });
+    database.prepare("UPDATE conversations SET archived_at = 1 WHERE id = ?").run(archivedId);
+    for (const operation of [
+      () => sendMessage(scopeFor("reader"), { to: "#old-room", text: "Post" }),
+      () => inviteToChannel(scopeFor("reader"), { channel: "#old-room", agents: ["@owner/writer"] }),
+      () => updateChannel(scopeFor("reader"), { channel: "#old-room", purpose: "Change" }),
+      () => joinChannel(scopeFor("reader"), { channel: "#old-room" }),
+    ]) assert.throws(operation, /this work moved to #member-room; join it/);
   });
 });
 

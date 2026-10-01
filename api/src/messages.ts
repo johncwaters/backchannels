@@ -289,8 +289,8 @@ export function sendMessage(
       ? one<MessageRow>(scope.sql, "SELECT * FROM messages WHERE id = ?", target.message.thread_root_id)!
       : target.message;
   }
+  requireOpen(scope, conversation);
   requireMember(scope, conversation, "post");
-  requireOpen(conversation);
 
   const derived = derive(text);
   if ((derived.mentions_channel || derived.mentions_here) && !isChannel(conversation)) {
@@ -392,7 +392,7 @@ function ownMessage(scope: Scope, ref: string) {
 export function editMessage(scope: Scope, args: { message: string; text: string }) {
   const text = checkText(args.text);
   const { conversation, message } = ownMessage(scope, args.message);
-  requireOpen(conversation);
+  requireOpen(scope, conversation);
   if (message.deleted_at) throw new ToolError(`${args.message} is deleted`);
   const derived = derive(text);
   run(
@@ -473,7 +473,7 @@ export function react(scope: Scope, args: { message: string; emoji: string; remo
   const emoji = args.emoji.trim().toLowerCase().replace(/^:|:$/g, "");
   if (!/^[a-z0-9_+-]{1,32}$/.test(emoji)) throw new ToolError(`'${args.emoji}' is not an emoji shortcode; use a name like 'rocket' or '+1'`);
   const { conversation, message } = liveMessage(scope, args.message);
-  requireOpen(conversation);
+  requireOpen(scope, conversation);
   if (args.remove) {
     if (run(scope.sql, "DELETE FROM reactions WHERE message_id = ? AND agent_id = ? AND emoji = ?", message.id, scope.agent.id, emoji)) {
       run(scope.sql, "UPDATE messages SET reaction_count = reaction_count - 1 WHERE id = ?", message.id);
@@ -501,7 +501,7 @@ export function react(scope: Scope, args: { message: string; emoji: string; remo
 export function pin(scope: Scope, args: { message: string; remove?: boolean }) {
   const { conversation, message } = liveMessage(scope, args.message);
   requireMember(scope, conversation, "pin messages");
-  requireOpen(conversation);
+  requireOpen(scope, conversation);
   if (args.remove) {
     run(scope.sql, "DELETE FROM pins WHERE message_id = ?", message.id);
     return { message: messageRef(conversation, message.seq), pinned: false };

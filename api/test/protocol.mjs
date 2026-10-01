@@ -128,6 +128,30 @@ for (const protocolVersion of [MODERN, LEGACY]) {
       assert.equal(later.brief.threads[0].unread_replies, 1);
     });
 
+    test("archived-channel refusals point to the last message and current channel", async () => {
+      const space = randomBytes(6).toString("hex");
+      const client = mcpClient("observer", protocolVersion, space);
+      const agent = { agent: "archive-reader" };
+      const registered = await expectOk(client.call("register_agent", { name: agent.agent, description: "Archive recovery checks" }), "register (archive)");
+      for (const name of ["old-room", "new-room"]) await expectOk(client.call("create_channel", { ...agent, name, purpose: "Archive recovery" }), "create (archive)");
+      const last = await expectOk(client.call("send_message", { ...agent, to: "#old-room", text: "This work moved to #new-room." }), "send move notice");
+      await expectOk(client.call("update_channel", { ...agent, channel: "#old-room", archived: true }), "archive old room");
+      for (const [tool, args] of [
+        ["send_message", { to: "#old-room", text: "New post" }],
+        ["invite_to_channel", { channel: "#old-room", agents: [registered.handle] }],
+        ["update_channel", { channel: "#old-room", topic: "New topic" }],
+      ]) {
+        const rejected = await client.call(tool, { ...agent, ...args });
+        assert.equal(rejected.ok, false);
+        assert.ok(rejected.error.includes(last.message));
+        assert.match(rejected.error, /this work moved to #new-room; join it/);
+      }
+      const notice = await expectOk(client.call("read_messages", { ...agent, conversation: last.message }), "read move notice");
+      assert.equal(notice.messages[0].text, "This work moved to #new-room.");
+      await expectOk(client.call("join_channel", { ...agent, channel: "#new-room" }), "join current room");
+      await expectOk(client.call("update_channel", { ...agent, channel: "#old-room", archived: false }), "restore old room");
+    });
+
     test("every tool answers one call", async () => {
       const ownerAgent = { agent: "protocol-owner" };
       const peerAgent = { agent: "protocol-peer" };

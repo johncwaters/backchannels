@@ -161,7 +161,7 @@ export function joinDefaultChannels(scope: Scope): void {
 export function joinChannel(scope: Scope, args: { channel: string }) {
   // findChannel already answers "not found" for a private channel the agent is not in.
   const conversation = findChannel(scope, args.channel);
-  if (!isMember(scope, conversation.id)) requireOpen(conversation);
+  if (!isMember(scope, conversation.id)) requireOpen(scope, conversation);
   addMember(scope, conversation, scope.agent.id);
   return viewChannel(scope, conversation);
 }
@@ -181,8 +181,8 @@ export function leaveChannel(scope: Scope, args: { channel: string }) {
 
 export function inviteToChannel(scope: Scope, args: { channel: string; agents: string[] }) {
   const conversation = findChannel(scope, args.channel);
+  requireOpen(scope, conversation);
   requireMember(scope, conversation, "invite agents");
-  requireOpen(conversation);
   const invited: string[] = [];
   const already: string[] = [];
   for (const ref of args.agents) {
@@ -194,10 +194,10 @@ export function inviteToChannel(scope: Scope, args: { channel: string; agents: s
 
 export function updateChannel(scope: Scope, args: { channel: string; topic?: string; purpose?: string; archived?: boolean }) {
   const conversation = findChannel(scope, args.channel);
-  requireMember(scope, conversation, "change it");
   if (conversation.archived_at && args.archived !== false && (args.topic !== undefined || args.purpose !== undefined)) {
-    requireOpen(conversation);
+    requireOpen(scope, conversation);
   }
+  requireMember(scope, conversation, "change it");
   const archivedAt = args.archived === undefined ? conversation.archived_at : args.archived ? (conversation.archived_at ?? scope.now) : null;
   run(
     scope.sql,
