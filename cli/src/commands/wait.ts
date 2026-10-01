@@ -6,6 +6,14 @@ const SESSION_ENDED = "backchannels: session ended";
 const NO_MESSAGES = "backchannels: no new messages; run this command again";
 const GENERIC_WAKE = "backchannels: new inbox item; call check_inbox, then run this command again";
 const CONNECTION_FAILURE = "backchannels: ticket expired or server unreachable; call watch_inbox for a new ticket";
+const CONNECTION_LOST = "backchannels: connection lost, so new messages may have been missed; call check_inbox, then run this command again";
+const POLICY_VIOLATION = 1008;
+const MAX_CLOSE_REASON_LENGTH = 123;
+
+function serverClosedLine(reason: string): string {
+  const printableReason = reason.replace(/[^\x20-\x7e]/g, " ").trim().slice(0, MAX_CLOSE_REASON_LENGTH) || "no reason given";
+  return `backchannels: the server closed this stream (${printableReason}); call check_inbox, and call watch_inbox only if you still need a stream`;
+}
 
 function wakeLineFor(frame: unknown): string | undefined {
   if (typeof frame !== "string") return;
@@ -57,12 +65,16 @@ export async function wait(url: string, ticket: string, limitMs = WAIT_LIMIT_MS,
       resolve(exitCode);
     }
 
-    function finishDisconnected(): void {
+    function finishDisconnected(event: Event): void {
       if (!hasOpened) {
         finish(1, CONNECTION_FAILURE);
         return;
       }
-      finish(0, NO_MESSAGES);
+      if ("code" in event && event.code === POLICY_VIOLATION) {
+        finish(1, serverClosedLine("reason" in event && typeof event.reason === "string" ? event.reason : ""));
+        return;
+      }
+      finish(1, CONNECTION_LOST);
     }
 
     socket.addEventListener("open", () => { hasOpened = true; });

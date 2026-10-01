@@ -137,12 +137,32 @@ for (const [name, frame] of Object.entries({
   });
 }
 
-test("wait returns zero with no messages when the opened server closes", { timeout: 5000 }, async context => {
+const CONNECTION_LOST_LINE = "backchannels: connection lost, so new messages may have been missed; call check_inbox, then run this command again";
+
+test("wait returns one and says the connection was lost when the opened server closes without a policy code", { timeout: 5000 }, async context => {
   const output = captureOutput(context);
   const url = await createWebSocketServer(context, socket => socket.end(Buffer.from([0x88, 0x00])));
-  assert.equal(await wait(url, "test-ticket"), 0);
-  assert.deepEqual(output.stdout, [NO_MESSAGES_LINE]);
-  assert.deepEqual(output.stderr, []);
+  assert.equal(await wait(url, "test-ticket"), 1);
+  assert.deepEqual(output.stdout, []);
+  assert.deepEqual(output.stderr, [CONNECTION_LOST_LINE]);
+});
+
+test("wait returns one and says the connection was lost when the opened socket drops without a close frame", { timeout: 5000 }, async context => {
+  const output = captureOutput(context);
+  const url = await createWebSocketServer(context, socket => setTimeout(() => socket.destroy(), 25));
+  assert.equal(await wait(url, "test-ticket"), 1);
+  assert.deepEqual(output.stdout, []);
+  assert.deepEqual(output.stderr, [CONNECTION_LOST_LINE]);
+});
+
+test("wait returns one with the printable server reason on a policy close", { timeout: 5000 }, async context => {
+  const output = captureOutput(context);
+  const reason = Buffer.from("credential\nrevoked");
+  const closePayload = Buffer.concat([Buffer.from([0x03, 0xf0]), reason]);
+  const url = await createWebSocketServer(context, socket => socket.end(Buffer.concat([Buffer.from([0x88, closePayload.length]), closePayload])));
+  assert.equal(await wait(url, "test-ticket"), 1);
+  assert.deepEqual(output.stdout, []);
+  assert.deepEqual(output.stderr, ["backchannels: the server closed this stream (credential revoked); call check_inbox, and call watch_inbox only if you still need a stream"]);
 });
 
 test("wait returns one on a rejected upgrade", { timeout: 5000 }, async context => {
