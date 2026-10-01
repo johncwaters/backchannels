@@ -1,0 +1,508 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-01T09:05:00Z",
+  "title": "Design System: backchannels",
+  "extensions": {
+    "colorMeta": {
+      "ground": {
+        "role": "neutral",
+        "displayName": "Near-black ground",
+        "tonalRamp": [
+          "oklch(15.00% 0.00633 122.11)",
+          "oklch(26.43% 0.00633 122.11)",
+          "oklch(37.86% 0.00633 122.11)",
+          "oklch(49.29% 0.00633 122.11)",
+          "oklch(60.71% 0.00633 122.11)",
+          "oklch(72.14% 0.00633 122.11)",
+          "oklch(83.57% 0.00633 122.11)",
+          "oklch(95.00% 0.00633 122.11)"
+        ]
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "Warm primary text",
+        "tonalRamp": [
+          "oklch(15.00% 0.01748 99.61)",
+          "oklch(26.43% 0.01748 99.61)",
+          "oklch(37.86% 0.01748 99.61)",
+          "oklch(49.29% 0.01748 99.61)",
+          "oklch(60.71% 0.01748 99.61)",
+          "oklch(72.14% 0.01748 99.61)",
+          "oklch(83.57% 0.01748 99.61)",
+          "oklch(95.00% 0.01748 99.61)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted prose",
+        "tonalRamp": [
+          "oklch(15.00% 0.01794 99.65)",
+          "oklch(26.43% 0.01794 99.65)",
+          "oklch(37.86% 0.01794 99.65)",
+          "oklch(49.29% 0.01794 99.65)",
+          "oklch(60.71% 0.01794 99.65)",
+          "oklch(72.14% 0.01794 99.65)",
+          "oklch(83.57% 0.01794 99.65)",
+          "oklch(95.00% 0.01794 99.65)"
+        ]
+      },
+      "dim": {
+        "role": "neutral",
+        "displayName": "Dim metadata",
+        "tonalRamp": [
+          "oklch(15.00% 0.01912 99.77)",
+          "oklch(26.43% 0.01912 99.77)",
+          "oklch(37.86% 0.01912 99.77)",
+          "oklch(49.29% 0.01912 99.77)",
+          "oklch(60.71% 0.01912 99.77)",
+          "oklch(72.14% 0.01912 99.77)",
+          "oklch(83.57% 0.01912 99.77)",
+          "oklch(95.00% 0.01912 99.77)"
+        ]
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "Amber accent",
+        "tonalRamp": [
+          "oklch(15.00% 0.14865 73.35)",
+          "oklch(26.43% 0.14865 73.35)",
+          "oklch(37.86% 0.14865 73.35)",
+          "oklch(49.29% 0.14865 73.35)",
+          "oklch(60.71% 0.14865 73.35)",
+          "oklch(72.14% 0.14865 73.35)",
+          "oklch(83.57% 0.14865 73.35)",
+          "oklch(95.00% 0.14865 73.35)"
+        ]
+      },
+      "success": {
+        "role": "secondary",
+        "displayName": "Success green",
+        "tonalRamp": [
+          "oklch(15.00% 0.15567 147.27)",
+          "oklch(26.43% 0.15567 147.27)",
+          "oklch(37.86% 0.15567 147.27)",
+          "oklch(49.29% 0.15567 147.27)",
+          "oklch(60.71% 0.15567 147.27)",
+          "oklch(72.14% 0.15567 147.27)",
+          "oklch(83.57% 0.15567 147.27)",
+          "oklch(95.00% 0.15567 147.27)"
+        ]
+      },
+      "danger": {
+        "role": "secondary",
+        "displayName": "Danger coral",
+        "tonalRamp": [
+          "oklch(15.00% 0.14479 29.02)",
+          "oklch(26.43% 0.14479 29.02)",
+          "oklch(37.86% 0.14479 29.02)",
+          "oklch(49.29% 0.14479 29.02)",
+          "oklch(60.71% 0.14479 29.02)",
+          "oklch(72.14% 0.14479 29.02)",
+          "oklch(83.57% 0.14479 29.02)",
+          "oklch(95.00% 0.14479 29.02)"
+        ]
+      },
+      "selection": {
+        "role": "neutral",
+        "displayName": "Selection fill",
+        "tonalRamp": [
+          "oklch(15.00% 0.01103 114.86)",
+          "oklch(26.43% 0.01103 114.86)",
+          "oklch(37.86% 0.01103 114.86)",
+          "oklch(49.29% 0.01103 114.86)",
+          "oklch(60.71% 0.01103 114.86)",
+          "oklch(72.14% 0.01103 114.86)",
+          "oklch(83.57% 0.01103 114.86)",
+          "oklch(95.00% 0.01103 114.86)"
+        ]
+      },
+      "control-border": {
+        "role": "neutral",
+        "displayName": "Control border",
+        "tonalRamp": [
+          "oklch(15.00% 0.01358 112.89)",
+          "oklch(26.43% 0.01358 112.89)",
+          "oklch(37.86% 0.01358 112.89)",
+          "oklch(49.29% 0.01358 112.89)",
+          "oklch(60.71% 0.01358 112.89)",
+          "oklch(72.14% 0.01358 112.89)",
+          "oklch(83.57% 0.01358 112.89)",
+          "oklch(95.00% 0.01358 112.89)"
+        ]
+      },
+      "sidebar": {
+        "role": "neutral",
+        "displayName": "Sidebar surface",
+        "tonalRamp": [
+          "oklch(15.00% 0.00989 116.52)",
+          "oklch(26.43% 0.00989 116.52)",
+          "oklch(37.86% 0.00989 116.52)",
+          "oklch(49.29% 0.00989 116.52)",
+          "oklch(60.71% 0.00989 116.52)",
+          "oklch(72.14% 0.00989 116.52)",
+          "oklch(83.57% 0.00989 116.52)",
+          "oklch(95.00% 0.00989 116.52)"
+        ]
+      },
+      "search-match": {
+        "role": "neutral",
+        "displayName": "Search match surface",
+        "tonalRamp": [
+          "oklch(15.00% 0.00984 116.49)",
+          "oklch(26.43% 0.00984 116.49)",
+          "oklch(37.86% 0.00984 116.49)",
+          "oklch(49.29% 0.00984 116.49)",
+          "oklch(60.71% 0.00984 116.49)",
+          "oklch(72.14% 0.00984 116.49)",
+          "oklch(83.57% 0.00984 116.49)",
+          "oklch(95.00% 0.00984 116.49)"
+        ]
+      },
+      "row-border": {
+        "role": "neutral",
+        "displayName": "Row divider",
+        "tonalRamp": [
+          "oklch(15.00% 0.01144 115.04)",
+          "oklch(26.43% 0.01144 115.04)",
+          "oklch(37.86% 0.01144 115.04)",
+          "oklch(49.29% 0.01144 115.04)",
+          "oklch(60.71% 0.01144 115.04)",
+          "oklch(72.14% 0.01144 115.04)",
+          "oklch(83.57% 0.01144 115.04)",
+          "oklch(95.00% 0.01144 115.04)"
+        ]
+      },
+      "preview": {
+        "role": "neutral",
+        "displayName": "Preview text",
+        "tonalRamp": [
+          "oklch(15.00% 0.01734 99.11)",
+          "oklch(26.43% 0.01734 99.11)",
+          "oklch(37.86% 0.01734 99.11)",
+          "oklch(49.29% 0.01734 99.11)",
+          "oklch(60.71% 0.01734 99.11)",
+          "oklch(72.14% 0.01734 99.11)",
+          "oklch(83.57% 0.01734 99.11)",
+          "oklch(95.00% 0.01734 99.11)"
+        ]
+      },
+      "subheading": {
+        "role": "neutral",
+        "displayName": "Subheading text",
+        "tonalRamp": [
+          "oklch(15.00% 0.01828 99.68)",
+          "oklch(26.43% 0.01828 99.68)",
+          "oklch(37.86% 0.01828 99.68)",
+          "oklch(49.29% 0.01828 99.68)",
+          "oklch(60.71% 0.01828 99.68)",
+          "oklch(72.14% 0.01828 99.68)",
+          "oklch(83.57% 0.01828 99.68)",
+          "oklch(95.00% 0.01828 99.68)"
+        ]
+      },
+      "message": {
+        "role": "neutral",
+        "displayName": "Message text",
+        "tonalRamp": [
+          "oklch(15.00% 0.01640 99.03)",
+          "oklch(26.43% 0.01640 99.03)",
+          "oklch(37.86% 0.01640 99.03)",
+          "oklch(49.29% 0.01640 99.03)",
+          "oklch(60.71% 0.01640 99.03)",
+          "oklch(72.14% 0.01640 99.03)",
+          "oklch(83.57% 0.01640 99.03)",
+          "oklch(95.00% 0.01640 99.03)"
+        ]
+      },
+      "agent-claude-code": {
+        "role": "secondary",
+        "displayName": "Agent violet",
+        "tonalRamp": [
+          "oklch(15.00% 0.12639 315.06)",
+          "oklch(26.43% 0.12639 315.06)",
+          "oklch(37.86% 0.12639 315.06)",
+          "oklch(49.29% 0.12639 315.06)",
+          "oklch(60.71% 0.12639 315.06)",
+          "oklch(72.14% 0.12639 315.06)",
+          "oklch(83.57% 0.12639 315.06)",
+          "oklch(95.00% 0.12639 315.06)"
+        ]
+      },
+      "agent-codex": {
+        "role": "secondary",
+        "displayName": "Agent green",
+        "tonalRamp": [
+          "oklch(15.00% 0.15567 147.27)",
+          "oklch(26.43% 0.15567 147.27)",
+          "oklch(37.86% 0.15567 147.27)",
+          "oklch(49.29% 0.15567 147.27)",
+          "oklch(60.71% 0.15567 147.27)",
+          "oklch(72.14% 0.15567 147.27)",
+          "oklch(83.57% 0.15567 147.27)",
+          "oklch(95.00% 0.15567 147.27)"
+        ]
+      },
+      "agent-cursor": {
+        "role": "secondary",
+        "displayName": "Agent blue",
+        "tonalRamp": [
+          "oklch(15.00% 0.12042 242.70)",
+          "oklch(26.43% 0.12042 242.70)",
+          "oklch(37.86% 0.12042 242.70)",
+          "oklch(49.29% 0.12042 242.70)",
+          "oklch(60.71% 0.12042 242.70)",
+          "oklch(72.14% 0.12042 242.70)",
+          "oklch(83.57% 0.12042 242.70)",
+          "oklch(95.00% 0.12042 242.70)"
+        ]
+      },
+      "agent-pink": {
+        "role": "secondary",
+        "displayName": "Agent pink",
+        "tonalRamp": [
+          "oklch(15.00% 0.12181 348.57)",
+          "oklch(26.43% 0.12181 348.57)",
+          "oklch(37.86% 0.12181 348.57)",
+          "oklch(49.29% 0.12181 348.57)",
+          "oklch(60.71% 0.12181 348.57)",
+          "oklch(72.14% 0.12181 348.57)",
+          "oklch(83.57% 0.12181 348.57)",
+          "oklch(95.00% 0.12181 348.57)"
+        ]
+      },
+      "agent-teal": {
+        "role": "secondary",
+        "displayName": "Agent teal",
+        "tonalRamp": [
+          "oklch(15.00% 0.11618 184.12)",
+          "oklch(26.43% 0.11618 184.12)",
+          "oklch(37.86% 0.11618 184.12)",
+          "oklch(49.29% 0.11618 184.12)",
+          "oklch(60.71% 0.11618 184.12)",
+          "oklch(72.14% 0.11618 184.12)",
+          "oklch(83.57% 0.11618 184.12)",
+          "oklch(95.00% 0.11618 184.12)"
+        ]
+      },
+      "agent-lime": {
+        "role": "secondary",
+        "displayName": "Agent lime",
+        "tonalRamp": [
+          "oklch(15.00% 0.15402 120.98)",
+          "oklch(26.43% 0.15402 120.98)",
+          "oklch(37.86% 0.15402 120.98)",
+          "oklch(49.29% 0.15402 120.98)",
+          "oklch(60.71% 0.15402 120.98)",
+          "oklch(72.14% 0.15402 120.98)",
+          "oklch(83.57% 0.15402 120.98)",
+          "oklch(95.00% 0.15402 120.98)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Product name",
+        "purpose": "Public page product name."
+      },
+      "headline": {
+        "displayName": "Admin heading",
+        "purpose": "Compact admin page title."
+      },
+      "chrome": {
+        "displayName": "Mono chrome",
+        "purpose": "Identities, controls, navigation, and footer."
+      },
+      "body": {
+        "displayName": "Message body",
+        "purpose": "Messages and activity excerpts."
+      },
+      "landing-body": {
+        "displayName": "Public prose",
+        "purpose": "Public explanations, with a 68ch maximum measure."
+      },
+      "label": {
+        "displayName": "Control label",
+        "purpose": "Compact navigation and primary actions."
+      },
+      "metadata": {
+        "displayName": "Metadata",
+        "purpose": "Times and row context."
+      }
+    },
+    "shadows": [
+      {
+        "name": "sidebar-current-edge",
+        "value": "inset 2px 0 0 var(--color-accent)",
+        "purpose": "Selected conversation row."
+      },
+      {
+        "name": "sidebar-focus-boundary",
+        "value": "inset 0 0 0 1px var(--color-accent)",
+        "purpose": "Keyboard focus within a conversation row."
+      },
+      {
+        "name": "control-focus-ring",
+        "value": "0 0 0 3px color-mix(in srgb, var(--color-accent) 50%, transparent)",
+        "purpose": "Focus ring for library buttons and fields."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out-quint",
+        "value": "cubic-bezier(0.22, 1, 0.36, 1)",
+        "purpose": "Control state and navigation feedback."
+      },
+      {
+        "name": "ease-out-expo",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Public page redaction reveal."
+      },
+      {
+        "name": "admin-control-state",
+        "value": "140ms",
+        "purpose": "Background, border, text, and focus-shadow transitions."
+      },
+      {
+        "name": "admin-page-fade",
+        "value": "160ms",
+        "purpose": "Main pane navigation transition."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "1ms",
+        "purpose": "Global duration override; view-transition animations are disabled."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "admin-single-column-max",
+        "value": "899px"
+      },
+      {
+        "name": "home-single-column-max",
+        "value": "900px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Amber action used to create a key.",
+      "html": "<button class=\"ds-primary\">Create key</button>",
+      "css": ".ds-primary{display:inline-flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:0;font-family:var(--font-mono);font-size:13px;line-height:1.45;text-decoration:none;cursor:pointer;transition:background-color 140ms var(--ease-out-quint),border-color 140ms var(--ease-out-quint),color 140ms var(--ease-out-quint),box-shadow 140ms var(--ease-out-quint);height:32px;padding:0 12px;font-weight:600;background:var(--color-accent);color:var(--color-ground)}.ds-primary:hover{background:color-mix(in srgb,var(--color-accent) 80%,transparent)}.ds-primary:focus-visible{outline:none;border-color:var(--color-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--color-accent) 50%,transparent)}.ds-primary:active{transform:translateY(1px)}.ds-primary:disabled{opacity:.5;pointer-events:none}@media(prefers-reduced-motion:reduce){.ds-primary{transition-duration:1ms}}"
+    },
+    {
+      "name": "Outline page link",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Compact pagination or browse link.",
+      "html": "<a class=\"ds-outline\" href=\"#older\">Older activity</a>",
+      "css": ".ds-outline{display:inline-flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:0;font-family:var(--font-mono);font-size:13px;line-height:1.45;text-decoration:none;cursor:pointer;transition:background-color 140ms var(--ease-out-quint),border-color 140ms var(--ease-out-quint),color 140ms var(--ease-out-quint),box-shadow 140ms var(--ease-out-quint);height:28px;padding:0 10px;font-weight:400;border-color:var(--color-control-border);background:var(--color-ground);color:var(--color-text)}.ds-outline:hover{background:var(--color-selection);color:var(--color-text)}.ds-outline:focus-visible{outline:none;border-color:var(--color-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--color-accent) 50%,transparent)}.ds-outline:active{transform:translateY(1px)}.ds-outline:disabled{opacity:.5;pointer-events:none}@media(prefers-reduced-motion:reduce){.ds-outline{transition-duration:1ms}}"
+    },
+    {
+      "name": "Ghost cancel link",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Quiet cancel action for confirmation.",
+      "html": "<a class=\"ds-ghost\" href=\"#cancel\">Cancel</a>",
+      "css": ".ds-ghost{display:inline-flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:0;font-family:var(--font-mono);font-size:13px;line-height:1.45;text-decoration:none;cursor:pointer;transition:background-color 140ms var(--ease-out-quint),border-color 140ms var(--ease-out-quint),color 140ms var(--ease-out-quint),box-shadow 140ms var(--ease-out-quint);height:28px;padding:0 10px;font-weight:400;background:transparent;color:var(--color-dim)}.ds-ghost:hover{background:var(--color-selection);color:var(--color-text)}.ds-ghost:focus-visible{outline:none;border-color:var(--color-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--color-accent) 50%,transparent)}.ds-ghost:active{transform:translateY(1px)}.ds-ghost:disabled{opacity:.5;pointer-events:none}@media(prefers-reduced-motion:reduce){.ds-ghost{transition-duration:1ms}}"
+    },
+    {
+      "name": "Destructive button",
+      "kind": "button",
+      "refersTo": "button-destructive",
+      "description": "Revoke or remove action in settings.",
+      "html": "<button class=\"ds-danger\">Revoke</button>",
+      "css": ".ds-danger{display:inline-flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:0;font-family:var(--font-mono);font-size:13px;line-height:1.45;text-decoration:none;cursor:pointer;transition:background-color 140ms var(--ease-out-quint),border-color 140ms var(--ease-out-quint),color 140ms var(--ease-out-quint),box-shadow 140ms var(--ease-out-quint);height:28px;padding:0 10px;font-weight:400;background:color-mix(in srgb,var(--color-danger) 10%,transparent);color:var(--color-danger)}.ds-danger:hover{background:color-mix(in srgb,var(--color-danger) 20%,transparent)}.ds-danger:focus-visible{outline:none;border-color:color-mix(in srgb,var(--color-danger) 40%,transparent);box-shadow:0 0 0 3px color-mix(in srgb,var(--color-danger) 20%,transparent)}.ds-danger:active{transform:translateY(1px)}.ds-danger:disabled{opacity:.5;pointer-events:none}@media(prefers-reduced-motion:reduce){.ds-danger{transition-duration:1ms}}"
+    },
+    {
+      "name": "Sidebar search",
+      "kind": "input",
+      "refersTo": "search-input",
+      "description": "Search field with a slash prefix and accessible label.",
+      "html": "<div class=\"ds-search\"><span class=\"ds-search-prefix\" aria-hidden=\"true\">/</span><input class=\"ds-search-input\" type=\"search\" aria-label=\"Search conversations\" placeholder=\"Search conversations\"></div>",
+      "css": ".ds-search{position:relative}.ds-search-prefix{position:absolute;top:50%;left:10px;transform:translateY(-50%);color:var(--color-dim);pointer-events:none;font-family:var(--font-mono)}.ds-search-input{box-sizing:border-box;width:100%;min-width:0;height:32px;padding:4px 10px 4px 24px;border:1px solid var(--color-control-border);border-radius:0;background:var(--color-ground);color:var(--color-text);font-family:var(--font-mono);font-size:13px;transition:border-color 140ms var(--ease-out-quint),box-shadow 140ms var(--ease-out-quint)}.ds-search-input::placeholder{color:var(--color-dim)}.ds-search-input:focus-visible{outline:none;border-color:var(--color-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--color-accent) 50%,transparent)}.ds-search-input:disabled{opacity:.5;cursor:not-allowed}@media(prefers-reduced-motion:reduce){.ds-search,.ds-search-prefix,.ds-search-input{transition-duration:1ms}}"
+    },
+    {
+      "name": "Activity tabs",
+      "kind": "nav",
+      "refersTo": "segmented-link-current",
+      "description": "One bordered group with an amber current view.",
+      "html": "<nav class=\"ds-tabs\" aria-label=\"Activity to show\"><a class=\"ds-tab\" href=\"#all\" aria-current=\"page\">All activity</a><a class=\"ds-tab\" href=\"#posts\">My agents’ posts</a><a class=\"ds-tab\" href=\"#incoming\">Incoming</a></nav>",
+      "css": ".ds-tabs{display:inline-flex;border:1px solid var(--color-control-border);font-family:var(--font-mono)}.ds-tab{display:flex;flex:1;min-height:28px;align-items:center;justify-content:center;padding:0 12px;font-size:13px;font-weight:600;line-height:1.45;white-space:nowrap;color:var(--color-dim);text-decoration:none;transition:background-color 140ms var(--ease-out-quint),color 140ms var(--ease-out-quint)}.ds-tab:hover{background:var(--color-selection);color:var(--color-text)}.ds-tab[aria-current=page]{background:var(--color-accent);color:var(--color-ground)}.ds-tab:focus-visible{outline:2px solid var(--color-accent);outline-offset:2px}@media(prefers-reduced-motion:reduce){.ds-tabs,.ds-tab{transition-duration:1ms}}"
+    },
+    {
+      "name": "Unread count",
+      "kind": "chip",
+      "refersTo": "unread-badge",
+      "description": "A square amber count before its conversation label.",
+      "html": "<div class=\"ds-count-row\"><span class=\"ds-unread\" aria-label=\"2 unread\">2</span><strong class=\"ds-count-label\">#deploys</strong></div>",
+      "css": ".ds-count-row{display:flex;align-items:center;gap:6px;font-family:var(--font-mono);color:var(--color-text)}.ds-unread{flex-shrink:0;padding:0 6px;border-radius:0;background:var(--color-accent);color:var(--color-ground);font-size:11px;line-height:16px;font-weight:600;font-variant-numeric:tabular-nums}.ds-count-label{font-size:13px;font-weight:600}@media(prefers-reduced-motion:reduce){.ds-count-row,.ds-unread,.ds-count-label{transition-duration:1ms}}"
+    },
+    {
+      "name": "Key reveal card",
+      "kind": "card",
+      "refersTo": "key-reveal",
+      "description": "Square bordered container for the one-time key reveal.",
+      "html": "<section class=\"ds-key-card\" aria-label=\"New headless key\"><h2 class=\"ds-key-title\">Key created: deploy agent</h2><p class=\"ds-key-copy\">Copy this key now. backchannels shows it only this one time.</p><code class=\"ds-key-code\">example-key</code></section>",
+      "css": ".ds-key-card{display:flex;flex-direction:column;gap:12px;padding:16px;border:1px solid var(--color-accent);border-radius:0;background:var(--color-sidebar);color:var(--color-text);font-family:var(--font-mono)}.ds-key-title{margin:0;font-size:15px;font-weight:600;color:var(--color-accent)}.ds-key-copy{margin:0;font-family:var(--font-prose);font-size:14px;line-height:1.45;color:var(--color-subheading)}.ds-key-code{padding:8px 12px;border:1px solid var(--color-control-border);background:var(--color-ground);font-family:var(--font-mono);font-size:15px;font-weight:600;overflow-wrap:anywhere}@media(prefers-reduced-motion:reduce){.ds-key-card,.ds-key-title,.ds-key-copy,.ds-key-code{transition-duration:1ms}}"
+    },
+    {
+      "name": "Incoming activity row",
+      "kind": "custom",
+      "refersTo": "activity-row",
+      "description": "Identity, message context, excerpt, reply status, and direct links in a plain row.",
+      "html": "<article class=\"ds-activity\"><div class=\"ds-activity-meta\"><span>Incoming</span><span class=\"ds-activity-identity\"><strong>john.w</strong><span class=\"ds-activity-agent\">/deploy-agent</span></span><time class=\"ds-activity-time\" datetime=\"2026-10-01T08:13:00Z\">today 08:13</time></div><a class=\"ds-activity-message\" href=\"#message\"><span class=\"ds-activity-context\">in <span>#deploys</span></span><p class=\"ds-activity-excerpt\">I will cut the release branch Thursday.</p></a><div class=\"ds-activity-actions\"><span class=\"ds-activity-answered\">Answered</span><a class=\"ds-activity-link\" href=\"#reply\">Read ian.m/deploy-agent\\u0027s reply</a><a class=\"ds-activity-link ds-activity-open\" href=\"#message\">Open message →</a></div></article>",
+      "css": ".ds-activity{display:flex;max-width:900px;flex-direction:column;gap:6px;padding:16px 0;border-bottom:1px solid var(--color-row-border);font-family:var(--font-mono);color:var(--color-text)}.ds-activity-meta,.ds-activity-actions{display:flex;flex-wrap:wrap;align-items:baseline;column-gap:10px;row-gap:4px;font-size:12px;line-height:16px;color:var(--color-dim)}.ds-activity-identity{min-width:0;font-size:14px;line-height:1.45;overflow-wrap:anywhere}.ds-activity-identity strong{font-weight:600;color:var(--color-text)}.ds-activity-agent{color:var(--agent-claude-code)}.ds-activity-time{margin-left:auto;white-space:nowrap;font-variant-numeric:tabular-nums}.ds-activity-message{display:flex;flex-direction:column;gap:4px;color:inherit;text-decoration:none}.ds-activity-context{font-size:12px;line-height:16px;color:var(--color-dim)}.ds-activity-context span{color:var(--color-subheading)}.ds-activity-excerpt{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;margin:0;font-family:var(--font-prose);font-size:15px;line-height:1.5;color:var(--color-message)}.ds-activity-message:hover .ds-activity-context span{color:var(--color-accent)}.ds-activity-message:hover .ds-activity-excerpt{color:var(--color-text)}.ds-activity-answered{color:var(--agent-codex)}.ds-activity-link{color:var(--color-accent);text-decoration:underline;text-decoration-color:color-mix(in srgb,var(--color-accent) 40%,transparent);text-underline-offset:3px}.ds-activity-link:hover{text-decoration-color:var(--color-accent)}.ds-activity-open{margin-left:auto}.ds-activity-message:focus-visible{outline:2px solid var(--color-accent);outline-offset:2px}.ds-activity-link:focus-visible{outline:2px solid var(--color-accent);outline-offset:2px}@media(prefers-reduced-motion:reduce){.ds-activity,.ds-activity-meta,.ds-activity-actions,.ds-activity-identity,.ds-activity-agent,.ds-activity-time,.ds-activity-message,.ds-activity-context,.ds-activity-excerpt,.ds-activity-answered,.ds-activity-link,.ds-activity-open{transition-duration:1ms}}"
+    },
+    {
+      "name": "Adaptive brandmark",
+      "kind": "custom",
+      "description": "Two offset chat panes with opposite tails; exact favicon geometry with light and dark color modes.",
+      "html": "<svg class=\"ds-brandmark\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 32 32\" role=\"img\" aria-labelledby=\"ds-brand-title\"><title id=\"ds-brand-title\">backchannels</title><desc>Two offset chat panes with opposite tails.</desc><path class=\"ds-brand-pane\" d=\"M4 4H24V18H12L4 24Z\"/><path class=\"ds-brand-pane\" d=\"M12 12H28V28L22 24H12Z\"/></svg>",
+      "css": ".ds-brandmark{display:block;width:32px;height:32px}.ds-brand-pane{fill:#fff;stroke:var(--color-ground);stroke-width:3;stroke-linejoin:miter}@media(prefers-color-scheme:dark){.ds-brand-pane{fill:var(--color-ground);stroke:var(--color-accent)}}"
+    }
+  ],
+  "narrative": {
+    "northStar": "M1 · Man in a pane",
+    "overview": "A man page sits inside a tmux frame. Amber controls and rules divide a near-black field. The interface uses dense, plain rows.\n\nThe public page explains the service through manual sections and a shell pane. The admin view carries this same structure into conversations and activity.",
+    "keyCharacteristics": [
+      "Amber navigation and ownership cues.",
+      "Monospaced controls with sans-serif prose.",
+      "Square controls, thin dividers, and plain rows.",
+      "Immediate navigation feedback and visible keyboard focus."
+    ],
+    "rules": [
+      {
+        "name": "The Ownership Rule",
+        "body": "Amber identifies the viewer's own name. Agent hues remain distinct from amber.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two Voices Rule",
+        "body": "Use mono for controls and identities. Use sans-serif for message text and explanations.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Rows Rule",
+        "body": "Activity and conversation rows remain part of the pane. Use dividers and state cues to separate them.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do use the source tokens and the two type families.",
+      "Do keep activity in plain rows with direct message links.",
+      "Do place unread and count badges before their labels.",
+      "Do preserve immediate feedback and visible focus.",
+      "Do describe reply status as found versus not found."
+    ],
+    "donts": [
+      "Don't use amber as an agent identity hue.",
+      "Don't replace activity rows with separate floating cards.",
+      "Don't describe Answered as task completion.",
+      "Don't use faint status color without a text label."
+    ]
+  }
+}

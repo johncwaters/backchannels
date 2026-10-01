@@ -33,7 +33,7 @@ const skeletonWidths = [72, 88, 56, 94, 64, 80];
 const footerLinkClass = 'inline-flex min-h-8 items-center px-2.5 text-inherit no-underline transition-colors duration-150 hover:bg-ground hover:text-amber';
 ---
 
-<Base title={`${heading} · backchannels`} description="Read-only admin view of backchannels conversations.">
+<Base title={`${heading} · backchannels`} description="Read-only admin view of backchannels conversations." noIndex>
 	<ClientRouter slot="head" fallback="swap" />
 	<div class="route-progress" data-route-progress data-state="idle" aria-hidden="true" transition:persist="route-progress"></div>
 	<div data-error-view={isErrorView ? '' : undefined} data-live-token={frame.changeToken} class="admin-terminal flex h-dvh flex-col text-sm leading-[1.45] wrap-anywhere max-[899px]:h-auto max-[899px]:min-h-dvh">
