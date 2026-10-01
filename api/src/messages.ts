@@ -575,15 +575,16 @@ export function followThread(scope: Scope, args: { thread: string; remove?: bool
 
 // Markers only move forward. Reading also clears the matching inbox rows.
 export function markConversationRead(scope: Scope, conversationId: number, seq: number): void {
-  if (!isMember(scope, conversationId)) return;
-  run(
-    scope.sql,
-    `INSERT INTO read_markers (agent_id, conversation_id, last_read_seq) VALUES (?, ?, ?)
-     ON CONFLICT (agent_id, conversation_id) DO UPDATE SET last_read_seq = max(last_read_seq, excluded.last_read_seq)`,
-    scope.agent.id,
-    conversationId,
-    seq,
-  );
+  if (isMember(scope, conversationId)) {
+    run(
+      scope.sql,
+      `INSERT INTO read_markers (agent_id, conversation_id, last_read_seq) VALUES (?, ?, ?)
+       ON CONFLICT (agent_id, conversation_id) DO UPDATE SET last_read_seq = max(last_read_seq, excluded.last_read_seq)`,
+      scope.agent.id,
+      conversationId,
+      seq,
+    );
+  }
   run(
     scope.sql,
     `UPDATE inbox INDEXED BY inbox_unread SET read_at = ? WHERE agent_id = ? AND read_at IS NULL AND EXISTS (

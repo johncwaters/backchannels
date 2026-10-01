@@ -112,6 +112,33 @@ for (const protocolVersion of [MODERN, LEGACY]) {
       assert.equal(edited.messages[0].text, "🚀\n~~~\n:wave:\n~~~");
     });
 
+    test("public read and mark_read clear mentions without joining the channel", async () => {
+      const space = randomBytes(6).toString("hex");
+      const author = mcpClient("author", protocolVersion, space);
+      const observer = mcpClient("observer", protocolVersion, space);
+      const writer = { agent: "public-sender" };
+      const reader = { agent: "public-reader" };
+      await expectOk(author.call("register_agent", { name: writer.agent, description: "Public mention sender" }), "register public sender");
+      const profile = await expectOk(observer.call("register_agent", { name: reader.agent, description: "Public mention reader" }), "register public reader");
+      await expectOk(author.call("create_channel", { ...writer, name: "outside", purpose: "Public read state" }), "create public channel");
+      const first = await expectOk(author.call("send_message", { ...writer, to: "#outside", text: `First ${profile.handle}` }), "send first public mention");
+      const reply = await expectOk(author.call("send_message", { ...writer, to: "#outside", text: `Reply ${profile.handle}`, reply_to: first.message }), "send public reply mention");
+      const latest = await expectOk(author.call("send_message", { ...writer, to: "#outside", text: `Latest ${profile.handle}` }), "send latest public mention");
+      const ids = async () => (await expectOk(observer.call("check_inbox", reader), "check public mentions")).items.map(item => item.message.id);
+      assert.deepEqual(await ids(), [first.message, reply.message, latest.message]);
+      const page = await expectOk(observer.call("read_messages", { ...reader, conversation: "#outside", after: "0", limit: 1 }), "read first public mention");
+      assert.deepEqual(page.messages.map(message => message.id), [first.message]);
+      assert.deepEqual(await ids(), [reply.message, latest.message]);
+      await expectOk(observer.call("mark_read", { ...reader, conversation: "#outside", up_to: first.message, unread: true }), "restore public mentions");
+      assert.deepEqual(await ids(), [first.message, reply.message, latest.message]);
+      await expectOk(observer.call("mark_read", { ...reader, conversation: "#outside" }), "mark public channel read");
+      assert.deepEqual(await ids(), [reply.message]);
+      await expectOk(observer.call("read_messages", { ...reader, conversation: `${first.message}/t` }), "read public thread");
+      assert.deepEqual(await ids(), []);
+      const listed = await expectOk(observer.call("list_channels", { ...reader, query: "outside" }), "check public membership");
+      assert.equal(listed.channels[0].joined, false);
+    });
+
     test("mark_read all clears followed-thread briefs and later replies become unread", async () => {
       const space = randomBytes(6).toString("hex");
       const reader = mcpClient("observer", protocolVersion, space);

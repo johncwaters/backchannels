@@ -541,6 +541,60 @@ describe("message ID boundaries", () => {
   });
 });
 
+describe("nonmember public read state", () => {
+  function fixture(testContext) {
+    const workspace = createWorkspace(testContext);
+    const conversationId = workspace.createConversation("outside", "public", ["writer"]);
+    const writer = workspace.scopeFor("writer");
+    const first = sendMessage(writer, { to: "#outside", text: "First @owner/reader" });
+    const reply = sendMessage(writer, { to: "#outside", text: "Reply @owner/reader", reply_to: first.message });
+    const latest = sendMessage(writer, { to: "#outside", text: "Latest @owner/reader" });
+    return { ...workspace, conversationId, first, reply, latest, reader: workspace.scopeFor("reader") };
+  }
+
+  test("a bounded read clears only the returned channel mention without creating a marker", (testContext) => {
+    const { database, reader, first, reply, latest } = fixture(testContext);
+    assert.equal(checkInbox(reader, {}).items.length, 3);
+    const page = readMessages(reader, { conversation: "#outside", after: "0", limit: 1 });
+    assert.deepEqual(page.messages.map(message => message.id), [first.message]);
+    assert.deepEqual(checkInbox(reader, {}).items.map(item => item.message.id), [reply.message, latest.message]);
+    assert.equal(database.prepare("SELECT count(*) AS n FROM read_markers WHERE agent_id = 'reader'").get().n, 0);
+  });
+
+  test("mark read and unread clear and restore public mentions without membership", (testContext) => {
+    const { database, reader, first, reply, latest } = fixture(testContext);
+    assert.equal(markRead(reader, { conversation: "#outside", up_to: first.message }).read_up_to, first.message);
+    assert.deepEqual(checkInbox(reader, {}).items.map(item => item.message.id), [reply.message, latest.message]);
+    markRead(reader, { conversation: "#outside", up_to: first.message, unread: true });
+    assert.deepEqual(checkInbox(reader, {}).items.map(item => item.message.id), [first.message, reply.message, latest.message]);
+    for (let attempt = 0; attempt < 2; attempt++) markRead(reader, { conversation: "#outside" });
+    assert.deepEqual(checkInbox(reader, {}).items.map(item => item.message.id), [reply.message]);
+    assert.equal(database.prepare("SELECT count(*) AS n FROM read_markers WHERE agent_id = 'reader'").get().n, 0);
+  });
+
+  test("member reads still advance the channel marker", (testContext) => {
+    const { database, reader, conversationId, latest } = fixture(testContext);
+    joinChannel(reader, { channel: "#outside" });
+    readMessages(reader, { conversation: "#outside" });
+    const marker = database.prepare("SELECT last_read_seq FROM read_markers WHERE agent_id = 'reader' AND conversation_id = ?").get(conversationId);
+    assert.equal(marker.last_read_seq, Number(latest.message.split("/")[1]));
+  });
+
+  test("leaving a private channel still refuses reads and retains its hidden inbox state", (testContext) => {
+    const { database, reader, scopeFor, createConversation } = fixture(testContext);
+    const privateId = createConversation("private-read", "private");
+    sendMessage(scopeFor("writer"), { to: "#private-read", text: "Private @owner/reader" });
+    leaveChannel(reader, { channel: "#private-read" });
+    const state = () => database.prepare("SELECT i.read_at FROM inbox i JOIN messages m ON m.id = i.message_id WHERE i.agent_id = 'reader' AND m.conversation_id = ?").all(privateId);
+    const before = state();
+    assert.equal(before.length, 1);
+    assert.throws(() => readMessages(reader, { conversation: "#private-read" }), /not found/);
+    assert.throws(() => markRead(reader, { conversation: "#private-read" }), /not found/);
+    assert.deepEqual(state(), before);
+    assert.ok(checkInbox(reader, {}).items.every(item => item.conversation !== "#private-read"));
+  });
+});
+
 describe("keyword notifications", () => {
   for (const [keyword, text, shouldNotify] of [
     ["api key", "rapi keyboard", false],
