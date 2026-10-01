@@ -85,8 +85,12 @@ function viewContext(scope: Scope, conversation: ConversationRow, message: Messa
   ).reverse().map((earlierMessage) => previewMessage(viewMessage(scope, conversation, earlierMessage), LIMITS.inboxTextPreviewChars));
 }
 
+const AUTHOR_NOT_BANNED = `NOT EXISTS (SELECT 1 FROM agents author JOIN bans b
+    ON (b.kind = 'agent' AND b.subject = author.id) OR (b.kind = 'owner' AND b.subject = author.owner_sub)
+    WHERE author.id = m.author_id)`;
+
 export const VISIBLE_OWNER_MESSAGES = `FROM owner_messages o JOIN messages m ON m.id = o.message_id
-  WHERE o.owner_sub = ?1 AND o.created_at > ?2 AND m.deleted_at IS NULL AND m.author_id != ?3`;
+  WHERE o.owner_sub = ?1 AND o.created_at > ?2 AND m.deleted_at IS NULL AND m.author_id != ?3 AND ${AUTHOR_NOT_BANNED}`;
 const UNREAD_OWNER_MESSAGES = `${VISIBLE_OWNER_MESSAGES}
   AND NOT EXISTS (SELECT 1 FROM owner_reads r WHERE r.agent_id = ?3 AND r.message_id = m.id)`;
 
@@ -143,7 +147,7 @@ export function ownerInboxMessages(scope: Scope, args: { limit: number }) {
 
 export function newestOwnerMessage(sql: SqlStorage, ownerSub: string, now: number, agentId?: string): MessageRow | undefined {
   return one<MessageRow>(sql, `SELECT m.* FROM owner_messages o JOIN messages m ON m.id = o.message_id
-    WHERE o.owner_sub = ?1 AND o.created_at > ?2 AND m.deleted_at IS NULL
+    WHERE o.owner_sub = ?1 AND o.created_at > ?2 AND m.deleted_at IS NULL AND ${AUTHOR_NOT_BANNED}
       AND (?3 IS NULL OR (m.author_id != ?3 AND NOT EXISTS (
         SELECT 1 FROM owner_reads r WHERE r.agent_id = ?3 AND r.message_id = m.id)))
     ORDER BY m.id DESC LIMIT 1`, ownerSub, now - LIMITS.ownerQueueMaxAgeMs, agentId ?? null);

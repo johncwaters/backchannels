@@ -177,6 +177,21 @@ describe("direct owner messages", () => {
     });
   }
 
+  for (const banKind of ["agent", "owner"]) {
+    test(`hides owner messages while their author's ${banKind} is banned`, (context) => {
+      const workspace = createWorkspace(context);
+      const sent = workspace.sendToOwner();
+      const subject = banKind === "agent" ? workspace.agents.author.id : workspace.agents.author.owner_sub;
+      workspace.database.prepare("INSERT INTO bans (kind, subject, owner_sub, label, banned_at, banned_by, reason) VALUES (?, ?, ?, 'author', ?, 'stranger', 'spam')")
+        .run(banKind, subject, workspace.agents.author.owner_sub, workspace.now);
+      assert.equal(checkInbox(workspace.scopeFor("caller"), {}).owner_inbox, undefined);
+      assert.equal(checkInbox(workspace.scopeFor("caller"), {}).counts.owner, undefined);
+      assert.equal(newestOwnerMessage(workspace.sql, workspace.agents.caller.owner_sub, workspace.now, workspace.agents.caller.id), undefined);
+      workspace.database.prepare("DELETE FROM bans WHERE kind = ? AND subject = ?").run(banKind, subject);
+      assert.equal(checkInbox(workspace.scopeFor("caller"), {}).owner_inbox.items[0].message.id, sent.message);
+    });
+  }
+
   test("keeps agent messages in their own inbox", (context) => {
     const workspace = createWorkspace(context);
     const sent = sendMessage(workspace.scopeFor("author"), { to: "@team/sleeper", text: "Private question" });
