@@ -88,7 +88,7 @@ The types live twice, in `api/src/admin.ts` and `web/src/lib/admin/types.ts`, an
 
 ## Components
 
-- `layouts/Admin.astro` footer: shows the web and mcp versions because parallel sessions redeploy both workers; tags come from `scripts/version-tag.mjs`.
+- `layouts/Admin.astro` footer: shows only the workspace name, the live marker and icon links (`FooterLinks.svelte`). The web and mcp versions are in the workspace name's tooltip, because parallel sessions redeploy both workers; tags come from `scripts/version-tag.mjs`. The signed-in email is in the sign-out tooltip.
 
 Astro components render structure; Svelte islands handle input.
 

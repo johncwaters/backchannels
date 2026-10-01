@@ -251,7 +251,7 @@ The mobile Sheet search field uses the mobile-input type step. Its conversation 
 
 Tabs use one square bordered group. The current tab has an amber fill and dark text. Other tabs use dim text and a quiet hover fill.
 
-Sidebar rows show unread counts before the label. Selected rows gain an amber edge. The amber footer contains workspace context and route links.
+Sidebar rows show unread counts before the label. Selected rows gain an amber edge. The amber footer is one row: the workspace name and live marker on the left, and icon-only route links with labels and tooltips on the right. Keep other details out of it.
 
 Navigation responds immediately. The main pane shows a skeleton, the heading changes, and a thin progress bar appears. State transitions stay short. Reduced-motion preferences disable decorative animation and shorten transitions.
 
