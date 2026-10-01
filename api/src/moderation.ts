@@ -2,10 +2,9 @@ import { bumpAdminConversationRevision, bumpAdminPublicRevision } from "./adminR
 import { removeMessage } from "./messages";
 import {
   all,
-  findChannel,
-  findMessage,
   label,
   one,
+  parseMessageRef,
   run,
   ToolError,
   type AgentRow,
@@ -124,7 +123,7 @@ function applyAction(scope: Scope, action: Exclude<ModerationAction, "log">, tar
 }
 
 function deleteAnyMessage(scope: Scope, target: string): ModerationOutcome {
-  const { conversation, message } = findMessage(scope, target);
+  const { conversation, message } = anyMessage(scope, target);
   removeMessage(scope, conversation, message);
   bumpAdminConversationRevision(scope.sql, conversation, scope.agent.owner_sub);
   return { output: { message: target, deleted: true }, endStreamsFor: [] };
@@ -153,8 +152,28 @@ function deleteAgentMessages(scope: Scope, target: string): ModerationOutcome {
   };
 }
 
+function anyConversation(scope: Scope, slug: string): ConversationRow {
+  const conversation = one<ConversationRow>(scope.sql, "SELECT * FROM conversations WHERE slug = ?", slug.trim().toLowerCase().replace(/^#/, ""));
+  if (!conversation) throw new ToolError(`conversation ${slug} not found`);
+  return conversation;
+}
+
+function anyMessage(scope: Scope, target: string): { conversation: ConversationRow; message: MessageRow } {
+  const parsed = parseMessageRef(target);
+  const conversation = anyConversation(scope, parsed.conversation);
+  const message = one<MessageRow>(scope.sql, "SELECT * FROM messages WHERE conversation_id = ? AND seq = ?", conversation.id, parsed.seq);
+  if (!message) throw new ToolError(`message ${target} not found`);
+  return { conversation, message };
+}
+
+function anyChannel(scope: Scope, target: string): ConversationRow {
+  const conversation = anyConversation(scope, target);
+  if (conversation.kind !== "public" && conversation.kind !== "private") throw new ToolError(`${target} is a private chat, not a channel`);
+  return conversation;
+}
+
 function setChannelArchived(scope: Scope, target: string, archived: boolean): ModerationOutcome {
-  const channel = findChannel(scope, target);
+  const channel = anyChannel(scope, target);
   const archivedAt = archived ? (channel.archived_at ?? scope.now) : null;
   run(scope.sql, "UPDATE conversations SET archived_at = ? WHERE id = ?", archivedAt, channel.id);
   bumpAdminConversationRevision(scope.sql, channel, scope.agent.owner_sub);

@@ -128,3 +128,17 @@ test("archive_channel works for a moderator who is not a member", (testContext) 
   moderate(scopeFor("mod-agent"), { action: "archive_channel", target: "#general", reason: "abandoned" });
   assert.ok(database.prepare("SELECT archived_at FROM conversations WHERE slug = 'general'").get().archived_at);
 });
+
+test("a moderator outside a private channel deletes a message there and archives it without reading it", (testContext) => {
+  const { database, scopeFor } = createWorkspace(testContext);
+  const privateId = Number(
+    database.prepare("INSERT INTO conversations (kind, name, slug, created_by, created_at) VALUES ('private', 'hidden', 'hidden', 'rogue', 1)").run().lastInsertRowid,
+  );
+  database.prepare("INSERT INTO members (conversation_id, agent_id, joined_at) VALUES (?, 'rogue', 1)").run(privateId);
+  const sent = sendMessage(scopeFor("rogue"), { to: "#hidden", text: "abuse" });
+  const deleted = moderate(scopeFor("mod-agent"), { action: "delete_message", target: sent.message, reason: "reported abuse" });
+  assert.deepEqual(Object.keys(deleted.output).sort(), ["action", "deleted", "message", "target"]);
+  assert.ok(database.prepare("SELECT deleted_at FROM messages WHERE author_id = 'rogue'").get().deleted_at);
+  moderate(scopeFor("mod-agent"), { action: "archive_channel", target: "#hidden", reason: "abuse channel" });
+  assert.ok(database.prepare("SELECT archived_at FROM conversations WHERE slug = 'hidden'").get().archived_at);
+});
