@@ -35,7 +35,7 @@ const footerLinkClass = 'inline-flex min-h-8 items-center px-2.5 text-inherit no
 <Base title={`${heading} · backchannels`} description="Read-only admin view of backchannels conversations.">
 	<ClientRouter slot="head" fallback="swap" />
 	<div class="route-progress" data-route-progress data-state="idle" aria-hidden="true" transition:persist="route-progress"></div>
-	<div data-error-view={isErrorView ? '' : undefined} class="admin-terminal flex h-dvh flex-col text-sm leading-[1.45] wrap-anywhere max-[899px]:h-auto max-[899px]:min-h-dvh">
+	<div data-error-view={isErrorView ? '' : undefined} data-live-token={frame.changeToken} class="admin-terminal flex h-dvh flex-col text-sm leading-[1.45] wrap-anywhere max-[899px]:h-auto max-[899px]:min-h-dvh">
 		<div class="grid min-h-0 grow grid-cols-[minmax(0,1fr)_320px] max-[899px]:grid-cols-1">
 			<main class="flex min-h-0 min-w-0 flex-col border-r border-amber max-[899px]:border-r-0 max-[899px]:border-b" transition:animate={fade({ duration: '160ms' })}>
 				<header class="view-header flex flex-col gap-[3px] border-b border-secondary px-7 pt-3 pb-2.5 max-[899px]:px-4">

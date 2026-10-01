@@ -7,6 +7,7 @@ export type AdminFailure = Extract<AdminResult<unknown>, { ok: false }>['error']
 export interface AdminApi {
 	viewer(): ReturnType<AdminApiRpc['viewer']>;
 	serverVersion(): ReturnType<AdminApiRpc['serverVersion']>;
+	changeToken(): ReturnType<AdminApiRpc['changeToken']>;
 	listConversations(options: Parameters<AdminApiRpc['listConversations']>[1]): ReturnType<AdminApiRpc['listConversations']>;
 	readConversation(options: Parameters<AdminApiRpc['readConversation']>[1]): ReturnType<AdminApiRpc['readConversation']>;
 	markRead(options: Parameters<AdminApiRpc['markRead']>[1]): ReturnType<AdminApiRpc['markRead']>;
@@ -77,6 +78,7 @@ export async function adminApiFor(context: APIContext): Promise<AdminApi | Respo
 	return {
 		viewer: () => rpc.viewer(accessToken),
 		serverVersion: () => rpc.serverVersion(accessToken),
+		changeToken: () => rpc.changeToken(accessToken),
 		listConversations: (options) => rpc.listConversations(accessToken, options),
 		readConversation: (options) => rpc.readConversation(accessToken, options),
 		markRead: (options) => rpc.markRead(accessToken, options),
@@ -107,6 +109,8 @@ async function mcpVersionOrUnknown(adminApi: AdminApi): Promise<string> {
 export async function loadAdminFrame(context: APIContext, scope: Scope) {
 	const adminApi = await adminApiFor(context);
 	if (adminApi instanceof Response) return adminApi;
+	const changeToken = await adminApi.changeToken();
+	if (!changeToken.ok) return failureResponse(context, changeToken.error);
 	const listSidebarKind = (kind: DirectoryKind) => adminApi.listConversations({ scope, kind, sort: sidebarSortFor(kind, scope) });
 	const showsPrivateChats = sidebarKindsFor(scope).includes('private');
 	const [viewer, mcpVersion, publicListing, privateListing] = await Promise.all([
@@ -125,6 +129,7 @@ export async function loadAdminFrame(context: APIContext, scope: Scope) {
 	};
 	const frame: AdminFrame = {
 		viewer: viewer.value,
+		changeToken: changeToken.value,
 		versions: { web: deployedVersion(env.CF_VERSION_METADATA), mcp: mcpVersion },
 		nowMs,
 		sidebarGroups: buildSidebarGroups(conversationsByKind, publicListing.value.totals, scope, nowMs),
@@ -135,6 +140,7 @@ export async function loadAdminFrame(context: APIContext, scope: Scope) {
 
 export interface AdminFrame {
 	viewer: Viewer;
+	changeToken: string;
 	versions: { web: string; mcp: string };
 	nowMs: number;
 	sidebarGroups: ReturnType<typeof buildSidebarGroups>;

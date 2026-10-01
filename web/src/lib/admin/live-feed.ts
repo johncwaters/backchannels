@@ -13,6 +13,10 @@ interface FreshPage {
 	freshDocument?: Document;
 }
 
+function changeTokenFrom(page: Document): string | undefined {
+	return page.querySelector<HTMLElement>('[data-live-token]')?.dataset.liveToken;
+}
+
 function scrollParentOf(element: HTMLElement): HTMLElement | null {
 	return element.scrollHeight > element.clientHeight ? element : document.scrollingElement as HTMLElement | null;
 }
@@ -112,6 +116,16 @@ async function fetchFreshPage(requestedUrl: string, request: AbortController): P
 	return { outcome: 'reachable', freshDocument: new DOMParser().parseFromString(html, 'text/html') };
 }
 
+async function fetchChangedPage(requestedUrl: string, request: AbortController, previousToken: string | undefined): Promise<FreshPage> {
+	if (previousToken === undefined) return fetchFreshPage(requestedUrl, request);
+	const response = await fetch('/admin/change-token', { headers: { accept: 'application/json' }, credentials: 'same-origin', cache: 'no-store', signal: request.signal }).catch(() => null);
+	const body: unknown = response?.ok && !response.redirected ? await response.json().catch(() => null) : null;
+	if (request.signal.reason === 'navigation') return { outcome: 'cancelled' };
+	if (!body || typeof body !== 'object' || !('token' in body) || typeof body.token !== 'string') return { outcome: 'unreachable' };
+	if (body.token === previousToken) return { outcome: 'reachable' };
+	return fetchFreshPage(requestedUrl, request);
+}
+
 function liveRegionsOnPage(): HTMLElement[] {
 	if (document.querySelector(errorViewSelector)) return [];
 	return [...document.querySelectorAll<HTMLElement>(liveRegionSelector)];
@@ -127,6 +141,7 @@ export function installLiveFeed(): () => void {
 	let inFlightRequest: AbortController | null = null;
 	let hasLastRefreshFailed = false;
 	let savedSidebarScrollTop = 0;
+	let currentChangeToken = changeTokenFrom(document);
 
 	function connectionStatusText(): string {
 		if (document.hidden) return 'paused';
@@ -135,14 +150,14 @@ export function installLiveFeed(): () => void {
 
 	async function refreshLiveRegions(): Promise<void> {
 		const regions = liveRegionsOnPage();
-		if (inFlightRequest || regions.length === 0 || document.hidden) return;
+		if (inFlightRequest || regions.length === 0 || document.hidden || document.documentElement.dataset.loading) return;
 		const requestedUrl = location.href;
 		const request = new AbortController();
 		inFlightRequest = request;
 		const timeout = window.setTimeout(() => request.abort('timeout'), refreshTimeoutMs);
 		const status = liveStatus();
 		if (status) status.dataset.refreshing = '';
-		const freshPage = await fetchFreshPage(requestedUrl, request).finally(() => {
+		const freshPage = await fetchChangedPage(requestedUrl, request, currentChangeToken).finally(() => {
 			window.clearTimeout(timeout);
 			if (inFlightRequest === request) inFlightRequest = null;
 		});
@@ -152,6 +167,7 @@ export function installLiveFeed(): () => void {
 		if (status) status.textContent = connectionStatusText();
 		if (!freshPage.freshDocument || location.href !== requestedUrl) return;
 		applyFreshRegions(regions, freshPage.freshDocument);
+		currentChangeToken = changeTokenFrom(freshPage.freshDocument);
 	}
 
 	function scheduleNextRefresh(): void {
@@ -174,6 +190,7 @@ export function installLiveFeed(): () => void {
 		cancelInFlightRefresh();
 	}, { signal });
 	document.addEventListener('astro:page-load', () => {
+		currentChangeToken = changeTokenFrom(document);
 		openFeedAtReadingPosition();
 		scheduleNextRefresh();
 	}, { signal });

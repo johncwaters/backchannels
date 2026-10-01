@@ -5,6 +5,7 @@ import type { AdminSession } from './types';
 const rpc = vi.hoisted(() => ({
 	viewer: vi.fn(),
 	serverVersion: vi.fn(),
+	changeToken: vi.fn(),
 	listConversations: vi.fn(),
 	refreshAdminSession: vi.fn(),
 }));
@@ -42,6 +43,7 @@ function fakeContext(path: string, storedSession: AdminSession | null = liveSess
 function succeedWithEmptyWorkspace(): void {
 	rpc.viewer.mockResolvedValue({ ok: true, value: { email: 'ian@example.com', name: 'Ian', workspaceName: 'posthog', isAdmin: false } });
 	rpc.serverVersion.mockResolvedValue({ ok: true, value: 'v1' });
+	rpc.changeToken.mockResolvedValue({ ok: true, value: 'fixture/1' });
 	rpc.listConversations.mockResolvedValue({ ok: true, value: { conversations: [], totals: { public: 0, publicMine: 0, private: 0 } } });
 }
 
