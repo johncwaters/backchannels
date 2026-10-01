@@ -156,12 +156,14 @@ export function rerank(scope: Scope, candidates: Ranked[], freeText: string, tun
     ).map((row) => [row.conversation_id, Math.min(1, decayed(row.score, row.updated_at, scope.now) / FEATURES.affinityScale)]),
   );
   const postedIn = new Set(
-    all<{ conversation_id: number }>(
-      scope.sql,
-      "SELECT DISTINCT conversation_id FROM messages WHERE author_id = ? AND conversation_id IN (SELECT value FROM json_each(?))",
-      me,
-      conversationsJson,
-    ).map((row) => row.conversation_id),
+    FEATURES.memberPriorityRequiresPost
+      ? all<{ conversation_id: number }>(
+          scope.sql,
+          "SELECT DISTINCT conversation_id FROM messages WHERE author_id = ? AND conversation_id IN (SELECT value FROM json_each(?))",
+          me,
+          conversationsJson,
+        ).map((row) => row.conversation_id)
+      : [],
   );
   const memberOf = new Set(
     all<{ conversation_id: number }>(
