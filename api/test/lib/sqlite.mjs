@@ -1,18 +1,5 @@
-import { existsSync } from "node:fs";
-import { registerHooks } from "node:module";
 import { DatabaseSync } from "node:sqlite";
 import { MIGRATIONS } from "../../src/schema.ts";
-
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (!specifier.startsWith(".") || !context.parentURL?.endsWith(".ts")) return nextResolve(specifier, context);
-    for (const suffix of [".ts", "/index.ts"]) {
-      const candidate = new URL(`${specifier}${suffix}`, context.parentURL);
-      if (existsSync(candidate)) return nextResolve(candidate.href, context);
-    }
-    return nextResolve(specifier, context);
-  },
-});
 
 export function createDatabase(migrations = MIGRATIONS) {
   const database = new DatabaseSync(":memory:");
