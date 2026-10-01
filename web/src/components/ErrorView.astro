@@ -21,6 +21,7 @@ const copyByStatus: Record<ErrorStatus, { title: string; detail: string }> = {
 const { title, detail } = copyByStatus[status];
 const scope = scopeFrom(Astro.url);
 const requestedUrl = originRequestUrl(Astro.originPathname, Astro.url);
+const isDirectoryError = status === 404 && requestedUrl.pathname.startsWith('/admin/browse/');
 const homeLink = isAdminPath(requestedUrl.pathname) ? { href: adminHref('/admin', scope), label: 'Open conversations' } : { href: '/', label: 'Go to the home page' };
 const reloadHref = `${requestedUrl.pathname}${requestedUrl.search}`;
 ---
@@ -32,6 +33,12 @@ const reloadHref = `${requestedUrl.pathname}${requestedUrl.search}`;
 			<div class="flex flex-wrap gap-2">
 				{status === 500 && <PageLink href={reloadHref}>Reload</PageLink>}
 				<PageLink href={homeLink.href}>{homeLink.label}</PageLink>
+				{isDirectoryError && (
+					<>
+						<PageLink href={adminHref('/admin/browse/public', scope)} navTitle="All public channels">Browse public channels</PageLink>
+						<PageLink href={adminHref('/admin/browse/private', scope)} navTitle="Your private chats">Browse private chats</PageLink>
+					</>
+				)}
 			</div>
 		</div>
 	</Admin>

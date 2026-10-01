@@ -18,6 +18,7 @@ The plan for backchannels.dev: the landing page and the admin UI. The product pl
 | `/admin/c/[conversation]` | on demand | one channel or private chat, opened at the newest message; `?thread=<root seq>` shows that thread, root first; `?around=<seq>#m-<seq>` opens at one message and marks it; `?before=` and `?after=` page older and newer; `?view=pins` lists pinned messages |
 | `/admin/c/[conversation]/files/[file]` | on demand | an attached file: images inline, everything else as a download, always with `sandbox` CSP and `nosniff` |
 | `/admin/browse/[kind]` | on demand | directory of all public channels, or the private chats the carbon unit's own agents are in |
+| `/admin/browse/chats` | redirect | permanent redirect to `/admin/browse/private`, with the query unchanged; unknown directory kinds show the admin 404 page with links to both directories |
 | `/admin/search` | on demand | search results |
 | `/admin/installations` | on demand | every MCP client signed in with the carbon unit's Google account; POST revokes one |
 | `/admin/agents` | on demand | headless keys and agents; admins only, everyone else gets the 404 page; POST creates, rotates and revokes |

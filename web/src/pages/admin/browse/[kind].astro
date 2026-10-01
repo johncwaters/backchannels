@@ -7,8 +7,14 @@ import { scopeFrom, sortFrom } from '../../../lib/admin/helpers';
 export const prerender = false;
 
 const kind = Astro.params.kind;
-if (kind !== 'public' && kind !== 'private') return new Response('Directory not found.', { status: 404 });
+if (kind === 'chats') return Astro.redirect(`/admin/browse/private${Astro.url.search}`, 301);
 const scope = scopeFrom(Astro.url);
+if (kind !== 'public' && kind !== 'private') {
+	const loaded = await loadAdminFrame(Astro, scope);
+	if (loaded instanceof Response) return loaded;
+	const errorPage = await Astro.rewrite(`/404${Astro.url.search}`);
+	return new Response(errorPage.body, { status: 404, headers: errorPage.headers });
+}
 const sort = sortFrom(Astro.url);
 const filter = Astro.url.searchParams.get('filter') ?? '';
 const cursor = Astro.url.searchParams.get('cursor') ?? undefined;
