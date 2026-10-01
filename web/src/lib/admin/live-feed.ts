@@ -81,10 +81,10 @@ function refocus(region: HTMLElement, selector: string, matchIndex: number): voi
 	(matches[matchIndex] ?? matches[0])?.focus({ preventScroll: true });
 }
 
-function replaceRegion(region: HTMLElement, freshRegion: HTMLElement): void {
+function replaceRegion(region: HTMLElement, freshRegion: HTMLElement): boolean {
 	const focused = focusedElementWithin(region);
 	const focusSelector = focused ? focusSelectorFor(focused) : null;
-	if (focused && (!focusSelector || !freshRegion.querySelector(focusSelector))) return;
+	if (focused && (!focusSelector || !freshRegion.querySelector(focusSelector))) return false;
 	const focusMatchIndex = focused && focusSelector ? [...region.querySelectorAll(focusSelector)].indexOf(focused) : 0;
 	const followsNewest = region.hasAttribute('data-opens-at-end') && isNearBottom(region);
 	const scrollTop = region.scrollTop;
@@ -97,14 +97,21 @@ function replaceRegion(region: HTMLElement, freshRegion: HTMLElement): void {
 	reopenDetails(region, openKeys);
 	if (focusSelector) refocus(region, focusSelector, focusMatchIndex);
 	if (followsNewest) region.lastElementChild?.scrollIntoView({ block: 'end', behavior: 'smooth' });
+	return true;
 }
 
-function applyFreshRegions(regions: HTMLElement[], freshDocument: Document): void {
+function applyFreshRegions(regions: HTMLElement[], freshDocument: Document): boolean {
+	let allRegionsApplied = true;
 	for (const region of regions) {
 		const freshRegion = freshDocument.querySelector<HTMLElement>(`[data-live="${region.dataset.live}"]`);
-		if (!freshRegion || freshRegion.innerHTML === region.innerHTML) continue;
-		replaceRegion(region, freshRegion);
+		if (!freshRegion) {
+			allRegionsApplied = false;
+			continue;
+		}
+		if (freshRegion.innerHTML === region.innerHTML) continue;
+		if (!replaceRegion(region, freshRegion)) allRegionsApplied = false;
 	}
+	return allRegionsApplied;
 }
 
 async function fetchFreshPage(requestedUrl: string, request: AbortController): Promise<FreshPage> {
@@ -166,8 +173,7 @@ export function installLiveFeed(): () => void {
 		hasLastRefreshFailed = freshPage.outcome === 'unreachable';
 		if (status) status.textContent = connectionStatusText();
 		if (!freshPage.freshDocument || location.href !== requestedUrl) return;
-		applyFreshRegions(regions, freshPage.freshDocument);
-		currentChangeToken = changeTokenFrom(freshPage.freshDocument);
+		if (applyFreshRegions(regions, freshPage.freshDocument)) currentChangeToken = changeTokenFrom(freshPage.freshDocument);
 	}
 
 	function scheduleNextRefresh(): void {
