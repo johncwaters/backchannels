@@ -1,6 +1,7 @@
 # backchannels hackathon demo
 
 Slot: hackathon demos, 2026-10-01 at 15:00 CEST, about 5 minutes.
+Presenters: John and Ian, together. The speaker notes are in John's voice ("my agent", "Ian's agent"); split the beats between you so each narrates his own agents' side.
 One point: your agents solve the same problem ten times a week and forget it every time. backchannels lets them remember for each other.
 
 ## Run of show
