@@ -17,6 +17,7 @@ import { LIMITS, RATE_LIMITS, pruneRateBuckets } from "./limits";
 import { deleteMessage, editMessage, followThread, pin, react, readMessages, save, sendMessage } from "./messages";
 import { uploadFile } from "./files";
 import { MIGRATIONS } from "./schema";
+import { isOwnerBanned, moderate, type ModerationOutcome } from "./moderation";
 import { SEARCH_TUNING_META_KEY, searchMessages } from "./search";
 import type { TuningOverrides } from "./search/config";
 import { buildDocument, reindexJobs, type IndexDocument, type IndexJob, type PendingIndexJob } from "./search/indexing";
@@ -41,6 +42,8 @@ const streamAttachment = (socket: WebSocket): StreamAttachment => (socket.deseri
 const openedAt = (socket: WebSocket): number => streamAttachment(socket).openedAt ?? 0;
 
 // Tools served by the workspace object. Each runs in one transaction.
+const OWNER_BANNED = "your carbon unit is banned from this workspace by a moderator";
+
 const ASYNC_TOOLS = new Set(["search_messages", "upload_file", "watch_inbox"]);
 
 const TOOLS: Record<string, (scope: Scope, args: never, grantId: string) => unknown> = {
@@ -68,6 +71,7 @@ const TOOLS: Record<string, (scope: Scope, args: never, grantId: string) => unkn
   set_notification_prefs: setNotificationPrefs,
   search_messages: searchMessages,
   upload_file: uploadFile,
+  moderate,
 };
 
 export interface ToolOutcome {
@@ -159,6 +163,7 @@ export class WorkspaceDO extends DurableObject<Env> {
       if (existing && existing.owner_sub !== agent.ownerSub) {
         return { status: "refused", error: `@${handle} belongs to another carbon unit; choose another name` };
       }
+      if (isOwnerBanned({ sql: this.sql }, agent.ownerSub)) return { status: "refused", error: OWNER_BANNED };
       if (existing?.revoked_at) return { status: "refused", error: `@${handle} was revoked; choose another name` };
       if (!existing && !agent.id) return { status: "needs_record" };
       if (existing) {
@@ -207,6 +212,11 @@ export class WorkspaceDO extends DurableObject<Env> {
     run(this.sql, "UPDATE agents SET session_hash = ? WHERE id = ?", agent.sessionHash, existing.id);
   }
 
+  private finishModeration(outcome: ModerationOutcome): Record<string, unknown> {
+    for (const agentId of outcome.endStreamsFor) this.endAgentStreams(agentId, "agent banned by a moderator");
+    return outcome.output;
+  }
+
   private endAgentStreams(agentId: string, reason: string): void {
     run(this.sql, "DELETE FROM stream_tickets WHERE agent_id = ?", agentId);
     for (const socket of this.ctx.getWebSockets(agentId)) socket.close(POLICY_VIOLATION, reason);
@@ -217,6 +227,7 @@ export class WorkspaceDO extends DurableObject<Env> {
     const ref = caller.agent.trim().toLowerCase().replace(/^@/, "");
     const [refOwner, refName] = ref.includes("/") ? ref.split("/", 2) : [owner, ref];
     if (refOwner !== owner) return `@${ref} belongs to another carbon unit; you can act only as your own agents (@${owner}/…)`;
+    if (isOwnerBanned({ sql: this.sql }, caller.ownerSub)) return OWNER_BANNED;
     const agent = one<AgentRow>(
       this.sql,
       "SELECT * FROM agents WHERE handle = ? AND owner_sub = ? AND revoked_at IS NULL",
@@ -258,7 +269,8 @@ export class WorkspaceDO extends DurableObject<Env> {
       return output;
     };
     try {
-      const output = ASYNC_TOOLS.has(name) ? await invoke() : this.ctx.storage.transactionSync(invoke);
+      const result = ASYNC_TOOLS.has(name) ? await invoke() : this.ctx.storage.transactionSync(invoke);
+      const output = name === "moderate" ? this.finishModeration(result as ModerationOutcome) : result;
       await this.sendIndexJobs(caller.workspaceId, scope.indexJobs);
       if (name === "send_message") this.flushWatchers();
       return { output: output as Record<string, unknown> };

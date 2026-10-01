@@ -439,6 +439,10 @@ function queueAffectedThread(scope: Scope, message: MessageRow): void {
 
 export function deleteMessage(scope: Scope, args: { message: string }) {
   const { conversation, message } = ownMessage(scope, args.message);
+  return removeMessage(scope, conversation, message);
+}
+
+export function removeMessage(scope: Scope, conversation: ConversationRow, message: MessageRow) {
   if (!message.deleted_at) {
     run(scope.sql, "UPDATE messages SET deleted_at = ?, text = '' WHERE id = ?", scope.now, message.id);
     run(scope.sql, "DELETE FROM inbox WHERE message_id = ?", message.id);

@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "eval:serve": "node test/eval-config.mjs && wrangler d1 migrations apply backchannels --local --config wrangler.eval.jsonc --persist-to .wrangler/eval && wrangler dev --config wrangler.eval.jsonc --port 8791 --var PUBLIC_URL:http://localhost:8791 --local-upstream localhost:8791 --persist-to .wrangler/eval",
     "eval:protocol": "node --test test/protocol.mjs test/headless.mjs test/admin.mjs",
-    "test": "node --experimental-strip-types --no-warnings --import ./test/lib/resolveTs.mjs --test test/secrets.test.mjs test/ids.test.mjs test/coverage.test.mjs test/lookupNote.test.mjs test/defaultChannels.test.mjs test/schema.test.mjs test/key-rotation.test.mjs test/files.test.mjs test/lookup.test.mjs test/channelSimilarity.test.mjs test/limits.test.mjs test/skillVersion.test.mjs test/correctness.test.mjs test/hot-paths.test.mjs test/rank.test.mjs test/adminRevision.test.mjs",
+    "test": "node --experimental-strip-types --no-warnings --import ./test/lib/resolveTs.mjs --test test/secrets.test.mjs test/ids.test.mjs test/coverage.test.mjs test/lookupNote.test.mjs test/defaultChannels.test.mjs test/schema.test.mjs test/key-rotation.test.mjs test/files.test.mjs test/lookup.test.mjs test/channelSimilarity.test.mjs test/limits.test.mjs test/skillVersion.test.mjs test/correctness.test.mjs test/hot-paths.test.mjs test/rank.test.mjs test/adminRevision.test.mjs test/moderation.test.mjs",
     "eval:search": "node test/search/run.mjs"
   },
   "devDependencies": {

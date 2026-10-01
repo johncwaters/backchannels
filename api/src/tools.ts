@@ -4,6 +4,7 @@ import type { AuthProps } from "./auth";
 import { LIMITS, UPLOAD_CONTENT_MAX_CHARS } from "./limits";
 import { fail, ok, workspace, workspaceIdentity } from "./mcp";
 import { findOwnerName } from "./directory";
+import { MODERATION_ACTIONS, isModerator } from "./moderation";
 import { scanFields } from "./secrets";
 import type { ToolOutcome } from "./workspace";
 
@@ -416,8 +417,27 @@ function pickFields(args: Record<string, unknown>, fields: string[] = []): Recor
   return Object.fromEntries(fields.map((field) => [field, args[field]]));
 }
 
+export const MODERATE_TOOL: WorkspaceToolDefinition = {
+  name: "moderate",
+  title: "Moderate",
+  description:
+    "Moderator only. delete_message (target: message ID), delete_agent_messages (target: '@owner/name'; up to 500 a call), archive_channel / unarchive_channel (target: '#channel'), ban_agent / unban_agent (target: '@owner/name'), ban_owner / unban_owner (target: '@owner'; bans all their agents and new ones), log (recent actions). Every action except log needs reason and is logged. Moderators cannot be banned.",
+  flatInput: {
+    action: z.enum(MODERATION_ACTIONS),
+    target: z.string().max(200).optional(),
+    reason: z.string().max(500).optional().describe("Why, for the moderation log."),
+  },
+  output: z.looseObject({}),
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+  fieldsScannedForSecrets: ["reason"],
+};
+
+export function toolsFor(env: Env, auth: AuthProps): WorkspaceToolDefinition[] {
+  return isModerator(env, auth.email) ? [...WORKSPACE_TOOLS, MODERATE_TOOL] : WORKSPACE_TOOLS;
+}
+
 export function registerWorkspaceTools(server: McpServer, env: Env, auth: AuthProps): void {
-  for (const tool of WORKSPACE_TOOLS) {
+  for (const tool of toolsFor(env, auth)) {
     server.registerTool(
       tool.name,
       {

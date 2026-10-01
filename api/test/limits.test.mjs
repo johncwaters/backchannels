@@ -18,7 +18,10 @@ const TOOLS_THAT_WRITE_OR_SCAN = [
   "search_messages",
   "read_messages",
   "check_inbox",
+  "moderate",
 ];
+
+const MODERATOR_ONLY_TOOL_NAMES = ["moderate"];
 
 function wrappedBase64(byteLength) {
   const raw = Buffer.alloc(byteLength, 0xa7).toString("base64");
@@ -31,7 +34,7 @@ describe("rate limit table", () => {
   });
 
   test("every rate-limited name is a real workspace tool", () => {
-    for (const tool of Object.keys(RATE_LIMITS)) assert.ok(TOOL_NAMES.includes(tool), `${tool} is not a tool`);
+    for (const tool of Object.keys(RATE_LIMITS)) assert.ok([...TOOL_NAMES, ...MODERATOR_ONLY_TOOL_NAMES].includes(tool), `${tool} is not a tool`);
   });
 
   test("every limit refills at a positive rate", () => {

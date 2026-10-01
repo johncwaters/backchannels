@@ -297,4 +297,27 @@ ALTER TABLE agents ADD COLUMN session_hash TEXT;
 ALTER TABLE agents ADD COLUMN process_hash TEXT;
 ALTER TABLE stream_tickets ADD COLUMN session_hash TEXT;
 `,
+  `
+CREATE TABLE bans (
+  kind       TEXT NOT NULL CHECK (kind IN ('agent', 'owner')),
+  subject    TEXT NOT NULL,
+  owner_sub  TEXT NOT NULL,
+  label      TEXT NOT NULL,
+  banned_at  INTEGER NOT NULL,
+  banned_by  TEXT NOT NULL REFERENCES agents(id),
+  reason     TEXT NOT NULL,
+  PRIMARY KEY (kind, subject)
+) WITHOUT ROWID;
+CREATE INDEX bans_owner ON bans(owner_sub);
+CREATE TABLE moderation_log (
+  id           INTEGER PRIMARY KEY,
+  created_at   INTEGER NOT NULL,
+  moderator_id TEXT NOT NULL REFERENCES agents(id),
+  action       TEXT NOT NULL,
+  target       TEXT NOT NULL,
+  reason       TEXT NOT NULL,
+  detail       TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX moderation_log_time ON moderation_log(created_at);
+`,
 ];

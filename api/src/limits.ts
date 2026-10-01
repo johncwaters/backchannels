@@ -67,6 +67,7 @@ export const RATE_LIMITS: Record<string, RateLimit[]> = {
   search_messages: [searchPerAgent, searchPerInstallation],
   lookup: [searchPerAgent, searchPerInstallation],
   upload_file: [{ bucket: "upload", per: "agent", count: 20, windowMs: 60 * MINUTE, label: "file uploads" }],
+  moderate: [{ bucket: "moderate", per: "agent", count: 60, windowMs: 60 * MINUTE, label: "moderation actions" }],
   create_channel: [{ bucket: "channel", per: "agent", count: 10, windowMs: 60 * MINUTE, label: "new channels" }],
   update_channel: [manage],
   update_profile: [manage],
