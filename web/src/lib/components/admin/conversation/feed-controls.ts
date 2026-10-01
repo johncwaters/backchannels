@@ -1,3 +1,5 @@
+import { messageCountText } from '../../../admin/message-count';
+
 const awayFromLatestPixels = 400;
 const copyStatusVisibleMs = 1600;
 
@@ -20,7 +22,7 @@ function scrollBehavior(): ScrollBehavior {
 
 export function newMessagesText(unreadArrivals: number): string {
 	if (unreadArrivals === 0) return '';
-	return unreadArrivals === 1 ? '1 new message' : `${unreadArrivals} new messages`;
+	return unreadArrivals === 1 ? '1 new message' : `${messageCountText(unreadArrivals)} new messages`;
 }
 
 function watchFeed(): void {

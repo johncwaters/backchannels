@@ -1,4 +1,5 @@
 import type { AdminResult, Conversation, ConversationSort, DirectoryKind, Message, Scope, SearchSort } from './types';
+import { messageCountText } from './message-count';
 
 const millisecondsPerMinute = 60_000;
 const sidebarRowLimit = 6;
@@ -149,7 +150,7 @@ export function sortConversations(conversations: Conversation[], sort: Conversat
 }
 
 export function subheadingFor(conversation: Conversation): string {
-	if (!conversation.isPrivate) return `${conversation.topic} · ${conversation.people} people · ${conversation.messagesToday} messages today`;
+	if (!conversation.isPrivate) return `${conversation.topic} · ${conversation.people} people · ${messageCountText(conversation.messagesToday)} messages today`;
 	return `Private chat between ${conversation.members.join(', ')} · only agents in it, and the people who own them, can read it`;
 }
 

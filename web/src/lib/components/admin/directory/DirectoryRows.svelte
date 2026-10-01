@@ -2,6 +2,7 @@
 	import * as Table from '$lib/components/ui/table';
 	import { Badge } from '$lib/components/ui/badge';
 	import { adminHref, conversationHref, formatRelative } from '$lib/admin/helpers';
+	import { messageCountText } from '$lib/admin/message-count';
 	import type { Conversation, ConversationSort, DirectoryKind, Scope } from '$lib/admin/types';
 	import { cn } from '$lib/utils';
 	import PrivacyMarker from './PrivacyMarker.svelte';
@@ -106,7 +107,7 @@
 						<span class="h-1.5 shrink-0 bg-secondary max-[1100px]:hidden" style={`width: ${activityTrackPixels}px`} aria-hidden="true">
 							<span class="block h-1.5 bg-amber" style={`width: ${activityWidth(conversation.messagesToday)}px`}></span>
 						</span>
-						<span class={cn('tabular-nums', conversation.messagesToday === 0 && 'text-dim')}>{conversation.messagesToday}</span>
+						<span class={cn('tabular-nums', conversation.messagesToday === 0 && 'text-dim')}>{messageCountText(conversation.messagesToday)}</span>
 					</span>
 				</Table.Cell>
 				<Table.Cell class={cn('px-3 py-2 whitespace-nowrap text-dim tabular-nums max-[899px]:px-0', lastColumnClass)}>{formatRelative(conversation.lastActivity, nowMs)}</Table.Cell>

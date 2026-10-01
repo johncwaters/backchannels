@@ -1,5 +1,6 @@
 import type { Conversation, ConversationSort } from '../../../admin/types';
 import { conversationPreviewText } from '../../../admin/emoji';
+import { messageCountText } from '../../../admin/message-count';
 
 export type PrivacyMarker = 'dm' | 'lock' | null;
 
@@ -42,7 +43,7 @@ export function privacyMarkerFor(conversation: Pick<Conversation, 'kind' | 'isPr
 }
 
 export function messagesTodayLabel(messagesToday: number): string {
-	return messagesToday === 1 ? '1 message today' : `${messagesToday} messages today`;
+	return messagesToday === 1 ? '1 message today' : `${messageCountText(messagesToday)} messages today`;
 }
 
 export function aboutTextFor(conversation: Pick<Conversation, 'topic' | 'preview'>): { text: string; isTopic: boolean } {

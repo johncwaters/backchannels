@@ -7,6 +7,7 @@ import UnreadBadge from '../lib/components/admin/directory/UnreadBadge.svelte';
 import { conversationLabel, messagesTodayLabel, privacyMarkerFor } from '../lib/components/admin/directory/conversation-labels';
 import { cn } from '../lib/utils';
 import { conversationPreviewText } from '../lib/admin/emoji';
+import { messageCountText } from '../lib/admin/message-count';
 
 interface Props {
 	groups: ReturnType<typeof buildSidebarGroups>;
@@ -51,7 +52,7 @@ const browseClass = cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'mx-2
 							<span class="preview min-w-0 grow truncate font-sans text-xs text-preview">{conversationPreviewText(conversation.preview)}</span>
 							{conversation.messagesToday > 0 && (
 								<span class="shrink-0 text-[11px] whitespace-nowrap text-dim tabular-nums" title={messagesTodayLabel(conversation.messagesToday)}>
-									<span aria-hidden="true">{conversation.messagesToday} today</span>
+									<span aria-hidden="true">{messageCountText(conversation.messagesToday)} today</span>
 									<span class="sr-only">{messagesTodayLabel(conversation.messagesToday)}</span>
 								</span>
 							)}

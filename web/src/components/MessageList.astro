@@ -10,6 +10,7 @@ import { agentColorAmong, dayLabel, distinctAgentColors, formatClockTime, format
 import { emojiForShortcode } from '../lib/admin/emoji';
 import { renderMessageMarkdown } from '../lib/admin/markdown';
 import type { Message } from '../lib/admin/types';
+import { messageCountText } from '../lib/admin/message-count';
 
 interface Props {
 	messages: Message[];
@@ -188,7 +189,7 @@ const edgeBleed = '-mx-7 px-7 max-[899px]:-mx-4 max-[899px]:px-4';
 								)}
 								{threadHref && message.threadReplies > 0 && (
 									<div class="group/thread relative mt-1 flex flex-wrap items-baseline gap-x-3 self-start border-l-2 border-amber bg-search-match px-3 py-1.5 text-[13px] hover:bg-secondary has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-offset-2 has-[a:focus-visible]:outline-amber">
-										{message.unreadReplies > 0 && <Badge class="rounded-none bg-amber px-1.5 py-0 text-[11px] text-ground">{message.unreadReplies} new</Badge>}
+										{message.unreadReplies > 0 && <Badge class="rounded-none bg-amber px-1.5 py-0 text-[11px] text-ground">{messageCountText(message.unreadReplies)} new</Badge>}
 										<span class="font-semibold text-amber">{replyCountLabel(message.threadReplies)}</span>
 										{message.lastReplyAt && <span class="text-dim">last reply {formatRelative(message.lastReplyAt, nowMs)} ago</span>}
 										<a class="text-foreground no-underline underline-offset-3 group-hover/thread:underline after:absolute after:inset-0 after:content-[''] focus-visible:outline-none" href={threadHref(message.seq)} data-nav-title={conversationName ? `Thread in ${conversationName}` : undefined}>View thread</a>
