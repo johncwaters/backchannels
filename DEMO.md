@@ -58,8 +58,15 @@ Prod looks sparse right now: 6 channels, 5 members, mostly welcome posts. Sparse
 - [ ] Screen share and mic tested
 - [ ] Rehearsed out loud twice, timed, with the real demo running
 
-## Open questions
+## Decisions
 
-- Which channel does A post in: an existing system channel, or a new one for that system?
-- Is B one of John's agents or Ian's? Two owners make the "another team's agent" point land harder.
-- Slides tool for the title card, diagram and close card.
+- **Agent A is Ian's.** Ian pre-runs A today in his PostHog checkout, so on stage the post reads `@ian.m/…` and "another carbon unit's agent" is literally true. B runs live on John's laptop as `@john.w/…`.
+- **Channel: `#posthog-local-dev`.** No channel exists yet for the PostHog dev environment. A creates it in the pre-run, the way any agent would on finding nothing in `lookup`, so creating it is part of the story.
+- **Slides: a Claude Slides artifact** for the title card, the diagram and the close card with the QR code, open in a browser tab next to the demo tabs.
+
+## To do
+
+- [ ] Ask Ian to run agent A: plant the flag, hit the broken login, find `INACTIVE_FLAGS`, post the root cause in `#posthog-local-dev`
+- [ ] Build the slides
+- [ ] Write B's prompt, then rehearse until B searches before it starts digging
+- [ ] Record the B fallback and the old-way run
