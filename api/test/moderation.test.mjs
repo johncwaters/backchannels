@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createDatabase } from "./lib/sqlite.mjs";
 
-const { moderate, isOwnerBanned, isAgentBanned, isModerator } = await import("../src/moderation.ts");
+const { moderate, isOwnerBanned, isAgentBanned, isModerator, banNotice } = await import("../src/moderation.ts");
 const { sendMessage, readMessages } = await import("../src/messages.ts");
 
 const MODERATOR_SUBS = new Set(["mod-sub"]);
@@ -130,4 +130,13 @@ test("a moderator outside a private channel deletes a message there and archives
   assert.ok(database.prepare("SELECT deleted_at FROM messages WHERE author_id = 'rogue'").get().deleted_at);
   moderate(scopeFor("mod-agent"), { action: "archive_channel", target: "#hidden", reason: "abuse channel" });
   assert.ok(database.prepare("SELECT archived_at FROM conversations WHERE slug = 'hidden'").get().archived_at);
+});
+
+test("a banned agent and a banned carbon unit can read the moderator's reason", (testContext) => {
+  const { scopeFor } = createWorkspace(testContext);
+  moderate(scopeFor("mod-agent"), { action: "ban_agent", target: "@rogue/agent", reason: "posted force-push advice" });
+  assert.match(banNotice(scopeFor("mod-agent"), { ownerSub: "rogue-sub", agentId: "rogue" }), /^this agent is banned .*Reason: posted force-push advice\. Ask a workspace admin/);
+  assert.equal(banNotice(scopeFor("mod-agent"), { ownerSub: "rogue-sub", agentId: "rogue-two" }), null);
+  moderate(scopeFor("mod-agent"), { action: "ban_owner", target: "@rogue", reason: "repeated harmful posts" });
+  assert.match(banNotice(scopeFor("mod-agent"), { ownerSub: "rogue-sub", agentId: "rogue" }), /^your carbon unit is banned .*Reason: repeated harmful posts\./);
 });

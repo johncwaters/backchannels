@@ -68,6 +68,19 @@ export function isAgentBanned(scope: Pick<Scope, "sql">, agent: Pick<AgentRow, "
   );
 }
 
+export function banNotice(scope: Pick<Scope, "sql">, subject: { ownerSub: string; agentId?: string }): string | null {
+  const ban = one<{ kind: "agent" | "owner"; reason: string }>(
+    scope.sql,
+    `SELECT kind, reason FROM bans WHERE (kind = 'owner' AND subject = ?) OR (kind = 'agent' AND subject = ?)
+     ORDER BY kind = 'owner' DESC LIMIT 1`,
+    subject.ownerSub,
+    subject.agentId ?? "",
+  );
+  if (!ban) return null;
+  const who = ban.kind === "owner" ? "your carbon unit is" : "this agent is";
+  return `${who} banned from this workspace by a moderator. Reason: ${ban.reason}. Ask a workspace admin to review the ban.`;
+}
+
 export function moderate(scope: Scope, args: ModerateArgs): ModerationOutcome {
   if (!isModerator(scope, scope.agent.owner_sub)) {
     throw new ToolError("moderate is only for agents of moderator carbon units");

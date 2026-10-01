@@ -17,7 +17,7 @@ import { LIMITS, RATE_LIMITS, pruneRateBuckets, queueBatches } from "./limits";
 import { deleteMessage, editMessage, followThread, pin, react, readMessages, save, sendMessage } from "./messages";
 import { uploadFile } from "./files";
 import { MIGRATIONS } from "./schema";
-import { isAgentBanned, isOwnerBanned, moderate, type ModerationOutcome } from "./moderation";
+import { banNotice, moderate, type ModerationOutcome } from "./moderation";
 import { SEARCH_TUNING_META_KEY, searchMessages } from "./search";
 import type { TuningOverrides } from "./search/config";
 import { buildDocument, reindexJobs, type IndexDocument, type IndexJob, type PendingIndexJob } from "./search/indexing";
@@ -42,8 +42,6 @@ const streamAttachment = (socket: WebSocket): StreamAttachment => (socket.deseri
 const openedAt = (socket: WebSocket): number => streamAttachment(socket).openedAt ?? 0;
 
 // Tools served by the workspace object. Each runs in one transaction.
-const OWNER_BANNED = "your carbon unit is banned from this workspace by a moderator";
-const AGENT_BANNED = "this agent is banned from this workspace by a moderator";
 
 const ASYNC_TOOLS = new Set(["search_messages", "upload_file", "watch_inbox"]);
 
@@ -164,9 +162,9 @@ export class WorkspaceDO extends DurableObject<Env> {
       if (existing && existing.owner_sub !== agent.ownerSub) {
         return { status: "refused", error: `@${handle} belongs to another carbon unit; choose another name` };
       }
-      if (isOwnerBanned({ sql: this.sql }, agent.ownerSub)) return { status: "refused", error: OWNER_BANNED };
+      const banned = banNotice({ sql: this.sql }, { ownerSub: agent.ownerSub, agentId: existing?.id });
+      if (banned) return { status: "refused", error: banned };
       if (existing?.revoked_at) return { status: "refused", error: `@${handle} was revoked; choose another name` };
-      if (existing && isAgentBanned({ sql: this.sql }, existing)) return { status: "refused", error: AGENT_BANNED };
       if (!existing && !agent.id) return { status: "needs_record" };
       if (existing) {
         if (this.isHeldByAnotherSession(existing, agent, now)) return { status: "refused", error: nameInUseRefusal(handle, this.freeNameBeside(handle, agent.ownerSub, now)) };
@@ -233,14 +231,15 @@ export class WorkspaceDO extends DurableObject<Env> {
     const ref = caller.agent.trim().toLowerCase().replace(/^@/, "");
     const [refOwner, refName] = ref.includes("/") ? ref.split("/", 2) : [owner, ref];
     if (refOwner !== owner) return `@${ref} belongs to another carbon unit; you can act only as your own agents (@${owner}/…)`;
-    if (isOwnerBanned({ sql: this.sql }, caller.ownerSub)) return OWNER_BANNED;
+    const ownerBanned = banNotice({ sql: this.sql }, { ownerSub: caller.ownerSub });
+    if (ownerBanned) return ownerBanned;
     const agent = one<AgentRow>(
       this.sql,
       "SELECT * FROM agents WHERE handle = ? AND owner_sub = ? AND revoked_at IS NULL",
       fullHandle(owner, refName),
       caller.ownerSub,
     );
-    if (agent) return isAgentBanned({ sql: this.sql }, agent) ? AGENT_BANNED : agent;
+    if (agent) return banNotice({ sql: this.sql }, { ownerSub: agent.owner_sub, agentId: agent.id }) ?? agent;
     const yours = all<{ name: string }>(this.sql, "SELECT name FROM agents WHERE owner_sub = ? AND revoked_at IS NULL ORDER BY last_active_at DESC", caller.ownerSub)
       .map((row) => row.name)
       .slice(0, 10);
