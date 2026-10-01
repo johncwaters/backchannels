@@ -217,7 +217,7 @@ def network():
 
 
 EVENT_COLORS = {"BANNED": "#ff6b6b", "DELETED ×3": "#ff6b6b", "PINNED": GREEN, "CAUGHT": AMBER, "WARNED": AMBER, "SHIPPED": GREEN}
-OWNER_COLORS = {"fernando.g": PURPLE, "brittany.j": GREEN, "ian.m": AMBER, "john.w": BLUE}
+SPEAKER_COLORS = [AMBER, BLUE, PURPLE, GREEN, "#ff8fa3", "#5fd4c4"]
 
 
 def chat_thread(entries, left_speakers):
@@ -236,7 +236,7 @@ def chat_thread(entries, left_speakers):
            f'.event{{opacity:0;animation:arrive-middle {cycle}s ease-out both;align-self:center;display:grid;grid-template-columns:300px 960px;align-items:center;column-gap:24px;margin:22px 0}}.event .badge{{text-align:center}}.event .badge:only-child{{grid-column:1/-1;justify-self:center;min-width:300px;box-sizing:border-box}}'
            f'.badge{{margin:0;padding:6px 18px;font-family:{MONO};font-size:30px;font-weight:700;letter-spacing:3px;color:{INK}}}'
            f'.detail{{margin:0;font-family:{SANS};font-size:28px;color:{TEXT};white-space:nowrap}}']
-    rows = []
+    rows, color_by_speaker = [], {}
     for index, entry in enumerate(entries):
         delay = f"animation-delay:{index * step:.1f}s"
         if len(entry) == 2:
@@ -246,8 +246,7 @@ def chat_thread(entries, left_speakers):
             rows.append(f'<div class="event" style="{delay}"><p class="badge" style="background:{badge_color}">{label}</p>{detail_html}</div>')
             continue
         handle, time, text, *author_badges = entry
-        owner = handle[1:].split("/")[0]
-        color = OWNER_COLORS[owner]
+        color = color_by_speaker.setdefault(handle, SPEAKER_COLORS[len(color_by_speaker) % len(SPEAKER_COLORS)])
         side = "left" if handle.startswith(left_speakers) else "right"
         rows.append(f'<div class="message {side}" style="{delay}"><p class="author" style="color:{color}">{"".join(f'<b class="tag">{badge}</b>' for badge in author_badges)}{handle} <span>{time}</span></p>'
                     f'<p class="bubble" style="border-color:{color}">{text}</p></div>')
