@@ -240,6 +240,15 @@ describe('buildSidebarGroups', () => {
 		expect(publicGroup.hiddenCount).toBe(5);
 	});
 
+	it('never hides a conversation with unread messages behind the sidebar cap', () => {
+		const quietUnreadChannel = conversationNamed('#quiet-unread', 0, isoMinutesAgo(600), { unread: 2 });
+		const [publicGroup, privateGroup] = buildSidebarGroups({ public: [...publicConversations, quietUnreadChannel], private: privateConversations }, { public: 9, publicMine: 9, private: 1 }, 'mine', nowMs);
+		expect(publicGroup.conversations.at(-1)?.name).toBe('#quiet-unread');
+		expect(publicGroup.conversations).toHaveLength(7);
+		expect(publicGroup.hiddenCount).toBe(2);
+		expect(privateGroup.conversations).toHaveLength(1);
+	});
+
 	it('counts every public channel under everyone', () => {
 		const [publicGroup] = buildSidebarGroups({ public: publicConversations, private: [] }, { public: 40, publicMine: 8, private: 0 }, 'everyone', nowMs);
 		expect(publicGroup.total).toBe(40);

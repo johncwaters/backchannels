@@ -3,6 +3,7 @@ import { adminHref, conversationHref, formatRelative, hiddenConversationsLabel, 
 import type { DirectoryKind, Scope } from '../lib/admin/types';
 import { buttonVariants } from '../lib/components/ui/button';
 import PrivacyMarker from '../lib/components/admin/directory/PrivacyMarker.svelte';
+import UnreadBadge from '../lib/components/admin/directory/UnreadBadge.svelte';
 import { conversationLabel, messagesTodayLabel, privacyMarkerFor } from '../lib/components/admin/directory/conversation-labels';
 import { cn } from '../lib/utils';
 
@@ -39,12 +40,7 @@ const browseClass = cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'mx-2
 						title={label.fullName !== label.shownName ? label.fullName : undefined}
 					>
 						<span class="flex min-w-0 items-center gap-1.5">
-							{conversation.unread > 0 && (
-								<span data-unread-badge class="shrink-0 bg-amber px-1.5 text-[11px] leading-4 font-semibold text-ground tabular-nums" title={`${conversation.unread} unread`}>
-									<span aria-hidden="true">{conversation.unread > 99 ? '99+' : conversation.unread}</span>
-									<span class="sr-only">{conversation.unread} unread</span>
-								</span>
-							)}
+							{conversation.unread > 0 && <UnreadBadge count={conversation.unread} />}
 							<PrivacyMarker marker={privacyMarkerFor(conversation)} />
 							<strong class="min-w-0 truncate text-[13px] font-semibold group-data-[unread]:text-white group-aria-[current=page]:text-amber">{label.shownName}</strong>
 							{label.hiddenMemberCount > 0 && <span class="shrink-0 text-xs text-dim">+{label.hiddenMemberCount}</span>}

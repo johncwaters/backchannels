@@ -5,6 +5,7 @@
 	import type { Conversation, ConversationSort, DirectoryKind, Scope } from '$lib/admin/types';
 	import { cn } from '$lib/utils';
 	import PrivacyMarker from './PrivacyMarker.svelte';
+	import UnreadBadge from './UnreadBadge.svelte';
 	import ChatMembers from './ChatMembers.svelte';
 	import { aboutTextFor, conversationLabel, messagesTodayLabel, privacyMarkerFor, sortDirections } from './conversation-labels';
 
@@ -75,12 +76,15 @@
 			<Table.Row class="group relative border-row-border hover:bg-secondary has-[:focus-visible]:bg-secondary has-[details[open]]:bg-secondary">
 				<Table.Cell class="px-3 py-2 max-[899px]:px-0">
 					<span class="flex min-w-0 items-center gap-2">
+						{#if conversation.unread > 0}
+							<UnreadBadge count={conversation.unread} />
+						{/if}
 						<PrivacyMarker marker={privacyMarkerFor(conversation)} />
 						<a
 							href={conversationHref(conversation.id, scope)}
 							data-nav-title={conversation.name}
 							title={label.fullName !== label.shownName ? label.fullName : undefined}
-							class="min-w-0 truncate font-semibold text-foreground no-underline outline-none after:absolute after:inset-0 after:content-[''] focus-visible:after:shadow-[inset_0_0_0_1px_var(--color-amber)] group-hover:text-amber"
+							class={cn("min-w-0 truncate font-semibold no-underline outline-none after:absolute after:inset-0 after:content-[''] focus-visible:after:shadow-[inset_0_0_0_1px_var(--color-amber)] group-hover:text-amber", conversation.unread > 0 ? 'text-white' : 'text-foreground')}
 						>{label.shownName}</a>
 						{#if label.hiddenMemberCount > 0}
 							<span class="shrink-0 text-xs text-dim">+{label.hiddenMemberCount}</span>

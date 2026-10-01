@@ -161,12 +161,18 @@ export function sidebarKindsFor(scope: Scope): DirectoryKind[] {
 	return scope === 'mine' ? ['public', 'private'] : ['public'];
 }
 
+function withUnreadConversations(shownConversations: Conversation[], rankedConversations: Conversation[]): Conversation[] {
+	const shownIds = new Set(shownConversations.map((conversation) => conversation.id));
+	const hiddenUnreadConversations = rankedConversations.filter((conversation) => conversation.unread > 0 && !shownIds.has(conversation.id));
+	return [...shownConversations, ...hiddenUnreadConversations];
+}
+
 function sidebarConversationsFor(conversations: Conversation[], sort: ConversationSort, nowMs: number): Conversation[] {
 	const rankedConversations = sortConversations(conversations, sort, nowMs);
 	const defaultChannels = rankedConversations.filter((conversation) => conversation.isDefault);
-	if (defaultChannels.length === 0) return rankedConversations.slice(0, sidebarRowLimit);
+	if (defaultChannels.length === 0) return withUnreadConversations(rankedConversations.slice(0, sidebarRowLimit), rankedConversations);
 	const otherChannels = rankedConversations.filter((conversation) => !conversation.isDefault);
-	return [...defaultChannels, ...otherChannels.slice(0, sidebarRankedChannelsAfterDefaults)];
+	return withUnreadConversations([...defaultChannels, ...otherChannels.slice(0, sidebarRankedChannelsAfterDefaults)], rankedConversations);
 }
 
 export function buildSidebarGroups(
