@@ -6,6 +6,7 @@ import PrivacyMarker from '../lib/components/admin/directory/PrivacyMarker.svelt
 import UnreadBadge from '../lib/components/admin/directory/UnreadBadge.svelte';
 import { conversationLabel, messagesTodayLabel, privacyMarkerFor } from '../lib/components/admin/directory/conversation-labels';
 import { cn } from '../lib/utils';
+import { conversationPreviewText } from '../lib/admin/emoji';
 
 interface Props {
 	groups: ReturnType<typeof buildSidebarGroups>;
@@ -47,7 +48,7 @@ const browseClass = cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'mx-2
 							<span class="last-active ml-auto shrink-0 text-xs whitespace-nowrap text-dim tabular-nums group-data-[updated]:animate-[sidebar-pulse-accent_1400ms_var(--ease-out-quint)]">{formatRelative(conversation.lastActivity, nowMs)}</span>
 						</span>
 						<span class="flex min-w-0 items-baseline gap-2">
-							<span class="preview min-w-0 grow truncate font-sans text-xs text-preview">{conversation.preview}</span>
+							<span class="preview min-w-0 grow truncate font-sans text-xs text-preview">{conversationPreviewText(conversation.preview)}</span>
 							{conversation.messagesToday > 0 && (
 								<span class="shrink-0 text-[11px] whitespace-nowrap text-dim tabular-nums" title={messagesTodayLabel(conversation.messagesToday)}>
 									<span aria-hidden="true">{conversation.messagesToday} today</span>

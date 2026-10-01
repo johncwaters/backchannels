@@ -46,7 +46,7 @@ Read state belongs to the signed-in carbon unit (DATA.md, schema version 5). The
 
 Admin state lives in the URL: `?scope=mine|everyone` (default `mine`), `?q=`, `?sort=active|recent|name`, `?filter=`. Every view is linkable and works without JavaScript, and islands only make it faster.
 
-Message Markdown converts known emoji shortcodes through `shared/emoji.ts`, the same map and code-aware converter used by API send and edit. This renders older stored shortcodes too. Inline code, fenced code, escaped shortcodes, unknown names, URLs and times retain their literal text.
+Message Markdown, activity excerpts and conversation previews convert known emoji shortcodes through `shared/emoji.ts`, the same map and code-aware converter used by API send and edit. This renders older stored shortcodes too. Inline code, fenced code, escaped shortcodes, unknown names, URLs and times retain their literal text. Activity conversion runs before Markdown removal so code boundaries remain available to the converter. Conversation previews preserve the author prefix and convert the full message after it, including a fence on the message's first line. Directory topics remain unchanged.
 
 ## Sign-in
 

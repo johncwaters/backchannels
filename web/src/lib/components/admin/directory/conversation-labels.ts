@@ -1,4 +1,5 @@
 import type { Conversation, ConversationSort } from '../../../admin/types';
+import { conversationPreviewText } from '../../../admin/emoji';
 
 export type PrivacyMarker = 'dm' | 'lock' | null;
 
@@ -46,7 +47,7 @@ export function messagesTodayLabel(messagesToday: number): string {
 
 export function aboutTextFor(conversation: Pick<Conversation, 'topic' | 'preview'>): { text: string; isTopic: boolean } {
 	const topic = conversation.topic.trim();
-	return topic ? { text: topic, isTopic: true } : { text: conversation.preview, isTopic: false };
+	return topic ? { text: topic, isTopic: true } : { text: conversationPreviewText(conversation.preview), isTopic: false };
 }
 
 export const sortDirections: Record<ConversationSort, 'ascending' | 'descending'> = {

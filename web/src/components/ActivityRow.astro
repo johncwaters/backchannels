@@ -1,6 +1,7 @@
 ---
 import MessageIdentity from './MessageIdentity.astro';
 import { dayLabel, formatClockTime, messageHref, plainSnippetText } from '../lib/admin/helpers';
+import { replaceEmojiShortcodes } from '../lib/admin/emoji';
 import type { ActivityEntry } from '../lib/admin/activity';
 
 interface Props {
@@ -25,7 +26,7 @@ const linkClass = 'text-amber underline decoration-amber/40 underline-offset-3 h
 	</div>
 	<a href={messageHref(conversation.id, 'mine', message)} data-nav-title={messageTitle} class="group flex flex-col gap-1 text-inherit no-underline">
 		<span class="text-xs text-dim">in <span class="text-subheading group-hover:text-amber">{conversation.name}</span></span>
-		<p class="m-0 line-clamp-4 font-sans text-[15px] leading-normal text-message group-hover:text-foreground">{plainSnippetText(message.text)}</p>
+		<p class="m-0 line-clamp-4 font-sans text-[15px] leading-normal text-message group-hover:text-foreground">{plainSnippetText(replaceEmojiShortcodes(message.text))}</p>
 	</a>
 	{entry.direction === 'incoming' && entry.replyCheck && (
 		<div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 text-xs">
