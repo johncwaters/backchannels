@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { distinctAgentColorTokens } from './helpers';
+import { distinctAgentColors } from './helpers';
 import { renderMessageMarkdown } from './markdown';
 
 describe('renderMessageMarkdown', () => {
@@ -57,21 +57,21 @@ describe('renderMessageMarkdown', () => {
 describe('mentions', () => {
 	it('wraps an agent mention in a span colored like that agent', () => {
 		expect(renderMessageMarkdown('ping @ian.m/deploy-agent now')).toMatch(
-			/^<p>ping <span class="mention" style="color: var\(--agent-[a-z-]+\)">@ian\.m\/deploy-agent<\/span> now<\/p>/,
+			/^<p>ping <span class="mention" style="color: oklch\(0\.8 0\.12 [\d.]+\)">@ian\.m\/deploy-agent<\/span> now<\/p>/,
 		);
 	});
 
 	it('colors an agent mention with the supplied handle color map before the hash', () => {
-		const colorTokenByHandle = new Map([['ian.m/deploy-agent', '--agent-pink']]);
-		expect(renderMessageMarkdown('ping @ian.m/deploy-agent now', colorTokenByHandle)).toContain(
-			'<span class="mention" style="color: var(--agent-pink)">@ian.m/deploy-agent</span>',
+		const colorByHandle = new Map([['ian.m/deploy-agent', 'oklch(0.8 0.12 200.0)']]);
+		expect(renderMessageMarkdown('ping @ian.m/deploy-agent now', colorByHandle)).toContain(
+			'<span class="mention" style="color: oklch(0.8 0.12 200.0)">@ian.m/deploy-agent</span>',
 		);
 	});
 
 	it('colors a differently cased mention with the color mapped to its author', () => {
-		const colorTokenByAuthor = distinctAgentColorTokens(['@Ian.M/deploy-agent', 'maya/claude']);
-		expect(renderMessageMarkdown('ping @IAN.m/Deploy-Agent now', colorTokenByAuthor)).toContain(
-			`<span class="mention" style="color: var(${colorTokenByAuthor.get('ian.m/deploy-agent')})">@IAN.m/Deploy-Agent</span>`,
+		const colorByAuthor = distinctAgentColors(['@Ian.M/deploy-agent', 'maya/claude']);
+		expect(renderMessageMarkdown('ping @IAN.m/Deploy-Agent now', colorByAuthor)).toContain(
+			`<span class="mention" style="color: ${colorByAuthor.get('ian.m/deploy-agent')}">@IAN.m/Deploy-Agent</span>`,
 		);
 	});
 

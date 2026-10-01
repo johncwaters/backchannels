@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
-	agentColorToken,
-	agentColorTokenAmong,
-	distinctAgentColorTokens,
+	agentColor,
+	agentColorAmong,
+	distinctAgentColors,
 	hiddenConversationsLabel,
 	buildSidebarGroups,
 	dayLabel,
@@ -118,31 +118,52 @@ describe('message times and day dividers', () => {
 	});
 });
 
-describe('agentColorToken', () => {
+const hueOf = (color: string) => Number(color.match(/^oklch\(0\.8 0\.12 ([\d.]+)\)$/)![1]);
+const hueDistance = (first: number, second: number) => Math.min(Math.abs(first - second), 360 - Math.abs(first - second));
+const manyHandles = Array.from({ length: 400 }, (_, index) => `person-${index}/agent-${index * 7}`);
+
+describe('agentColor', () => {
 	it('gives the same handle the same agent color every time', () => {
-		expect(agentColorToken('ian.m/deploy-bot')).toBe(agentColorToken('@ian.m/deploy-bot'));
+		expect(agentColor('ian.m/deploy-bot')).toBe(agentColor('@IAN.M/deploy-bot'));
 	});
 
-	it('always picks one of the agent color tokens', () => {
-		const agentColorTokens = ['--agent-claude-code', '--agent-codex', '--agent-cursor', '--agent-pink', '--agent-teal', '--agent-lime'];
-		for (const handle of ['maya/claude', 'dan/codex', 'priya/cursor', 'a', '']) expect(agentColorTokens).toContain(agentColorToken(handle));
+	it('spreads many handles across the hue spectrum', () => {
+		const hueBuckets = new Set(manyHandles.map((handle) => Math.floor(hueOf(agentColor(handle)) / 10)));
+		expect(hueBuckets.size).toBeGreaterThan(20);
+	});
+
+	it('never uses a hue near the amber accent or the danger red', () => {
+		for (const handle of manyHandles) {
+			const hue = hueOf(agentColor(handle));
+			expect(hue >= 100 || hue < 5).toBe(true);
+		}
 	});
 });
 
-describe('distinctAgentColorTokens', () => {
-	it('gives every author in a conversation its own color', () => {
-		const handles = ['ian.m/backchannels-maintainer', 'john.w/backchannel-dev-iksxop', 'ian.m/posthog-web', 'john.w/backchannel-dev', 'maya/claude', 'dan/codex'];
-		const tokenByHandle = distinctAgentColorTokens([...handles, ...handles]);
-		expect(new Set(tokenByHandle.values()).size).toBe(handles.length);
+describe('distinctAgentColors', () => {
+	it('keeps a few authors at least 45 degrees of hue apart', () => {
+		const hues = [...distinctAgentColors(['ian.m/web-designer', 'li.p/codex-reviewer', 'sara.k/deploy-agent', 'john.w/backchannels-builder']).values()].map(hueOf);
+		for (const [index, hue] of hues.entries()) {
+			for (const otherHue of hues.slice(index + 1)) expect(hueDistance(hue, otherHue)).toBeGreaterThanOrEqual(45);
+		}
+	});
+
+	it('keeps ten authors in a conversation at least 20 degrees of hue apart', () => {
+		const handles = ['ian.m/backchannels-maintainer', 'john.w/backchannel-dev-iksxop', 'ian.m/posthog-web', 'john.w/backchannel-dev', 'maya/claude', 'dan/codex', 'li.p/codex-reviewer', 'sara.k/deploy-agent', 'tom.h/billing-agent', 'priya/cursor'];
+		const hues = [...distinctAgentColors([...handles, ...handles]).values()].map(hueOf);
+		expect(hues).toHaveLength(handles.length);
+		for (const [index, hue] of hues.entries()) {
+			for (const otherHue of hues.slice(index + 1)) expect(hueDistance(hue, otherHue)).toBeGreaterThanOrEqual(20);
+		}
 	});
 
 	it('keeps an author on its hashed color when nobody else claims it', () => {
-		expect(distinctAgentColorTokens(['ian.m/deploy-bot']).get('ian.m/deploy-bot')).toBe(agentColorToken('ian.m/deploy-bot'));
+		expect(distinctAgentColors(['ian.m/deploy-bot']).get('ian.m/deploy-bot')).toBe(agentColor('ian.m/deploy-bot'));
 	});
 
 	it('resolves a handle written with a leading @ or different case to its mapped author color', () => {
-		const tokenByHandle = distinctAgentColorTokens(['ian.m/deploy-bot', 'maya/claude']);
-		expect(agentColorTokenAmong(tokenByHandle, '@IAN.M/Deploy-Bot')).toBe(tokenByHandle.get('ian.m/deploy-bot'));
+		const colorByHandle = distinctAgentColors(['ian.m/deploy-bot', 'maya/claude']);
+		expect(agentColorAmong(colorByHandle, '@IAN.M/Deploy-Bot')).toBe(colorByHandle.get('ian.m/deploy-bot'));
 	});
 });
 

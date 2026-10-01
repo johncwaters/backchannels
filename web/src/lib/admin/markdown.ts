@@ -1,6 +1,6 @@
 import MarkdownIt from 'markdown-it';
 import type { StateCore, Token } from 'markdown-it';
-import { agentColorTokenAmong } from './helpers';
+import { agentColorAmong } from './helpers';
 
 const untrustedLinkRel = 'nofollow noopener noreferrer';
 const mentionPattern = /(^|[^\w@/])@(?:([a-z0-9][a-z0-9._-]*)\/([a-z0-9][a-z0-9_-]*)|(channel|here)(?![\w./-]))/gi;
@@ -13,12 +13,12 @@ messageMarkdown.renderer.rules.link_open = (tokens, index, options, _environment
 };
 
 type MentionRenderEnvironment = {
-	colorTokenByHandle?: ReadonlyMap<string, string>;
+	colorByHandle?: ReadonlyMap<string, string>;
 };
 
-function mentionColorToken(state: StateCore, mentionedHandle: string): string {
-	const { colorTokenByHandle } = state.env as MentionRenderEnvironment;
-	return agentColorTokenAmong(colorTokenByHandle, mentionedHandle);
+function mentionColor(state: StateCore, mentionedHandle: string): string {
+	const { colorByHandle } = state.env as MentionRenderEnvironment;
+	return agentColorAmong(colorByHandle, mentionedHandle);
 }
 
 function mentionTokens(state: StateCore, text: string): Token[] {
@@ -36,7 +36,7 @@ function mentionTokens(state: StateCore, text: string): Token[] {
 		pushText(text.slice(consumedUpTo, mentionStart));
 		const openToken = new state.Token('mention_open', 'span', 1);
 		openToken.attrSet('class', broadcast ? 'mention mention-broadcast' : 'mention');
-		if (agentName) openToken.attrSet('style', `color: var(${mentionColorToken(state, `${owner}/${agentName}`)})`);
+		if (agentName) openToken.attrSet('style', `color: ${mentionColor(state, `${owner}/${agentName}`)}`);
 		tokens.push(openToken);
 		pushText(whole.slice(leadingCharacter.length));
 		tokens.push(new state.Token('mention_close', 'span', -1));
@@ -59,7 +59,7 @@ messageMarkdown.core.ruler.push('mentions', (state) => {
 	}
 });
 
-export function renderMessageMarkdown(messageText: string, colorTokenByHandle?: ReadonlyMap<string, string>): string {
-	const environment: MentionRenderEnvironment = { colorTokenByHandle };
+export function renderMessageMarkdown(messageText: string, colorByHandle?: ReadonlyMap<string, string>): string {
+	const environment: MentionRenderEnvironment = { colorByHandle };
 	return messageMarkdown.render(messageText, environment);
 }

@@ -3,7 +3,11 @@ import type { AdminResult, Conversation, ConversationSort, DirectoryKind, Messag
 const millisecondsPerMinute = 60_000;
 const sidebarRowLimit = 6;
 const sidebarRankedChannelsAfterDefaults = 3;
-const agentColorTokens = ['--agent-claude-code', '--agent-codex', '--agent-cursor', '--agent-pink', '--agent-teal', '--agent-lime'];
+const authorHueStart = 100;
+const authorHueSpan = 265;
+const widestAuthorHueGap = 45;
+const narrowestAuthorHueGap = 12;
+const authorHueSearchStep = 5;
 
 export function minutesSince(isoTime: string | null, nowMs: number): number {
 	if (!isoTime) return Number.POSITIVE_INFINITY;
@@ -46,35 +50,67 @@ export function agentColorKey(agentHandle: string): string {
 	return agentHandle.replace(/^@/, '').toLowerCase();
 }
 
-function agentColorIndex(agentHandle: string): number {
+function agentHuePosition(agentHandle: string): number {
 	const normalizedHandle = agentColorKey(agentHandle);
 	let hash = 0x811c9dc5;
 	for (let index = 0; index < normalizedHandle.length; index++) {
 		hash = Math.imul(hash ^ normalizedHandle.charCodeAt(index), 0x01000193) >>> 0;
 	}
-	return hash % agentColorTokens.length;
+	return (hash % (authorHueSpan * 10)) / 10;
 }
 
-export function agentColorToken(agentHandle: string): string {
-	return agentColorTokens[agentColorIndex(agentHandle)];
+function authorHueAt(huePosition: number): number {
+	return (authorHueStart + huePosition) % 360;
 }
 
-export function distinctAgentColorTokens(agentHandles: Iterable<string>): Map<string, string> {
-	const takenIndexes = new Set<number>();
-	const tokenByHandle = new Map<string, string>();
-	for (const agentHandle of [...new Set([...agentHandles].map(agentColorKey))].sort()) {
-		let colorIndex = agentColorIndex(agentHandle);
-		for (let probe = 0; probe < agentColorTokens.length && takenIndexes.has(colorIndex); probe++) {
-			colorIndex = (colorIndex + 1) % agentColorTokens.length;
+function authorColorAt(huePosition: number): string {
+	return `oklch(0.8 0.12 ${authorHueAt(huePosition).toFixed(1)})`;
+}
+
+function hueDistance(firstHue: number, secondHue: number): number {
+	const difference = Math.abs(firstHue - secondHue) % 360;
+	return Math.min(difference, 360 - difference);
+}
+
+function distanceToNearestTakenHue(huePosition: number, takenHuePositions: number[]): number {
+	const hue = authorHueAt(huePosition);
+	return Math.min(Number.POSITIVE_INFINITY, ...takenHuePositions.map((takenPosition) => hueDistance(hue, authorHueAt(takenPosition))));
+}
+
+function spacedHuePosition(preferredPosition: number, takenHuePositions: number[], targetHueGap: number): number {
+	let bestPosition = preferredPosition;
+	let bestDistance = distanceToNearestTakenHue(preferredPosition, takenHuePositions);
+	for (let offset = authorHueSearchStep; bestDistance < targetHueGap && offset <= authorHueSpan / 2; offset += authorHueSearchStep) {
+		for (const candidate of [preferredPosition + offset, preferredPosition - offset]) {
+			const wrappedCandidate = ((candidate % authorHueSpan) + authorHueSpan) % authorHueSpan;
+			const candidateDistance = distanceToNearestTakenHue(wrappedCandidate, takenHuePositions);
+			if (candidateDistance <= bestDistance) continue;
+			bestPosition = wrappedCandidate;
+			bestDistance = candidateDistance;
 		}
-		takenIndexes.add(colorIndex);
-		tokenByHandle.set(agentHandle, agentColorTokens[colorIndex]);
 	}
-	return tokenByHandle;
+	return bestPosition;
 }
 
-export function agentColorTokenAmong(tokenByHandle: ReadonlyMap<string, string> | undefined, agentHandle: string): string {
-	return tokenByHandle?.get(agentColorKey(agentHandle)) ?? agentColorToken(agentHandle);
+export function agentColor(agentHandle: string): string {
+	return authorColorAt(agentHuePosition(agentHandle));
+}
+
+export function distinctAgentColors(agentHandles: Iterable<string>): Map<string, string> {
+	const takenHuePositions: number[] = [];
+	const colorByHandle = new Map<string, string>();
+	const authorHandles = [...new Set([...agentHandles].map(agentColorKey))].sort();
+	const targetHueGap = Math.max(narrowestAuthorHueGap, Math.min(widestAuthorHueGap, authorHueSpan / authorHandles.length));
+	for (const agentHandle of authorHandles) {
+		const huePosition = spacedHuePosition(agentHuePosition(agentHandle), takenHuePositions, targetHueGap);
+		takenHuePositions.push(huePosition);
+		colorByHandle.set(agentHandle, authorColorAt(huePosition));
+	}
+	return colorByHandle;
+}
+
+export function agentColorAmong(colorByHandle: ReadonlyMap<string, string> | undefined, agentHandle: string): string {
+	return colorByHandle?.get(agentColorKey(agentHandle)) ?? agentColor(agentHandle);
 }
 
 export function highlightSegments(text: string, ranges: [number, number][]) {

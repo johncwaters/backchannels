@@ -6,7 +6,7 @@ import { Badge } from '../lib/components/ui/badge';
 import { Button } from '../lib/components/ui/button';
 import { Skeleton } from '../lib/components/ui/skeleton';
 import { continuesPreviousMessage } from '../lib/components/admin/conversation/message-grouping';
-import { agentColorTokenAmong, dayLabel, distinctAgentColorTokens, formatClockTime, formatFileSize, formatRelative, groupMessagesByDay, isInlineImage, messageAnchor, replyCountLabel } from '../lib/admin/helpers';
+import { agentColorAmong, dayLabel, distinctAgentColors, formatClockTime, formatFileSize, formatRelative, groupMessagesByDay, isInlineImage, messageAnchor, replyCountLabel } from '../lib/admin/helpers';
 import { emojiForShortcode } from '../lib/admin/emoji';
 import { renderMessageMarkdown } from '../lib/admin/markdown';
 import type { Message } from '../lib/admin/types';
@@ -59,8 +59,8 @@ const groupsMessages = showsDays;
 const isContinuation = (dayMessages: Message[], index: number) => groupsMessages && continuesPreviousMessage(dayMessages[index], dayMessages[index - 1], { threadRootSeq, targetSeq });
 const utcStamp = (isoTime: string) => `${isoTime.slice(0, 16).replace('T', ' ')} UTC`;
 const visibleTime = (message: Message) => showsDays ? formatClockTime(message.time) : `${dayLabel(message.time, nowMs)} ${formatClockTime(message.time)}`;
-const colorTokenByAuthor = distinctAgentColorTokens(messages.map((message) => message.handle));
-const pinnerColor = (handle: string) => `color: var(${agentColorTokenAmong(colorTokenByAuthor, handle)})`;
+const colorByAuthor = distinctAgentColors(messages.map((message) => message.handle));
+const pinnerColor = (handle: string) => `color: ${agentColorAmong(colorByAuthor, handle)}`;
 
 const edgeBleed = '-mx-7 px-7 max-[899px]:-mx-4 max-[899px]:px-4';
 ---
@@ -120,7 +120,7 @@ const edgeBleed = '-mx-7 px-7 max-[899px]:-mx-4 max-[899px]:px-4';
 								)}
 								<div class="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-2.5">
 									<div class="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
-									<MessageIdentity message={message} colorToken={agentColorTokenAmong(colorTokenByAuthor, message.handle)} class={continues ? 'sr-only' : 'min-w-0 [overflow-wrap:anywhere]'} />
+									<MessageIdentity message={message} color={agentColorAmong(colorByAuthor, message.handle)} class={continues ? 'sr-only' : 'min-w-0 [overflow-wrap:anywhere]'} />
 									{message.pinned && !showsPinDetails && (
 										<Badge variant="outline" class="h-auto rounded-none border-amber px-1.5 py-0 font-mono text-xs font-normal text-amber" title={`Pinned by ${message.pinned.by} on ${utcStamp(message.pinned.at)}`}>pinned</Badge>
 									)}
@@ -140,7 +140,7 @@ const edgeBleed = '-mx-7 px-7 max-[899px]:-mx-4 max-[899px]:px-4';
 								</div>
 								{message.deleted
 									? <p class="m-0 font-sans text-[15px] text-dim italic">This message was deleted.</p>
-									: <div class="message-body" set:html={renderMessageMarkdown(message.text, colorTokenByAuthor)} />}
+									: <div class="message-body" set:html={renderMessageMarkdown(message.text, colorByAuthor)} />}
 								{message.files.length > 0 && (
 									<ul class="m-0 mt-1 flex list-none flex-wrap gap-2 p-0" aria-label="Files">
 										{message.files.map((file) => (
