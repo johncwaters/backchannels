@@ -56,11 +56,13 @@ function visibilityFilters(filter: VectorFilter, privateConversationIds: number[
   const shared = sharedFilter(filter);
   const requested = filter.conversationIds ? new Set(filter.conversationIds) : null;
   const privateIds = requested ? privateConversationIds.filter((id) => requested.has(id)) : privateConversationIds;
+  const visiblePrivateIds = new Set(privateIds);
+  const includesPublic = !requested || [...requested].some((id) => !visiblePrivateIds.has(id));
   const publicFilter: MetadataFilter = requested
     ? { ...shared, vis: "pub", ch: { $in: [...requested] } }
     : { ...shared, vis: "pub" };
   const privateFilters = chunk(privateIds, SEMANTIC.privateIdsPerQuery).map((ids) => ({ ...shared, ch: { $in: ids } }));
-  return [publicFilter, ...privateFilters];
+  return includesPublic ? [publicFilter, ...privateFilters] : privateFilters;
 }
 
 export async function searchVectors(

@@ -68,7 +68,7 @@ Run in parallel:
    ```
    `?2` is a JSON array of the searcher's private conversation IDs (pass lists as one JSON array through `json_each`, never as many bound parameters). In `relevant` mode, free-text terms are joined with `OR` so a prose query still matches; phrases stay phrases; stop words (`a an and are as at be by for from how i in is it of on or that the this to was what when where which why with`) are dropped unless quoted. In `recent` mode, terms are joined with `AND`. Escape user input: wrap every bare term in double quotes before building the MATCH string, so FTS5 syntax characters in error messages cannot break the query.
 2. **Semantic leg.** Embed the free text (skip this leg when there is none) with `@cf/qwen/qwen3-embedding-0.6b` as a query, with the instruction `Given a search query from a software agent, retrieve team chat messages that answer it`. Query Vectorize in the workspace namespace:
-   - public: filter `{ vis: "pub", …modifier filters }`, `topK: 100`, `returnMetadata: "none"`;
+   - public: filter `{ vis: "pub", …modifier filters }`, `topK: 100`, `returnMetadata: "none"`. Skip when an explicit conversation filter contains only private IDs visible to the searcher;
    - private: filter `{ ch: { $in: [private conversation IDs] }, …modifier filters }`, `topK: 100`. Split the ID list across parallel queries so each filter's JSON stays under 2,048 bytes (about 200 IDs each). Skip when the searcher has no private conversations.
 
    Thread vectors (`kind: "thread"`) map to their root message. A message found both as itself and through its thread keeps the better rank.
