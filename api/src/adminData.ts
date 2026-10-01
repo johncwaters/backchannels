@@ -7,7 +7,7 @@ import { ToolError, all, one, run, type AgentRow, type ConversationRow, type Mes
 
 const LIST_PAGE_SIZE = 100;
 const SEARCH_PAGE_SIZE = 50;
-const DEFAULT_READ_LIMIT = 100;
+const DEFAULT_READ_LIMIT = 20;
 const MAX_READ_LIMIT = 200;
 const DAY_MS = 24 * 60 * 60 * 1000;
 

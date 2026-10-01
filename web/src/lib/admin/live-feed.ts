@@ -1,3 +1,5 @@
+import { installOlderMessages, preserveLoadedMessages, readingAnchor, restoreReadingAnchor } from './message-pagination';
+
 export const refreshIntervalMs = 10_000;
 export const refreshTimeoutMs = 8_000;
 const statusPulseMs = 900;
@@ -28,6 +30,11 @@ function isNearBottom(element: HTMLElement): boolean {
 }
 
 function openFeedAtReadingPosition(): void {
+	const target = location.hash ? document.getElementById(location.hash.slice(1)) : document.querySelector<HTMLElement>('[data-message-feed] article.target');
+	if (target) {
+		target.scrollIntoView({ block: 'start' });
+		return;
+	}
 	if (location.hash) return;
 	const firstUnread = document.querySelector<HTMLElement>('[data-first-unread]');
 	if (firstUnread) {
@@ -82,20 +89,28 @@ function refocus(region: HTMLElement, selector: string, matchIndex: number): voi
 }
 
 function replaceRegion(region: HTMLElement, freshRegion: HTMLElement): boolean {
+	if (region.hasAttribute('data-pagination-loading')) return false;
+	preserveLoadedMessages(region, freshRegion);
 	const focused = focusedElementWithin(region);
 	const focusSelector = focused ? focusSelectorFor(focused) : null;
 	if (focused && (!focusSelector || !freshRegion.querySelector(focusSelector))) return false;
 	const focusMatchIndex = focused && focusSelector ? [...region.querySelectorAll(focusSelector)].indexOf(focused) : 0;
 	const followsNewest = region.hasAttribute('data-opens-at-end') && isNearBottom(region);
+	const anchor = region.hasAttribute('data-message-feed') && !followsNewest ? readingAnchor(region) : undefined;
 	const scrollTop = region.scrollTop;
 	const openKeys = openDetailsKeys(region);
 	const knownIds = new Set([...region.querySelectorAll('[id]')].map((element) => element.id));
 	const previousPreviews = previewsByHref(region);
 	region.innerHTML = freshRegion.innerHTML;
+	if (region.hasAttribute('data-message-feed')) {
+		if (freshRegion.dataset.olderHref) region.dataset.olderHref = freshRegion.dataset.olderHref;
+		else region.removeAttribute('data-older-href');
+	}
 	markArrivals(region, knownIds, previousPreviews);
 	region.scrollTop = scrollTop;
 	reopenDetails(region, openKeys);
 	if (focusSelector) refocus(region, focusSelector, focusMatchIndex);
+	restoreReadingAnchor(region, anchor);
 	if (followsNewest) region.lastElementChild?.scrollIntoView({ block: 'end', behavior: 'smooth' });
 	return true;
 }
@@ -142,6 +157,15 @@ function liveStatus(): HTMLElement | null {
 	return document.querySelector<HTMLElement>('[data-live-status]');
 }
 
+function refreshPageUrl(requestedUrl: string, regions: HTMLElement[]): string {
+	if (!regions.some((region) => region.dataset.live === 'messages' && region.hasAttribute('data-message-feed'))) return requestedUrl;
+	const url = new URL(requestedUrl);
+	url.searchParams.delete('around');
+	url.searchParams.delete('after');
+	url.searchParams.set('before', String(Number.MAX_SAFE_INTEGER));
+	return url.href;
+}
+
 export function installLiveFeed(): () => void {
 	const listeners = new AbortController();
 	let refreshTimer: number | undefined;
@@ -149,6 +173,7 @@ export function installLiveFeed(): () => void {
 	let hasLastRefreshFailed = false;
 	let savedSidebarScrollTop = 0;
 	let currentChangeToken = changeTokenFrom(document);
+	let stopPagination: (() => void) | undefined;
 
 	function connectionStatusText(): string {
 		if (document.hidden) return 'paused';
@@ -164,7 +189,7 @@ export function installLiveFeed(): () => void {
 		const timeout = window.setTimeout(() => request.abort('timeout'), refreshTimeoutMs);
 		const status = liveStatus();
 		if (status) status.dataset.refreshing = '';
-		const freshPage = await fetchChangedPage(requestedUrl, request, currentChangeToken).finally(() => {
+		const freshPage = await fetchChangedPage(refreshPageUrl(requestedUrl, regions), request, currentChangeToken).finally(() => {
 			window.clearTimeout(timeout);
 			if (inFlightRequest === request) inFlightRequest = null;
 		});
@@ -192,12 +217,15 @@ export function installLiveFeed(): () => void {
 
 	const { signal } = listeners;
 	document.addEventListener('astro:before-preparation', () => {
+		stopPagination?.();
 		window.clearTimeout(refreshTimer);
 		cancelInFlightRefresh();
 	}, { signal });
 	document.addEventListener('astro:page-load', () => {
 		currentChangeToken = changeTokenFrom(document);
 		openFeedAtReadingPosition();
+		stopPagination?.();
+		stopPagination = installOlderMessages();
 		scheduleNextRefresh();
 	}, { signal });
 
@@ -220,6 +248,7 @@ export function installLiveFeed(): () => void {
 
 	return () => {
 		listeners.abort();
+		stopPagination?.();
 		window.clearTimeout(refreshTimer);
 		cancelInFlightRefresh();
 	};

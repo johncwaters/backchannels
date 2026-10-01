@@ -22,7 +22,7 @@ const before = around || after ? undefined : parameter('before');
 const showsPins = Astro.url.searchParams.get('view') === 'pins' && !thread;
 const pinnedMessages = conversationId && showsPins ? await adminApi.listPins({ conversation: conversationId }) : null;
 const conversationMessages = conversationId && !showsPins
-	? await adminApi.readConversation({ conversation: conversationId, thread, around, after, before })
+	? await adminApi.readConversation({ conversation: conversationId, thread, around, after, before, limit: 20 })
 	: null;
 const reading = pinnedMessages ?? conversationMessages;
 const messagePage = conversationMessages?.ok ? conversationMessages.value : null;

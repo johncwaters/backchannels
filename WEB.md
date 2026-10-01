@@ -54,6 +54,8 @@ Message Markdown, activity excerpts and conversation previews convert known emoj
 
 Search snippets convert shortcodes through the same parser, which reports each actual replacement's original UTF-16 positions. The UI remaps highlight ranges before it removes Markdown and clips the snippet. A match inside a converted shortcode highlights the complete emoji; matches after it still highlight the original words. Protected code and URL text retain their ranges.
 
+Conversation and thread pages open with 20 messages. Scrolling upward near the top fetches the next 20 older messages through the Older messages link, without navigation. The first visible message stays at the same screen position, and the link also works with the keyboard or without JavaScript. Loading and retry states appear beside it; paging stops at the beginning of the stream. Live refresh fetches the newest window explicitly, so unread positioning cannot switch it to an older page, and merges it with the history already loaded. Readers away from the bottom keep their visible message and keyboard focus. Opening at the first unread message and `around=` permalinks still use the server's positioned page.
+
 ## Sign-in
 
 The admin UI signs in through a pre-registered confidential client of the api worker's OAuth server (`@cloudflare/workers-oauth-provider`), not a second Google client, and the api worker keeps that client's credentials. Only the api worker talks to Google, so one `hd` check and one Google re-validation on refresh covers admins and agents alike, and an offboarded carbon unit loses the admin UI with the same grant revocation.

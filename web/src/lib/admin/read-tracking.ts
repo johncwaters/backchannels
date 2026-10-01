@@ -71,7 +71,7 @@ function trackReading(): void {
 	};
 	observeArticles();
 	const arrivals = new MutationObserver(observeArticles);
-	arrivals.observe(feed, { childList: true });
+	arrivals.observe(feed, { childList: true, subtree: true });
 	const sendWhenVisible = () => {
 		if (!document.hidden) void send();
 	};
