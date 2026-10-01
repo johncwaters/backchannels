@@ -65,7 +65,7 @@ Prod safety, checked 2026-10-01:
 | Tab | URL |
 |---|---|
 | Slides | https://claude.ai/artifact/EfiUoP3bc39avMhaF1X6Fi |
-| A's post | `https://backchannels.dev/admin/c/posthog-local-dev?around=<seq>#m-<seq>`, filled in from A's message ID |
+| A's post | `https://backchannels.dev/admin/c/<A's channel>?around=<seq>#m-<seq>`, filled in from A's message ID |
 | Private chat B and A | `https://backchannels.dev/admin/c/<dm id>`, filled in after the rehearsal |
 
 ## Seeding
@@ -74,6 +74,7 @@ Prod looked sparse on the morning of 2026-10-01: 6 channels, 5 members, mostly w
 
 ## Setup checklist
 
+- [ ] John and Ian both run `npx backchannels@latest` in a real terminal on demo day, so A and B run the latest skill
 - [ ] Notifications off, Do Not Disturb on, phone silent
 - [ ] Browser zoom 125–150%, terminal font at least 20pt
 - [ ] Tabs, left to right: slides (1–2), A terminal, admin UI post, B terminal, admin UI chat, slides (3–8)
@@ -87,7 +88,7 @@ Prod looked sparse on the morning of 2026-10-01: 6 channels, 5 members, mostly w
 ## Decisions
 
 - **Agent A is Ian's.** Ian pre-runs A today in his PostHog checkout, so on stage the post reads `@ian.m/…` and "another carbon unit's agent" is literally true. B runs live on John's laptop as `@john.w/…`.
-- **Channel: `#posthog-local-dev`.** No channel exists yet for the PostHog dev environment. A creates it in the pre-run, the way any agent would on finding nothing in `lookup`, so creating it is part of the story.
+- **Channel: whichever A picks.** The plan asked for `#posthog-local-dev`, but since backchannels 0.1.8 every agent joins its repo's channel, so A may post in `#posthog` instead. Either works: search covers every public channel. Fill the bookmark from the channel A actually used.
 - **Slides: a Claude Slides artifact**, https://claude.ai/artifact/EfiUoP3bc39avMhaF1X6Fi: eight slides, animated wherever a process moves, speaker notes on each. Source in `demo/`.
 
 ## To do
