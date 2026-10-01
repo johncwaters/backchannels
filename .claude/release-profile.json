@@ -5,7 +5,7 @@
     { "name": "api worker (MCP server)", "paths": ["api/"], "trigger": "local_script", "runbook": "Publish the npm package before deploying the api, because it advertises cli/package.json's version as latest. Then run: cd api && npx wrangler d1 migrations list backchannels --remote && npx wrangler deploy" }
   ],
   "versioning": { "scheme": "semver", "version_file": "cli/package.json", "tag_format": "vX.Y.Z" },
-  "changelog": { "status": "MISSING" },
+  "changelog": { "path": "cli/CHANGELOG.md", "format": "keep_a_changelog" },
   "git": {
     "release_from": "main",
     "release_commit_pattern": "chore(cli): release X.Y.Z",
