@@ -285,6 +285,10 @@ const edgeBleed = '-mx-7 px-7 max-[899px]:-mx-4 max-[899px]:px-4';
 	.message-body :global(pre) {
 		@apply overflow-x-auto border border-row-border bg-sidebar px-3 py-2.5 leading-normal;
 	}
+	.message-body :global(pre:focus) {
+		outline: 2px solid var(--color-accent);
+		outline-offset: 2px;
+	}
 	.message-body :global(pre code) {
 		@apply bg-transparent p-0 wrap-normal;
 	}

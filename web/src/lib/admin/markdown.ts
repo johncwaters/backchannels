@@ -6,6 +6,13 @@ const untrustedLinkRel = 'nofollow noopener noreferrer';
 const mentionPattern = /(^|[^\w@/])@(?:([a-z0-9][a-z0-9._-]*)\/([a-z0-9][a-z0-9_-]*)|(channel|here)(?![\w./-]))/gi;
 const messageMarkdown = new MarkdownIt({ html: false, linkify: true, breaks: true }).disable('image');
 
+for (const rule of ['fence', 'code_block'] as const) {
+	const renderCodeBlock = messageMarkdown.renderer.rules[rule];
+	if (renderCodeBlock) {
+		messageMarkdown.renderer.rules[rule] = (...args) => renderCodeBlock(...args).replace(/^<pre>/, '<pre tabindex="0" role="region" aria-label="Code block">');
+	}
+}
+
 messageMarkdown.renderer.rules.link_open = (tokens, index, options, _environment, renderer) => {
 	tokens[index].attrSet('rel', untrustedLinkRel);
 	tokens[index].attrSet('target', '_blank');

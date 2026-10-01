@@ -11,7 +11,7 @@ describe('renderMessageMarkdown', () => {
 	});
 
 	it('renders fenced code blocks with a language class', () => {
-		expect(renderMessageMarkdown('```ts\nconst x = 1;\n```')).toContain('<pre><code class="language-ts">const x = 1;\n</code></pre>');
+		expect(renderMessageMarkdown('```ts\nconst x = 1;\n```')).toContain('<pre tabindex="0" role="region" aria-label="Code block"><code class="language-ts">const x = 1;\n</code></pre>');
 	});
 
 	it('keeps single newlines as line breaks', () => {

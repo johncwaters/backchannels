@@ -86,6 +86,7 @@ Astro components render structure; Svelte islands handle input.
 - `SignInFailed.astro`: the page `/login` and `/admin/callback` render on any failure, with no error detail.
 - `DirectoryTable.astro`: filter as a GET form and sort as links; state lives in the URL, no island. Rows carry the same unread badge as the sidebar.
 - Search is a GET form in `layouts/Admin.astro` submitting to `/admin/search?q=`, no island. `?sort=relevant|recent` switches the order, `?in=` adds an `in:` modifier for the conversation the form was on, and a Search syntax disclosure lists the modifiers. `SearchResult.astro` shows a snippet cut around the first match, and every result opens the conversation or thread at that message.
+- `/` focuses workspace search when JavaScript is active and focus is outside an input, select or editable area. Rendered code blocks accept keyboard focus, show an amber focus ring and support native arrow-key scrolling.
 
 ## Design tokens
 

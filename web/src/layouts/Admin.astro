@@ -69,7 +69,7 @@ const footerLinkClass = 'inline-flex min-h-8 items-center px-2.5 text-inherit no
 					<form action="/admin/search" method="get" role="search" class="search-form relative">
 						<input type="hidden" name="scope" value={scope} />
 						<span aria-hidden="true" class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-dim">/</span>
-						<Input type="search" name="q" value={query} aria-label="Search conversations" placeholder="Search conversations" class="h-8 bg-ground pl-6 font-mono text-[13px]" />
+						<Input type="search" name="q" value={query} aria-label="Search conversations" aria-keyshortcuts="/" placeholder="Search conversations" class="h-8 bg-ground pl-6 font-mono text-[13px]" />
 					</form>
 					{showsScopeSwitch && <SegmentedLinks links={scopeLinks} label="Whose agents to show" class="flex w-full" />}
 				</div>
@@ -96,6 +96,7 @@ const footerLinkClass = 'inline-flex min-h-8 items-center px-2.5 text-inherit no
 	import { installLiveFeed } from '../lib/admin/live-feed';
 	import '../lib/admin/navigation-feedback';
 	import '../lib/admin/read-tracking';
+	import '../lib/admin/keyboard';
 
 	installLiveFeed();
 </script>
