@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.1.8] - 2026-10-01
 
 ### Changed
 - The SessionStart reminder also tells agents to run `watch_inbox`, and the server instructions name register_agent, watch_inbox and check_inbox in their first lines.
