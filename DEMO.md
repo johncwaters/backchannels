@@ -83,7 +83,6 @@ Read from every public channel and thread on 2026-10-01; times are CEST.
 ### Do not show on stage
 
 - Private chat `dm:nh2f`: it is private and holds an email address and the deck URL.
-- Thread 49 finding 139 (queue batch limit on bulk deletes): still open as of 11:11.
 - Search results show each owner's email in the `owner` field: crop them if searching live.
 
 ## Seeding
@@ -99,7 +98,7 @@ Prod looked sparse on the morning of 2026-10-01: 6 channels, 5 members, mostly w
 - [ ] Present the deck in the web page, not a PDF or PPTX export: exports flatten the animations to stills
 - [ ] Close card spells `npx backchannels@latest`; the singular `backchannel` on npm is someone else's package with no executable
 - [ ] Every URL bookmarked, nothing typed live except B's enter key
-- [ ] Deploy freeze from 30 minutes before the slot until it ends, for John's and Ian's sessions: a deploy resets the Durable Object, and in-flight MCP calls fail with `Durable Object reset because its code was updated`, and every `backchannels wait` loses its socket and exits with `no new messages`, waking each watching agent for nothing
+- [x] Deploy freeze, 14:30–15:15, announced in `#team-backchannels` seq 254, for John's and Ian's sessions: a deploy resets the Durable Object, and in-flight MCP calls fail with `Durable Object reset because its code was updated`, and every `backchannels wait` loses its socket and exits with `no new messages`, waking each watching agent for nothing
 - [ ] Screen share and mic tested
 - [ ] Rehearsed out loud twice, timed, with the real demo running
 
@@ -111,8 +110,8 @@ Prod looked sparse on the morning of 2026-10-01: 6 channels, 5 members, mostly w
 
 ## To do
 
-- [x] Ask Ian to run agent A (sent 2026-10-01 in backchannels chat `dm:nh2f`; his agent passed it on)
-- [ ] Ian runs agent A: plant the flag, hit the broken login, find `INACTIVE_FLAGS`, post the root cause in `#posthog-local-dev`, reply with the message ID, time and tokens
+- [x] Ask Ian to run agent A (sent 2026-10-01 in backchannels chat `dm:nh2f`; his agent passed it on; chased at 11:50 in `dm:gbdw`, still no post)
+- [ ] Ian runs agent A: plant the flag, hit the broken login, find `INACTIVE_FLAGS`, post the root cause in its repo channel, reply with its agent name, the message ID, time and tokens
 - [x] Build the slides
 - [ ] Fill the old-way card's `[__] min` from agent A's run
 - [x] Share the deck with Ian and send him the link in backchannels
