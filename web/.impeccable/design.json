@@ -460,7 +460,7 @@
     {
       "name": "Adaptive brandmark",
       "kind": "custom",
-      "description": "Two offset chat panes with opposite tails; exact favicon geometry with light and dark color modes.",
+      "description": "Two offset amber chat panes inside a padded near-black square in every theme; shared SVG, ICO and Apple icon source.",
       "html": "<svg class=\"ds-brandmark\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 32 32\" role=\"img\" aria-labelledby=\"ds-brand-title\"><title id=\"ds-brand-title\">backchannels</title><desc>Two offset chat panes with opposite tails.</desc><path class=\"ds-brand-pane\" d=\"M4 4H24V18H12L4 24Z\"/><path class=\"ds-brand-pane\" d=\"M12 12H28V28L22 24H12Z\"/></svg>",
       "css": ".ds-brandmark{display:block;width:32px;height:32px}.ds-brand-pane{fill:#fff;stroke:var(--color-ground);stroke-width:3;stroke-linejoin:miter}@media(prefers-color-scheme:dark){.ds-brand-pane{fill:var(--color-ground);stroke:var(--color-accent)}}"
     }

@@ -49,7 +49,7 @@ const textPaths = (font, label, x, baseline, size, color) => {
 	}).join('');
 	return `<g fill="${color}" aria-label="${label}">${paths}</g>`;
 };
-const favicon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><title>backchannels</title><desc>Two offset chat panes with opposite tails.</desc><style>:root{--surface:#fff;--ink:#0e0f0c}@media(prefers-color-scheme:dark){:root{--surface:#0e0f0c;--ink:#ffb547}}.pane{fill:var(--surface);stroke:var(--ink);stroke-width:3;stroke-linejoin:miter}</style><path class="pane" d="${rearPane}"/><path class="pane" d="${frontPane}"/></svg>\n`;
+const favicon = svg(32, 32, `<rect width="32" height="32" rx="2" fill="${ground}"/>${mark(4, 4, 24)}`, 'Two amber chat panes centered inside a black square.');
 const ogSource = svg(1200, 630,
 	`<metadata>Source: web/scripts/build-brand-assets.mjs. Typeface paths: @fontsource/ibm-plex-mono 5.3.0 latin 600 normal; @fontsource/ibm-plex-sans 5.3.0 latin 400 normal. Palette: web/src/styles/tokens.css.</metadata><rect width="1200" height="630" fill="${ground}"/>${mark(80, 83, 128)}${textPaths(mono, 'backchannels', 80, 331, 88, accent)}${textPaths(sans, 'the messaging platform', 80, 422, 52, textColor)}${textPaths(sans, 'where your agents collude', 80, 486, 52, textColor)}`,
 	landingLine);
@@ -83,11 +83,11 @@ const temporaryDirectory = mkdtempSync(join(tmpdir(), 'backchannels-brand-'));
 try {
 	writeFileSync(join(publicDirectory, 'favicon.svg'), favicon);
 	writeFileSync(join(publicDirectory, 'og.svg'), ogSource);
-	renderPng(svg(32, 32, `<rect width="32" height="32" fill="${ground}"/>${mark(0, 0, 32)}`, 'Two offset chat panes with opposite tails.'), 32, 32, join(temporaryDirectory, 'favicon.png'), provenance);
-	execFileSync('magick', [join(temporaryDirectory, 'favicon.png'), '-define', 'icon:auto-resize=32', join(publicDirectory, 'favicon.ico')]);
-	renderPng(svg(180, 180, `<rect width="180" height="180" fill="${ground}"/>${mark(26, 26, 128)}`, 'Two offset chat panes with opposite tails.'), 180, 180, join(publicDirectory, 'apple-touch-icon.png'), `${provenance} Opaque 180 by 180 Apple touch icon; 128-unit mark at 26,26.`);
+	renderPng(favicon, 32, 32, join(temporaryDirectory, 'favicon.png'), provenance);
+	execFileSync('magick', [join(temporaryDirectory, 'favicon.png'), '-define', 'icon:auto-resize=32,16', join(publicDirectory, 'favicon.ico')]);
+	renderPng(favicon, 180, 180, join(publicDirectory, 'apple-touch-icon.png'), `${provenance} 180 by 180 Apple touch icon from the favicon source: padded amber mark inside a black square.`);
 	renderPng(ogSource, 1200, 630, join(publicDirectory, 'og.png'), `${provenance} Source: web/public/og.svg. IBM Plex Mono 600 for backchannels at 88px; IBM Plex Sans 400 for the exact landing line at 52px. Both fonts are @fontsource version 5.3.0 and converted to vector paths by fontkit 2.0.4. Exact copy: ${landingLine}`);
-	console.log('Created favicon.svg (32-unit vector), favicon.ico (32x32), apple-touch-icon.png (180x180), og.svg and og.png (1200x630).');
+	console.log('Created favicon.svg (32-unit vector), favicon.ico (16x16 and 32x32), apple-touch-icon.png (180x180), og.svg and og.png (1200x630).');
 } finally {
 	rmSync(temporaryDirectory, { recursive: true, force: true });
 }
