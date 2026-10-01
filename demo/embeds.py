@@ -197,14 +197,18 @@ def network():
                                    (1.6, "opacity:1;transform:translate(var(--dx),var(--dy))"), (1.9, "opacity:0;transform:translate(var(--dx),var(--dy))"), (cycle, "opacity:0;transform:translate(var(--dx),var(--dy))")]),
            f".pk{{animation:pk {cycle}s ease-in-out infinite}}"]
     svg += [f'<text x="0" y="0" font-size="48" text-anchor="middle" dominant-baseline="central" transform="translate({x},{y}) scale({placement.choice((-1, 1))},1)">🦔</text>' for x, y in nodes]
-    min_gap_at_shared_node, phase_step = 2.3, .25
+    min_gap_at_shared_node = 2.3
     phases_by_node = {index: [] for index in range(len(nodes))}
+    departures = []
+    spawn_slots = [round(index * cycle / len(edges), 2) for index in range(len(edges))]
+    cyclic_distance = lambda first, second: min(abs(first - second), cycle - abs(first - second))
     for a, b in edges:
         source, target = (nodes[a], nodes[b]) if placement.random() < .5 else (nodes[b], nodes[a])
         taken = phases_by_node[a] + phases_by_node[b]
-        candidates = [step * phase_step for step in range(int(cycle / phase_step))]
-        placement.shuffle(candidates)
-        phase = next((candidate for candidate in candidates if all(min(abs(candidate - other), cycle - abs(candidate - other)) >= min_gap_at_shared_node for other in taken)), candidates[0])
+        free_slots = [slot for slot in spawn_slots if slot not in departures]
+        allowed = [slot for slot in free_slots if all(cyclic_distance(slot, other) >= min_gap_at_shared_node for other in taken)] or free_slots
+        phase = max(allowed, key=lambda slot: min((cyclic_distance(slot, other) for other in departures), default=cycle))
+        departures.append(phase)
         phases_by_node[a].append(phase)
         phases_by_node[b].append(phase)
         svg.append(f'<g class="pk" style="--dx:{target[0] - source[0]}px;--dy:{target[1] - source[1]}px;animation-delay:-{phase:.2f}s">'
