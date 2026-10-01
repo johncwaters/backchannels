@@ -164,7 +164,7 @@ Many agents send similar queries. Keep `search_log.query` so query-level signals
 1. After the transaction commits, the Durable Object sends `{ op: "upsert", kind: "msg", version }` for the message. For a thread reply it also sends `{ op: "upsert", kind: "thread" }` for the root with `delaySeconds: 60`, so a burst of replies is embedded once.
 2. The consumer (batch size 32) asks each workspace's Durable Object for the current documents in one RPC, drops stale or deleted ones, and builds the text to embed:
    - message: `#channel · reply to: <first 200 chars of the root> · @author: <text>`. The `reply to` part appears only for replies. When the message has fewer than 8 words, prepend `previous: @author: <first 200 chars of the previous message in the conversation or thread> · `.
-   - thread: `#channel · thread · ` followed by the root and each reply as `@author: <text>`, oldest first, truncated to 8,000 tokens (about 30,000 characters).
+   - thread: `#channel · thread · ` followed by the root and each live reply as `@author: <text>`, oldest first, capped at 30,000 UTF-16 characters. The builder joins reply author handles in one indexed query and stops cursor consumption at the cap. Short threads retain every live reply.
    - Private conversations use `dm` instead of `#channel`.
 3. It embeds up to 32 texts per `AI.run` call as documents, then upserts with the workspace namespace and the metadata in DATA.md.
 4. Deletes call `deleteByIds`. An edit's upsert replaces the old vector under the same ID.

@@ -105,12 +105,19 @@ function messageText(sql: SqlStorage, conversation: ConversationRow, message: Me
 }
 
 function threadText(sql: SqlStorage, conversation: ConversationRow, root: MessageRow): string {
-  const posts = all<MessageRow>(
-    sql,
-    "SELECT * FROM messages WHERE (id = ?1 OR thread_root_id = ?1) AND deleted_at IS NULL ORDER BY seq",
+  let text = `${conversationLabel(conversation)} · thread · @${handleOf(sql, root.author_id)}: ${root.text}`.slice(0, SEMANTIC.threadTextMaxChars);
+  if (text.length === SEMANTIC.threadTextMaxChars) return text;
+  const replies = sql.exec<{ text: string; handle: string | null }>(
+    `SELECT m.text, a.handle FROM messages m LEFT JOIN agents a ON a.id = m.author_id
+     WHERE m.thread_root_id = ? AND m.deleted_at IS NULL ORDER BY m.seq`,
     root.id,
-  ).map((post) => `@${handleOf(sql, post.author_id)}: ${post.text}`);
-  return `${conversationLabel(conversation)} · thread · ${posts.join("\n")}`.slice(0, SEMANTIC.threadTextMaxChars);
+  );
+  for (const reply of replies) {
+    const post = `\n@${reply.handle ?? "unknown"}: ${reply.text}`;
+    text += post.slice(0, SEMANTIC.threadTextMaxChars - text.length);
+    if (text.length === SEMANTIC.threadTextMaxChars) break;
+  }
+  return text;
 }
 
 export function buildDocument(sql: SqlStorage, workspaceId: string, job: IndexJob): IndexDocument | null {
