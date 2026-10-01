@@ -27,9 +27,10 @@ function textFrame(text: string): Buffer {
   return Buffer.concat([header, payload]);
 }
 
-async function createWebSocketServer(context: TestContext, onOpen: (socket: Duplex, request: IncomingMessage) => void, shouldReject = false) {
+async function createWebSocketServer(context: TestContext, onOpen: (socket: Duplex, request: IncomingMessage, upgradeCount: number) => void, shouldReject: boolean | ((upgradeCount: number) => boolean) = false, rejectionStatus = "401 Unauthorized") {
   const sockets = new Set<Duplex>();
   const server = createServer();
+  let upgradeCount = 0;
   context.after(async () => {
     for (const socket of sockets) socket.destroy();
     await new Promise<void>((resolve, reject) => server.close(error => {
@@ -38,10 +39,11 @@ async function createWebSocketServer(context: TestContext, onOpen: (socket: Dupl
     }));
   });
   server.on("upgrade", (request, socket) => {
+    upgradeCount += 1;
     sockets.add(socket);
     socket.on("close", () => sockets.delete(socket));
-    if (shouldReject) {
-      socket.end("HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+    if (typeof shouldReject === "function" ? shouldReject(upgradeCount) : shouldReject) {
+      socket.end(`HTTP/1.1 ${rejectionStatus}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n`);
       return;
     }
     const key = request.headers["sec-websocket-key"];
@@ -51,7 +53,7 @@ async function createWebSocketServer(context: TestContext, onOpen: (socket: Dupl
     socket.on("data", (frame: Buffer) => {
       if ((frame[0] & 0x0f) === 8 && !socket.writableEnded) socket.end(Buffer.from([0x88, 0x00]));
     });
-    onOpen(socket, request);
+    onOpen(socket, request, upgradeCount);
   });
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
@@ -139,28 +141,282 @@ for (const [name, frame] of Object.entries({
 
 const CONNECTION_LOST_LINE = "backchannels: connection lost, so new messages may have been missed; call check_inbox, then run this command again";
 
-test("wait returns one and says the connection was lost when the opened server closes without a policy code", { timeout: 5000 }, async context => {
+for (const cursor of [0, 42, Number.MAX_SAFE_INTEGER]) {
+  test(`wait records cursor ${cursor} without waking and keeps it across reconnects`, { timeout: 5000 }, async context => {
+    const output = captureOutput(context);
+    let upgradeCount = 0;
+    const url = await createWebSocketServer(context, (socket, request, connectionNumber) => {
+      upgradeCount = connectionNumber;
+      const resumeProtocol = connectionNumber === 1 ? "" : `, bc-resume.${cursor}`;
+      assert.equal(request.headers["sec-websocket-protocol"], `bc-stream, test-ticket, bc-resume${resumeProtocol}`);
+      assert.deepEqual(output.stdout, []);
+      assert.deepEqual(output.stderr, []);
+      if (connectionNumber < 3) {
+        const frames = [
+          { type: "cursor", cursor: connectionNumber === 1 ? cursor : 7 },
+          { type: "cursor", cursor: 99 },
+        ];
+        socket.end(Buffer.concat([...frames.map(frame => textFrame(JSON.stringify(frame))), Buffer.from([0x88, 0x00])]));
+        return;
+      }
+      socket.write(textFrame(JSON.stringify(PUSH_EVENT)));
+    });
+    assert.equal(await wait(url, "test-ticket", 1000, 30, {}, [1, 2]), 0);
+    assert.equal(upgradeCount, 3);
+    assert.deepEqual(output.stdout, [EVENT_LINE]);
+    assert.deepEqual(output.stderr, []);
+  });
+}
+
+for (const cursor of [undefined, null, -1, 1.5, "42", Number.MAX_SAFE_INTEGER + 1]) {
+  test(`wait ignores invalid cursor ${JSON.stringify(cursor)} without waking or offering it`, { timeout: 5000 }, async context => {
+    const output = captureOutput(context);
+    const url = await createWebSocketServer(context, (socket, request, connectionNumber) => {
+      assert.equal(request.headers["sec-websocket-protocol"], "bc-stream, test-ticket, bc-resume");
+      if (connectionNumber === 1) {
+        socket.end(Buffer.concat([textFrame(JSON.stringify({ type: "cursor", cursor })), Buffer.from([0x88, 0x00])]));
+        return;
+      }
+      assert.deepEqual(output.stdout, []);
+      socket.write(textFrame(JSON.stringify(PUSH_EVENT)));
+    });
+    assert.equal(await wait(url, "test-ticket", 1000, 30, {}, [1]), 0);
+    assert.deepEqual(output.stdout, [EVENT_LINE]);
+    assert.deepEqual(output.stderr, []);
+  });
+}
+
+test("wait keeps waiting when it only receives cursor frames", { timeout: 5000 }, async context => {
   const output = captureOutput(context);
-  const url = await createWebSocketServer(context, socket => socket.end(Buffer.from([0x88, 0x00])));
-  assert.equal(await wait(url, "test-ticket"), 1);
+  const url = await createWebSocketServer(context, socket => socket.write(textFrame(JSON.stringify({ type: "cursor", cursor: 42 }))));
+  assert.equal(await wait(url, "test-ticket", 50), 0);
+  assert.deepEqual(output.stdout, [NO_MESSAGES_LINE]);
+  assert.deepEqual(output.stderr, []);
+});
+
+test("wait escalates backoff and exits after five reconnects drop before ten seconds", async context => {
+  const output = captureOutput(context);
+  context.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  const sockets: EventTarget[] = [];
+  context.mock.method(globalThis, "WebSocket", function() {
+    const socket = Object.assign(new EventTarget(), { close() {} });
+    sockets.push(socket);
+    return socket;
+  });
+  const waiting = wait("ws://localhost/stream", "test-ticket", 120000, 30, {});
+  sockets[0].dispatchEvent(new Event("open"));
+  sockets[0].dispatchEvent(Object.assign(new Event("close"), { code: 1006 }));
+  for (const reconnectDelayMs of [1000, 2000, 4000, 8000, 16000]) {
+    const previousSocketCount = sockets.length;
+    context.mock.timers.tick(reconnectDelayMs - 1);
+    assert.equal(sockets.length, previousSocketCount);
+    context.mock.timers.tick(1);
+    assert.equal(sockets.length, previousSocketCount + 1);
+    const currentSocket = sockets[sockets.length - 1];
+    currentSocket.dispatchEvent(new Event("open"));
+    context.mock.timers.tick(9999);
+    assert.deepEqual(output.stderr, []);
+    currentSocket.dispatchEvent(Object.assign(new Event("close"), { code: 1006 }));
+  }
+  assert.equal(await waiting, 1);
+  assert.equal(sockets.length, 6);
   assert.deepEqual(output.stdout, []);
   assert.deepEqual(output.stderr, [CONNECTION_LOST_LINE]);
 });
 
-test("wait returns one and says the connection was lost when the opened socket drops without a close frame", { timeout: 5000 }, async context => {
+test("wait resets backoff only when a socket drops after ten seconds", async context => {
   const output = captureOutput(context);
-  const url = await createWebSocketServer(context, socket => setTimeout(() => socket.destroy(), 25));
-  assert.equal(await wait(url, "test-ticket"), 1);
+  context.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  const sockets: EventTarget[] = [];
+  context.mock.method(globalThis, "WebSocket", function() {
+    const socket = Object.assign(new EventTarget(), { close() {} });
+    sockets.push(socket);
+    return socket;
+  });
+  const waiting = wait("ws://localhost/stream", "test-ticket", 120000, 30, {});
+  sockets[0].dispatchEvent(new Event("open"));
+  sockets[0].dispatchEvent(new Event("error"));
+  context.mock.timers.tick(1000);
+  sockets[1].dispatchEvent(new Event("error"));
+  context.mock.timers.tick(2000);
+  sockets[2].dispatchEvent(new Event("open"));
+  context.mock.timers.tick(10000);
+  sockets[2].dispatchEvent(new Event("error"));
+  context.mock.timers.tick(999);
+  assert.equal(sockets.length, 3);
+  context.mock.timers.tick(1);
+  assert.equal(sockets.length, 4);
+  sockets[3].dispatchEvent(new Event("open"));
+  sockets[3].dispatchEvent(new MessageEvent("message", { data: JSON.stringify(PUSH_EVENT) }));
+  assert.equal(await waiting, 0);
+  assert.deepEqual(output.stdout, [EVENT_LINE]);
+  assert.deepEqual(output.stderr, []);
+});
+
+test("wait uses the default backoff for socket errors and ignores events from replaced sockets", async context => {
+  const output = captureOutput(context);
+  context.mock.timers.enable({ apis: ["setTimeout"] });
+  class StreamSocket extends EventTarget {
+    hasClosed = false;
+
+    constructor(url: string, protocols: string[]) {
+      super();
+      assert.equal(url, "ws://localhost/stream");
+      assert.deepEqual(protocols, ["bc-stream", "test-ticket", "bc-resume"]);
+      sockets.push(this);
+    }
+
+    close(): void {
+      this.hasClosed = true;
+    }
+  }
+  const sockets: StreamSocket[] = [];
+  context.mock.method(globalThis, "WebSocket", function(url: string, protocols: string[]) {
+    return new StreamSocket(url, protocols);
+  });
+  const waiting = wait("ws://localhost/stream", "test-ticket", 60000, 30, {});
+  const firstSocket = sockets[0];
+  firstSocket.dispatchEvent(new Event("open"));
+  firstSocket.dispatchEvent(new Event("error"));
+  firstSocket.dispatchEvent(new Event("close"));
+  for (const reconnectDelayMs of [1000, 2000, 4000, 8000, 16000]) {
+    const previousSocketCount = sockets.length;
+    context.mock.timers.tick(reconnectDelayMs - 1);
+    assert.equal(sockets.length, previousSocketCount);
+    context.mock.timers.tick(1);
+    assert.equal(sockets.length, previousSocketCount + 1);
+    firstSocket.dispatchEvent(new Event("open"));
+    firstSocket.dispatchEvent(new MessageEvent("message", { data: JSON.stringify(PUSH_EVENT) }));
+    firstSocket.dispatchEvent(Object.assign(new Event("close"), { code: 1008, reason: "stale policy close" }));
+    assert.deepEqual(output.stdout, []);
+    assert.deepEqual(output.stderr, []);
+    const currentSocket = sockets[sockets.length - 1];
+    currentSocket.dispatchEvent(new Event("error"));
+    currentSocket.dispatchEvent(new Event("close"));
+  }
+  assert.equal(await waiting, 1);
+  context.mock.timers.tick(60000);
+  assert.equal(sockets.length, 6);
+  assert.ok(sockets.every(socket => socket.hasClosed));
   assert.deepEqual(output.stdout, []);
   assert.deepEqual(output.stderr, [CONNECTION_LOST_LINE]);
 });
 
-test("wait returns one with the printable server reason on a policy close", { timeout: 5000 }, async context => {
+test("wait reconnects quietly after the server closes an opened socket and wakes on the next connection", { timeout: 5000 }, async context => {
   const output = captureOutput(context);
+  let upgradeCount = 0;
+  const url = await createWebSocketServer(context, (socket, request, connectionNumber) => {
+    upgradeCount = connectionNumber;
+    assert.equal(request.url, "/stream");
+    assert.equal(request.headers["sec-websocket-protocol"], "bc-stream, test-ticket, bc-resume");
+    assert.deepEqual(output.stdout, []);
+    assert.deepEqual(output.stderr, []);
+    if (connectionNumber === 1) {
+      socket.end(Buffer.from([0x88, 0x00]));
+      return;
+    }
+    socket.write(textFrame(JSON.stringify(PUSH_EVENT)));
+  });
+  assert.equal(await wait(url, "test-ticket", 1000, 30, {}, [5]), 0);
+  await delay(20);
+  assert.equal(upgradeCount, 2);
+  assert.deepEqual(output.stdout, [EVENT_LINE]);
+  assert.deepEqual(output.stderr, []);
+});
+
+test("wait exits with connection lost after five consecutive reconnects fail to open", { timeout: 5000 }, async context => {
+  const output = captureOutput(context);
+  let upgradeCount = 0;
+  const url = await createWebSocketServer(context, socket => socket.end(Buffer.from([0x88, 0x00])), connectionNumber => {
+    upgradeCount = connectionNumber;
+    return connectionNumber > 1;
+  }, "503 Service Unavailable");
+  assert.equal(await wait(url, "test-ticket", 1000, 30, {}, [1, 2, 4, 8, 16]), 1);
+  await delay(20);
+  assert.equal(upgradeCount, 6);
+  assert.deepEqual(output.stdout, []);
+  assert.deepEqual(output.stderr, [CONNECTION_LOST_LINE]);
+});
+
+test("wait reconnects after abrupt drops and resets backoff when each socket stays healthy", { timeout: 5000 }, async context => {
+  const output = captureOutput(context);
+  let upgradeCount = 0;
+  const url = await createWebSocketServer(context, (socket, request, connectionNumber) => {
+    upgradeCount = connectionNumber;
+    if (connectionNumber < 3) {
+      setTimeout(() => socket.destroy(), 25);
+      return;
+    }
+    socket.write(textFrame(JSON.stringify(PUSH_EVENT)));
+  });
+  assert.equal(await wait(url, "test-ticket", 500, 30, {}, [5, 1000], 10), 0);
+  assert.equal(upgradeCount, 3);
+  assert.deepEqual(output.stdout, [EVENT_LINE]);
+  assert.deepEqual(output.stderr, []);
+});
+
+test("wait resets consecutive failures after a healthy reconnect drops", { timeout: 5000 }, async context => {
+  const output = captureOutput(context);
+  let upgradeCount = 0;
+  const url = await createWebSocketServer(context, (socket, request, connectionNumber) => {
+    if (connectionNumber < 11) {
+      setTimeout(() => socket.end(Buffer.from([0x88, 0x00])), 25);
+      return;
+    }
+    socket.write(textFrame(JSON.stringify(PUSH_EVENT)));
+  }, connectionNumber => {
+    upgradeCount = connectionNumber;
+    return connectionNumber !== 1 && connectionNumber !== 6 && connectionNumber !== 11;
+  }, "503 Service Unavailable");
+  assert.equal(await wait(url, "test-ticket", 1000, 30, {}, [1, 2, 4, 8, 16], 10), 0);
+  assert.equal(upgradeCount, 11);
+  assert.deepEqual(output.stdout, [EVENT_LINE]);
+  assert.deepEqual(output.stderr, []);
+});
+
+test("wait limit ends the wait while reconnecting and cancels the pending reconnect", { timeout: 5000 }, async context => {
+  const output = captureOutput(context);
+  let upgradeCount = 0;
+  const url = await createWebSocketServer(context, (socket, request, connectionNumber) => {
+    upgradeCount = connectionNumber;
+    socket.end(Buffer.from([0x88, 0x00]));
+  });
+  assert.equal(await wait(url, "test-ticket", 100, 30, {}, [200]), 0);
+  await delay(250);
+  assert.equal(upgradeCount, 1);
+  assert.deepEqual(output.stdout, [NO_MESSAGES_LINE]);
+  assert.deepEqual(output.stderr, []);
+});
+
+test("wait ends its Claude session while reconnecting and cancels the pending reconnect", { timeout: 5000 }, async context => {
+  const output = captureOutput(context);
+  let upgradeCount = 0;
+  context.mock.method(process, "kill", () => {
+    throw Object.assign(new Error("session ended"), { code: "ESRCH" });
+  });
+  const url = await createWebSocketServer(context, (socket, request, connectionNumber) => {
+    upgradeCount = connectionNumber;
+    socket.end(Buffer.from([0x88, 0x00]));
+  });
+  assert.equal(await wait(url, "test-ticket", 1000, 100, { CLAUDE_PID: String(process.pid) }, [200]), 0);
+  await delay(250);
+  assert.equal(upgradeCount, 1);
+  assert.deepEqual(output.stdout, ["backchannels: session ended"]);
+  assert.deepEqual(output.stderr, []);
+});
+
+test("wait returns one with the printable server reason on a policy close after exactly one upgrade", { timeout: 5000 }, async context => {
+  const output = captureOutput(context);
+  let upgradeCount = 0;
   const reason = Buffer.from("credential\nrevoked");
   const closePayload = Buffer.concat([Buffer.from([0x03, 0xf0]), reason]);
-  const url = await createWebSocketServer(context, socket => socket.end(Buffer.concat([Buffer.from([0x88, closePayload.length]), closePayload])));
-  assert.equal(await wait(url, "test-ticket"), 1);
+  const url = await createWebSocketServer(context, (socket, request, connectionNumber) => {
+    upgradeCount = connectionNumber;
+    socket.end(Buffer.concat([Buffer.from([0x88, closePayload.length]), closePayload]));
+  });
+  assert.equal(await wait(url, "test-ticket", 1000, 30, {}, [5]), 1);
+  await delay(20);
+  assert.equal(upgradeCount, 1);
   assert.deepEqual(output.stdout, []);
   assert.deepEqual(output.stderr, ["backchannels: the server closed this stream (credential revoked); call check_inbox, and call watch_inbox only if you still need a stream"]);
 });
@@ -189,7 +445,7 @@ test("wait reads the ticket from the environment and sends it only in the subpro
   assert.equal(output.stdout, `${EVENT_LINE}\n`);
   assert.equal(output.stderr, "");
   assert.equal(requestUrl, "/stream");
-  assert.equal(protocols, `bc-stream, ${ticket}`);
+  assert.equal(protocols, `bc-stream, ${ticket}, bc-resume`);
 });
 
 test("wait returns zero when its internal limit expires", { timeout: 5000 }, async context => {

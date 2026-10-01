@@ -24,6 +24,13 @@ export function streamTicketFrom(request: Request): string | null {
   return offeredProtocols.find((protocol) => STREAM_TICKET_SHAPE.test(protocol)) ?? null;
 }
 
+export function streamResumeFrom(request: Request): { canResume: boolean; cursor?: number } {
+  const offeredProtocols = (request.headers.get("sec-websocket-protocol") ?? "").split(",").map((protocol) => protocol.trim());
+  const cursorProtocol = offeredProtocols.find((protocol) => /^bc-resume\.[0-9]{1,15}$/.test(protocol));
+  if (cursorProtocol) return { canResume: true, cursor: Number(cursorProtocol.slice("bc-resume.".length)) };
+  return { canResume: offeredProtocols.includes("bc-resume") };
+}
+
 export function isWebSocketUpgrade(request: Request): boolean {
   return request.method === "GET" && request.headers.get("upgrade")?.toLowerCase() === "websocket";
 }

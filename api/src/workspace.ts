@@ -24,7 +24,7 @@ import { buildDocument, reindexJobs, type IndexDocument, type IndexJob, type Pen
 import { findWorkspaceDomain, workspaceAdminSubs } from "./directory";
 import { fullHandle, handleOwner, sha256Hex } from "./ids";
 import { ToolError, all, freeSessionName, isNameHoldExpired, label, messageRef, nameInUseRefusal, one, run, type AgentRow, type ConversationRow, type MessageRow, type Scope } from "./store";
-import { STREAM_PROTOCOL, STREAM_ROUTE, isStreamGrantLive, isWebSocketUpgrade, streamTicketFrom, unauthorizedStream } from "./stream";
+import { STREAM_PROTOCOL, STREAM_ROUTE, isStreamGrantLive, isWebSocketUpgrade, streamResumeFrom, streamTicketFrom, unauthorizedStream } from "./stream";
 import { buildBrief, type Brief } from "./brief";
 import { adminChangeToken, bumpAdminOwnerRevision, bumpAdminPublicRevision, recordAdminToolChange } from "./adminRevision";
 
@@ -302,7 +302,12 @@ export class WorkspaceDO extends DurableObject<Env> {
     const [client, server] = Object.values(new WebSocketPair());
     server.serializeAttachment({ openedAt: Date.now(), grantId: holder.grant_id } satisfies StreamAttachment);
     this.ctx.acceptWebSocket(server, [agentId]);
-    this.flushPending(agentId);
+    const resume = streamResumeFrom(request);
+    if (resume.canResume) {
+      const agent = one<{ push_cursor: number }>(this.sql, "SELECT push_cursor FROM agents WHERE id = ?", agentId)!;
+      server.send(JSON.stringify({ type: "cursor", cursor: agent.push_cursor }));
+    }
+    this.flushPending(agentId, resume.cursor, resume.cursor === undefined ? undefined : server);
     return new Response(null, { status: 101, webSocket: client, headers: { "Sec-WebSocket-Protocol": STREAM_PROTOCOL } });
   }
 
@@ -346,15 +351,16 @@ export class WorkspaceDO extends DurableObject<Env> {
     for (const agentId of watchedAgentIds) this.flushPending(agentId);
   }
 
-  private flushPending(agentId: string): void {
-    const openSockets = this.ctx.getWebSockets(agentId).filter((socket) => socket.readyState === WebSocket.OPEN);
+  private flushPending(agentId: string, resumeCursor?: number, resumeSocket?: WebSocket): void {
+    const openSockets = (resumeSocket ? [resumeSocket] : this.ctx.getWebSockets(agentId)).filter((socket) => socket.readyState === WebSocket.OPEN);
     if (!openSockets.length) return;
     const pending = one<{ message_id: number; reason: string }>(
       this.sql,
       `SELECT message_id, reason ${VISIBLE_UNREAD_INBOX}
-       AND message_id > (SELECT push_cursor FROM agents WHERE id = ?1)
+       AND message_id > coalesce(?2, (SELECT push_cursor FROM agents WHERE id = ?1))
        ORDER BY message_id LIMIT 1`,
       agentId,
+      resumeCursor ?? null,
     );
     if (!pending) return;
     const event = JSON.stringify(this.pushEvent(pending.message_id, pending.reason));
@@ -371,6 +377,7 @@ export class WorkspaceDO extends DurableObject<Env> {
     const conversation = one<ConversationRow>(this.sql, "SELECT * FROM conversations WHERE id = ?", message.conversation_id)!;
     const author = one<{ handle: string }>(this.sql, "SELECT handle FROM agents WHERE id = ?", message.author_id);
     return {
+      cursor: messageId,
       reason,
       conversation: label(conversation),
       message: messageRef(conversation, message.seq),

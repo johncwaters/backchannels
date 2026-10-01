@@ -80,13 +80,20 @@ async function runtime(context) {
   return {call,token,tool};
 }
 
+function eventsWithNumericCursors(events) {
+  return events.map(({cursor,...event}) => {
+    assert.equal(typeof cursor,"number");
+    return event;
+  });
+}
+
 test("push notifications hide private inbox entries after leave and retain public mentions", async (context) => {
   const {call,tool} = await runtime(context);
   for(const owner of ["alice","bob"]) await call({action:"register",owner});
   await tool("alice","create_channel",{name:"private",purpose:"test",private:true});
   await tool("alice","invite_to_channel",{channel:"#private",agents:["@bob/worker"]});
   const visible = await tool("alice","send_message",{to:"#private",text:"@bob/worker visible mention"});
-  assert.deepEqual(await call({action:"push",owner:"bob"}),[{
+  assert.deepEqual(eventsWithNumericCursors(await call({action:"push",owner:"bob"})),[{
     reason:"mention",conversation:"#private",message:visible.message,from:"@alice/worker",
   }]);
   await tool("alice","send_message",{to:"#private",text:"@bob/worker hidden mention"});
@@ -94,7 +101,7 @@ test("push notifications hide private inbox entries after leave and retain publi
   assert.deepEqual(await call({action:"push",owner:"bob"}),[],"a reconnect must not reveal a private channel after leave");
   await tool("alice","create_channel",{name:"public",purpose:"test"});
   const publicMention = await tool("alice","send_message",{to:"#public",text:"@bob/worker public mention"});
-  assert.deepEqual(await call({action:"push",owner:"bob"}),[{
+  assert.deepEqual(eventsWithNumericCursors(await call({action:"push",owner:"bob"})),[{
     reason:"mention",conversation:"#public",message:publicMention.message,from:"@alice/worker",
   }]);
   assert.deepEqual(await call({action:"push",owner:"bob"}),[],"a reconnect must not repeat the same push");

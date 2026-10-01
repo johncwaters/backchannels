@@ -484,8 +484,8 @@ const EVENT_TIMEOUT_MS = 5000;
 const SPONSOR_LIVENESS_MS = 7 * 24 * 60 * 60 * 1000;
 const SPONSOR_STALE_MARGIN_MS = 3000;
 
-function watchStream(url, ticket) {
-  const socket = new WebSocket(url, ["bc-stream", ticket]);
+function watchStream(url, ticket, resumeProtocols = []) {
+  const socket = new WebSocket(url, ["bc-stream", ticket, ...resumeProtocols]);
   const events = [];
   const waiters = [];
   socket.addEventListener("message", (message) => {
@@ -568,7 +568,8 @@ describe("inbox push stream", () => {
     const event = await stream.nextEvent();
     await delay(QUIET_PERIOD_MS);
     assert.deepEqual(stream.events, [], "more than one event arrived");
-    assert.deepEqual(Object.keys(event).sort(), ["conversation", "from", "message", "reason"]);
+    assert.deepEqual(Object.keys(event).sort(), ["conversation", "cursor", "from", "message", "reason"]);
+    assert.ok(Number.isSafeInteger(event.cursor) && event.cursor > 0);
     assert.equal(event.reason, "dm");
     assert.equal(event.message, sent.message);
     assert.equal(event.conversation, sent.conversation);
@@ -687,6 +688,106 @@ describe("inbox push stream", () => {
     const refused = await senderClient.call("send_message", { ...sender, to: watcherHandle, text: `try ${watch.ticket}` });
     assert.equal(refused.ok, false);
     assert.match(refused.error, /stream ticket/);
+  });
+});
+
+describe("resumable inbox push stream", () => {
+  async function createStreamFixture(context) {
+    const space = randomBytes(6).toString("hex");
+    const watcherClient = mcpClient("watcher", MODERN, space);
+    const senderClient = mcpClient("sender", MODERN, space);
+    const watcher = { agent: "stream-listener" };
+    const sender = { agent: "stream-publisher" };
+    const registered = await expectOk(watcherClient.call("register_agent", { name: watcher.agent, description: "Receives resumable inbox pushes" }), "register watcher");
+    await expectOk(senderClient.call("register_agent", { name: sender.agent, description: "Sends resumable inbox fixtures" }), "register sender");
+    const watch = await expectOk(watcherClient.call("watch_inbox", watcher), "watch inbox");
+    const streams = [];
+    context.after(async () => {
+      await Promise.all(streams.map(stream => stream.close()));
+    });
+    async function open(resumeProtocols = []) {
+      const stream = watchStream(watch.url, watch.ticket, resumeProtocols);
+      streams.push(stream);
+      await stream.opened;
+      assert.equal(stream.socket.protocol, "bc-stream");
+      return stream;
+    }
+    const send = text => expectOk(senderClient.call("send_message", { ...sender, to: registered.handle, text }), "send message");
+    const markRead = messages => expectOk(watcherClient.call("mark_read", { ...watcher, messages }), "mark read");
+    return { open, send, markRead };
+  }
+
+  test("only sockets offering resume receive a cursor and legacy pushes stay unchanged", async context => {
+    const { open, send } = await createStreamFixture(context);
+    const legacy = await open();
+    const invalid = await open(["bc-resume.-1", "bc-resume.1000000000000000"]);
+    const capable = await open(["bc-resume"]);
+    assert.deepEqual(await capable.nextEvent(), { type: "cursor", cursor: 0 });
+    await delay(QUIET_PERIOD_MS);
+    assert.deepEqual(legacy.events, []);
+    assert.deepEqual(invalid.events, []);
+    assert.deepEqual(capable.events, []);
+    const sent = await send("resume capability");
+    const pushed = await capable.nextEvent();
+    assert.equal(pushed.message, sent.message);
+    assert.ok(Number.isSafeInteger(pushed.cursor) && pushed.cursor > 0);
+    assert.deepEqual(await legacy.nextEvent(), pushed);
+    assert.deepEqual(await invalid.nextEvent(), pushed);
+  });
+
+  test("a stale resume cursor replays only unread items on its own socket despite the server cursor", async context => {
+    const { open, send, markRead } = await createStreamFixture(context);
+    const original = await open(["bc-resume"]);
+    assert.deepEqual(await original.nextEvent(), { type: "cursor", cursor: 0 });
+    const first = await send("first unread push");
+    const firstPush = await original.nextEvent();
+    const second = await send("second unread push");
+    const secondPush = await original.nextEvent();
+    assert.ok(secondPush.cursor > firstPush.cursor);
+    await original.close();
+    const legacy = await open();
+    const resumed = await open(["bc-resume.0"]);
+    assert.deepEqual(await resumed.nextEvent(), { type: "cursor", cursor: secondPush.cursor });
+    assert.deepEqual(await resumed.nextEvent(), firstPush);
+    await delay(QUIET_PERIOD_MS);
+    assert.deepEqual(resumed.events, []);
+    assert.deepEqual(legacy.events, []);
+    await resumed.close();
+    const current = await open(["bc-resume", `bc-resume.${secondPush.cursor}`]);
+    assert.deepEqual(await current.nextEvent(), { type: "cursor", cursor: secondPush.cursor });
+    await delay(QUIET_PERIOD_MS);
+    assert.deepEqual(current.events, []);
+    await current.close();
+    await markRead([first.message]);
+    const afterReadingFirst = await open(["bc-resume.0"]);
+    assert.deepEqual(await afterReadingFirst.nextEvent(), { type: "cursor", cursor: secondPush.cursor });
+    assert.deepEqual(await afterReadingFirst.nextEvent(), secondPush);
+    await afterReadingFirst.close();
+    await markRead([second.message]);
+    const afterReadingBoth = await open(["bc-resume.0"]);
+    assert.deepEqual(await afterReadingBoth.nextEvent(), { type: "cursor", cursor: secondPush.cursor });
+    await delay(QUIET_PERIOD_MS);
+    assert.deepEqual(afterReadingBoth.events, []);
+    assert.deepEqual(legacy.events, []);
+  });
+
+  test("cursor precedes a pending push and resuming uses the supplied cursor after a batch advances the server cursor", async context => {
+    const { open, send } = await createStreamFixture(context);
+    const first = await send("first disconnected message");
+    const second = await send("second disconnected message");
+    const initial = await open(["bc-resume"]);
+    assert.deepEqual(await initial.nextEvent(), { type: "cursor", cursor: 0 });
+    const firstPush = await initial.nextEvent();
+    assert.equal(firstPush.message, first.message);
+    await initial.close();
+    const resumed = await open([`bc-resume.${firstPush.cursor}`]);
+    const serverCursor = await resumed.nextEvent();
+    const secondPush = await resumed.nextEvent();
+    assert.deepEqual(serverCursor, { type: "cursor", cursor: secondPush.cursor });
+    assert.ok(secondPush.cursor > firstPush.cursor);
+    assert.equal(secondPush.message, second.message);
+    await delay(QUIET_PERIOD_MS);
+    assert.deepEqual(resumed.events, []);
   });
 });
 

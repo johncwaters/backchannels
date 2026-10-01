@@ -9,6 +9,9 @@ const CONNECTION_FAILURE = "backchannels: ticket expired or server unreachable; 
 const CONNECTION_LOST = "backchannels: connection lost, so new messages may have been missed; call check_inbox, then run this command again";
 const POLICY_VIOLATION = 1008;
 const MAX_CLOSE_REASON_LENGTH = 123;
+const RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000, 16000];
+const MAX_FAILED_RECONNECT_ATTEMPTS = 5;
+const HEALTHY_SOCKET_DURATION_MS = 10_000;
 
 function serverClosedLine(reason: string): string {
   const printableReason = reason.replace(/[^\x20-\x7e]/g, " ").trim().slice(0, MAX_CLOSE_REASON_LENGTH) || "no reason given";
@@ -24,6 +27,7 @@ function wakeLineFor(frame: unknown): string | undefined {
     return;
   }
   if (typeof event !== "object" || event === null || Array.isArray(event)) return;
+  if ("type" in event && event.type === "cursor") return;
   if (!("reason" in event) || typeof event.reason !== "string" || !event.reason) return GENERIC_WAKE;
   if (!("conversation" in event) || typeof event.conversation !== "string") return GENERIC_WAKE;
   if (!("message" in event) || typeof event.message !== "string") return GENERIC_WAKE;
@@ -31,17 +35,15 @@ function wakeLineFor(frame: unknown): string | undefined {
   return `backchannels: new ${event.reason} from ${event.from} in ${event.conversation}; call check_inbox, then run this command again`;
 }
 
-export async function wait(url: string, ticket: string, limitMs = WAIT_LIMIT_MS, sessionPollIntervalMs = SESSION_POLL_INTERVAL_MS, environment: NodeJS.ProcessEnv = process.env): Promise<number> {
-  let socket: WebSocket;
-  try {
-    socket = new WebSocket(url, ["bc-stream", ticket]);
-  } catch {
-    console.error(CONNECTION_FAILURE);
-    return 1;
-  }
+export async function wait(url: string, ticket: string, limitMs = WAIT_LIMIT_MS, sessionPollIntervalMs = SESSION_POLL_INTERVAL_MS, environment: NodeJS.ProcessEnv = process.env, reconnectDelaysMs: readonly number[] = RECONNECT_DELAYS_MS, healthySocketDurationMs = HEALTHY_SOCKET_DURATION_MS): Promise<number> {
   return new Promise<number>(resolve => {
+    let socket: WebSocket | undefined;
     let hasOpened = false;
     let hasFinished = false;
+    let resumeCursor: number | undefined;
+    let failedReconnectAttempts = 0;
+    let reconnectDelayIndex = 0;
+    let reconnectTimeout: ReturnType<typeof setTimeout> | undefined;
     const timeout = setTimeout(() => finish(0, NO_MESSAGES), limitMs);
     const sessionPidText = environment.CLAUDE_PID ?? "";
     const sessionPid = Number(sessionPidText);
@@ -59,31 +61,91 @@ export async function wait(url: string, ticket: string, limitMs = WAIT_LIMIT_MS,
       hasFinished = true;
       clearTimeout(timeout);
       clearInterval(sessionPollInterval);
+      clearTimeout(reconnectTimeout);
       if (exitCode === 1) console.error(message);
       if (exitCode === 0) console.log(message);
-      socket.close();
+      socket?.close();
       resolve(exitCode);
     }
 
-    function finishDisconnected(event: Event): void {
+    function scheduleReconnect(hasStayedHealthy: boolean, isReconnect: boolean): void {
+      if (hasFinished) return;
       if (!hasOpened) {
         finish(1, CONNECTION_FAILURE);
         return;
       }
-      if ("code" in event && event.code === POLICY_VIOLATION) {
-        finish(1, serverClosedLine("reason" in event && typeof event.reason === "string" ? event.reason : ""));
+      if (hasStayedHealthy) {
+        failedReconnectAttempts = 0;
+        reconnectDelayIndex = 0;
+      }
+      if (!hasStayedHealthy && isReconnect) failedReconnectAttempts += 1;
+      if (failedReconnectAttempts >= MAX_FAILED_RECONNECT_ATTEMPTS) {
+        finish(1, CONNECTION_LOST);
         return;
       }
-      finish(1, CONNECTION_LOST);
+      const reconnectDelayMs = reconnectDelaysMs[Math.min(reconnectDelayIndex, reconnectDelaysMs.length - 1)];
+      reconnectDelayIndex += 1;
+      reconnectTimeout = setTimeout(connect, reconnectDelayMs);
     }
 
-    socket.addEventListener("open", () => { hasOpened = true; });
-    socket.addEventListener("message", event => {
-      const wakeLine = wakeLineFor(event.data);
-      if (!wakeLine) return;
-      finish(0, wakeLine);
-    });
-    socket.addEventListener("error", finishDisconnected);
-    socket.addEventListener("close", finishDisconnected);
+    function connect(): void {
+      if (hasFinished) return;
+      reconnectTimeout = undefined;
+      const isReconnect = hasOpened;
+      let currentSocket: WebSocket;
+      try {
+        const offeredProtocols = ["bc-stream", ticket, "bc-resume"];
+        if (isReconnect && resumeCursor !== undefined) offeredProtocols.push(`bc-resume.${resumeCursor}`);
+        currentSocket = new WebSocket(url, offeredProtocols);
+      } catch {
+        scheduleReconnect(false, isReconnect);
+        return;
+      }
+      socket = currentSocket;
+      let didOpen = false;
+      let openedAtMs = 0;
+      let hasDisconnected = false;
+
+      function disconnect(): void {
+        if (hasFinished || hasDisconnected || socket !== currentSocket) return;
+        hasDisconnected = true;
+        currentSocket.close();
+        scheduleReconnect(didOpen && Date.now() - openedAtMs >= healthySocketDurationMs, isReconnect);
+      }
+
+      currentSocket.addEventListener("open", () => {
+        if (hasFinished || hasDisconnected || socket !== currentSocket) return;
+        didOpen = true;
+        openedAtMs = Date.now();
+        hasOpened = true;
+      });
+      currentSocket.addEventListener("message", event => {
+        if (hasFinished || hasDisconnected || socket !== currentSocket) return;
+        if (resumeCursor === undefined && typeof event.data === "string") {
+          try {
+            const frame: unknown = JSON.parse(event.data);
+            if (typeof frame === "object" && frame !== null && !Array.isArray(frame) && "type" in frame && frame.type === "cursor" && "cursor" in frame && typeof frame.cursor === "number" && Number.isSafeInteger(frame.cursor) && frame.cursor >= 0) {
+              resumeCursor = frame.cursor;
+            }
+          } catch {
+            return;
+          }
+        }
+        const wakeLine = wakeLineFor(event.data);
+        if (!wakeLine) return;
+        finish(0, wakeLine);
+      });
+      currentSocket.addEventListener("error", disconnect);
+      currentSocket.addEventListener("close", event => {
+        if (hasFinished || hasDisconnected || socket !== currentSocket) return;
+        if (didOpen && event.code === POLICY_VIOLATION) {
+          finish(1, serverClosedLine(event.reason));
+          return;
+        }
+        disconnect();
+      });
+    }
+
+    connect();
   });
 }
