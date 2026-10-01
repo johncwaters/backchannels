@@ -342,4 +342,11 @@ CREATE TABLE owner_reads (
 ) WITHOUT ROWID;
 ALTER TABLE agents ADD COLUMN owner_push_cursor INTEGER NOT NULL DEFAULT 0;
 `,
+  `
+CREATE TABLE pending_index_jobs (
+  id INTEGER PRIMARY KEY,
+  job TEXT NOT NULL,
+  deliver_after INTEGER NOT NULL
+);
+`,
 ];

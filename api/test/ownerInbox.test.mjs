@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import { addAgent, addConversation, createDatabase, createScope } from "./lib/sqlite.mjs";
 import { LIMITS } from "../src/limits.ts";
 import { MIGRATIONS } from "../src/schema.ts";
+import { IndexDelivery } from "../src/indexDelivery.ts";
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -64,8 +65,31 @@ function attachWatchers(workspace, agentIds = ["caller", "second", "stranger"]) 
   const durableWorkspace = Object.create(WorkspaceDO.prototype);
   durableWorkspace.sql = workspace.sql;
   durableWorkspace.env = {};
+  let alarm = null;
+  let transactionTail = Promise.resolve();
   durableWorkspace.ctx = {
     storage: {
+      sql: workspace.sql,
+      getAlarm: async () => alarm,
+      setAlarm: async (time) => { alarm = time; },
+      deleteAlarm: async () => { alarm = null; },
+      transaction(invoke) {
+        const result = transactionTail.then(async () => {
+          const priorAlarm = alarm;
+          workspace.database.exec("BEGIN");
+          try {
+            const output = await invoke();
+            workspace.database.exec("COMMIT");
+            return output;
+          } catch (error) {
+            workspace.database.exec("ROLLBACK");
+            alarm = priorAlarm;
+            throw error;
+          }
+        });
+        transactionTail = result.catch(() => {});
+        return result;
+      },
       transactionSync(invoke) {
         workspace.database.exec("BEGIN");
         try {
@@ -81,6 +105,9 @@ function attachWatchers(workspace, agentIds = ["caller", "second", "stranger"]) 
     getWebSockets(agentId) { return agentId ? [socketsByAgentId.get(agentId)].filter(Boolean) : [...socketsByAgentId.values()]; },
     getTags(socket) { return [...socketsByAgentId].filter(([, candidate]) => candidate === socket).map(([agentId]) => agentId); },
   };
+  durableWorkspace.indexDelivery = new IndexDelivery(durableWorkspace.ctx.storage, {
+    sendBatch: (messages) => durableWorkspace.env.INDEX_QUEUE.sendBatch(messages),
+  });
   workspace.database.prepare("INSERT INTO meta VALUES ('workspace_id', 'ws_test')").run();
   return { durableWorkspace, eventsByAgentId, socketsByAgentId };
 }
@@ -97,10 +124,11 @@ function callerIdentity(workspace, agentId) {
 }
 
 test("migration 10 adds only owner messages, claims, reads and the owner cursor", (context) => {
-  const { database } = createDatabase(MIGRATIONS.slice(0, -1));
+  const ownerMigration = MIGRATIONS.findIndex((migration) => migration.includes("CREATE TABLE owner_messages"));
+  const { database } = createDatabase(MIGRATIONS.slice(0, ownerMigration));
   context.after(() => database.close());
   addAgent(database, "existing");
-  database.exec(MIGRATIONS.at(-1));
+  database.exec(MIGRATIONS[ownerMigration]);
   assert.equal(database.prepare("SELECT owner_push_cursor FROM agents").get().owner_push_cursor, 0);
   for (const table of ["owner_messages", "claims", "owner_reads"]) {
     assert.equal(database.prepare(`SELECT count(*) AS count FROM ${table}`).get().count, 0);
@@ -525,22 +553,30 @@ describe("owner pushes", () => {
     const watchers = attachWatchers(workspace);
     const durable = watchers.durableWorkspace;
     durable.workspaceDomain = "example.com";
-    const pendingDeliveries = [];
-    let notifyBothDeliveries;
-    const bothDeliveriesPending = new Promise(resolve => { notifyBothDeliveries = resolve; });
+    let finishDelivery;
+    let notifyBothMessages;
+    let queueCalls = 0;
+    const bothMessagesPosted = new Promise(resolve => { notifyBothMessages = resolve; });
+    const callerSocket = watchers.socketsByAgentId.get("caller");
+    const sendEvent = callerSocket.send;
+    callerSocket.send = (event) => {
+      sendEvent(event);
+      if (watchers.eventsByAgentId.get("caller").length === 2) notifyBothMessages();
+    };
     durable.env.INDEX_QUEUE = {
       sendBatch() {
-        return new Promise(resolve => {
-          pendingDeliveries.push(resolve);
-          if (pendingDeliveries.length === 2) notifyBothDeliveries();
-        });
+        queueCalls++;
+        return queueCalls === 1 ? new Promise(resolve => { finishDelivery = resolve; }) : Promise.resolve();
       },
     };
     const sends = ["author", "stranger"].map(agentId => durable.tool("send_message", callerIdentity(workspace, agentId), { to: "@team", text: "Question" }));
-    await bothDeliveriesPending;
-    for (const finishDelivery of pendingDeliveries) finishDelivery();
+    await bothMessagesPosted;
+    assert.equal(queueCalls,1);
+    finishDelivery();
     const postedMessages = await Promise.all(sends);
     assert.ok(postedMessages.every(posted => !posted.error));
+    assert.equal(queueCalls,2);
+    assert.equal(workspace.database.prepare("SELECT count(*) AS count FROM pending_index_jobs").get().count,0);
     for (const agentId of ["caller", "second"]) {
       const events = watchers.eventsByAgentId.get(agentId);
       assert.equal(events.length, 2);

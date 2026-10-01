@@ -32,6 +32,19 @@ test("repeated documents embed and upsert once with the final text and metadata"
   assert.equal(state.size,2);
 });
 
+test("redelivery in separate queue batches preserves the same vector state", async () => {
+  const {env,state} = fixture();
+  const document = upsert("ws_test:1:1","persisted queue job");
+  await applyDocuments(env,"ws_test",[document]);
+  const first = structuredClone([...state]);
+  await applyDocuments(env,"ws_test",[document]);
+  assert.deepEqual([...state],first);
+  const deleted = {action:"delete",id:document.id};
+  await applyDocuments(env,"ws_test",[deleted]);
+  await applyDocuments(env,"ws_test",[deleted]);
+  assert.equal(state.size,0);
+});
+
 test("a delete keeps priority over an upsert in either input order without embedding it", async () => {
   for(const deleteFirst of [false,true]) {
     const {env,calls,state} = fixture();

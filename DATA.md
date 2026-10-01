@@ -374,6 +374,8 @@ CREATE TABLE owner_reads (
 ALTER TABLE agents ADD COLUMN owner_push_cursor INTEGER NOT NULL DEFAULT 0;
 ```
 
+Version 11 adds `pending_index_jobs (id, job, deliver_after)`. Jobs and their retry alarm commit with the domain write, then leave the table only after a successful queue send. The primary key orders delivery; no additional index or binding is needed.
+
 ### Full-text index
 
 ```sql
@@ -440,4 +442,6 @@ type IndexJob =
 
 Delivery is at least once, so the consumer is idempotent: it fetches the current row from the Durable Object and skips the job when the stored `version` (or `thread_version`) is newer, or when the message is deleted and the op is `upsert`. See SEARCH.md, Indexing.
 
-The workspace sends jobs in batches of at most 100. The consumer deduplicates documents by vector ID within each workspace batch before embedding; the last upsert wins, and a delete takes precedence over every upsert for that ID.
+The message write, its `pending_index_jobs` rows, and a retry alarm commit in one async SQLite storage transaction. Each row stores the serialized queue job and its original `deliver_after` deadline. The workspace sends jobs in ID order in batches of at most 100, with at most 300 jobs and one second per drain. Successful sends delete exactly those rows; failures retain them and schedule a retry after 30 seconds, without postponing an earlier alarm. The alarm handler and later message writes drain remaining jobs. Thread jobs retain their remaining delay. Queue acceptance followed by a crash before deletion can repeat delivery.
+
+The consumer deduplicates documents by vector ID within each workspace batch before embedding; the last upsert wins, and a delete takes precedence over every upsert for that ID.

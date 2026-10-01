@@ -13,7 +13,8 @@ import {
 import type { AdminReadOptions, AdminResult, AdminSearchOptions, ConversationSort, FileDownload, DirectoryKind, Scope as AdminScope } from "./admin";
 import { adminFile, adminList, adminMarkRead, adminPins, adminRead, adminSearch, type AdminContext } from "./adminData";
 import { checkInbox, getNotificationPrefs, markRead, setNotificationPrefs, VISIBLE_UNREAD_INBOX, watchInbox } from "./inbox";
-import { LIMITS, RATE_LIMITS, pruneRateBuckets, queueBatches } from "./limits";
+import { LIMITS, RATE_LIMITS, pruneRateBuckets } from "./limits";
+import { IndexDelivery } from "./indexDelivery";
 import { deleteMessage, editMessage, followThread, pin, react, readMessages, save, sendMessage } from "./messages";
 import { uploadFile } from "./files";
 import { newestOwnerMessage } from "./ownerInbox";
@@ -21,7 +22,7 @@ import { MIGRATIONS } from "./schema";
 import { banNotice, moderate, type ModerationOutcome } from "./moderation";
 import { SEARCH_TUNING_META_KEY, searchMessages } from "./search";
 import type { TuningOverrides } from "./search/config";
-import { buildDocument, reindexJobs, type IndexDocument, type IndexJob, type PendingIndexJob } from "./search/indexing";
+import { buildDocument, reindexJobs, type IndexDocument, type IndexJob } from "./search/indexing";
 import { findWorkspaceDomain, workspaceAdminSubs } from "./directory";
 import { fullHandle, handleOwner, sha256Hex } from "./ids";
 import { ToolError, all, freeSessionName, isNameHoldExpired, label, messageRef, nameInUseRefusal, one, run, type AgentRow, type ConversationRow, type MessageRow, type Scope } from "./store";
@@ -118,10 +119,12 @@ export type RegisterOutcome =
 export class WorkspaceDO extends DurableObject<Env> {
   private sql: SqlStorage;
   private workspaceDomain: string | undefined;
+  private indexDelivery: IndexDelivery;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.sql = ctx.storage.sql;
+    this.indexDelivery = new IndexDelivery(ctx.storage, env.INDEX_QUEUE);
     ctx.blockConcurrencyWhile(async () => this.migrate());
   }
 
@@ -275,10 +278,14 @@ export class WorkspaceDO extends DurableObject<Env> {
       return output;
     };
     try {
-      const result = ASYNC_TOOLS.has(name) ? await invoke() : this.ctx.storage.transactionSync(invoke);
+      const result = ASYNC_TOOLS.has(name) ? await invoke() : await this.ctx.storage.transaction(async () => {
+        const output = invoke();
+        await this.indexDelivery.storeJobs(caller.workspaceId, scope.indexJobs, now);
+        return output;
+      });
       const output = name === "moderate" ? this.finishModeration(result as ModerationOutcome) : result;
       if (name === "send_message") this.flushWatchers(scope.queuedOwnerSubs);
-      await this.sendIndexJobs(caller.workspaceId, scope.indexJobs);
+      if (scope.indexJobs.length) await this.indexDelivery.drain();
       return { output: output as Record<string, unknown> };
     } catch (error) {
       if (error instanceof ToolError) return { error: error.message };
@@ -481,15 +488,8 @@ export class WorkspaceDO extends DurableObject<Env> {
     };
   }
 
-  private async sendIndexJobs(workspaceId: string, jobs: PendingIndexJob[]): Promise<void> {
-    const messages = jobs.map(({ delaySeconds, ...job }) => ({ body: { ...job, ws: workspaceId } as IndexJob, delaySeconds }));
-    for (const batch of queueBatches(messages)) {
-      try {
-        await this.env.INDEX_QUEUE.sendBatch(batch);
-      } catch (error) {
-        console.error(`${batch.length} index jobs not queued; lexical search still covers these messages`, error);
-      }
-    }
+  async alarm(): Promise<void> {
+    await this.indexDelivery.drain();
   }
 
   async setSearchTuning(overrides: TuningOverrides | null, resetSignals: boolean): Promise<void> {

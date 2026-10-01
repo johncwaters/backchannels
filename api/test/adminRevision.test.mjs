@@ -25,10 +25,31 @@ async function runtime(context) {
     const admin = (owner) => ({workspaceId, grantId:'grant', sub:owner});
     export class TestWorkspace extends WorkspaceDO {
       constructor(ctx, env) {
-        super(ctx, {...env, INDEX_QUEUE:{async sendBatch(){}}, PUBLIC_URL:'http://localhost', DB:{prepare:()=>({bind:()=>({all:async()=>({results:[{sub:'alice'}]})})})}});
+        const queueState = {failures:0,sent:[]};
+        super(ctx, {...env, INDEX_QUEUE:{async sendBatch(batch){
+          if(queueState.failures>0){queueState.failures--;throw new Error('queue unavailable');}
+          queueState.sent.push(...batch);
+        }}, PUBLIC_URL:'http://localhost', DB:{prepare:()=>({bind:()=>({all:async()=>({results:[{sub:'alice'}]})})})}});
+        this.queueState = queueState;
         this.workspaceDomain = 'example.com';
       }
       async perform(input) {
+        if(input.action === 'queue') {
+          if(input.failures !== undefined) this.queueState.failures = input.failures;
+          if(input.retry) await this.alarm();
+          return {sent:this.queueState.sent,pending:this.sql.exec('SELECT id,job,deliver_after FROM pending_index_jobs ORDER BY id').toArray(),alarm:await this.ctx.storage.getAlarm()};
+        }
+        if(input.action === 'rollbackIndexWrite') {
+          let error;
+          try {
+            await this.ctx.storage.transaction(async () => {
+              this.sql.exec("INSERT INTO meta (key,value) VALUES ('rolled-back-write','1')");
+              await this.indexDelivery.storeJobs(workspaceId,[{op:'upsert',conv:1,seq:1,kind:'msg',version:1}],now);
+              throw new Error('write interrupted');
+            });
+          } catch(failure) {error = failure.message;}
+          return {error,writes:this.sql.exec("SELECT value FROM meta WHERE key='rolled-back-write'").toArray(),pending:this.sql.exec('SELECT id FROM pending_index_jobs').toArray(),alarm:await this.ctx.storage.getAlarm()};
+        }
         if(input.action === 'token') {
           const sql = this.ctx.storage.sql;
           const prior = this.sql;
@@ -134,6 +155,32 @@ function eventsWithNumericCursors(events) {
     return event;
   });
 }
+
+test("a workspace message survives queue failure and its persisted job is sent by the alarm", async (context) => {
+  const {call,tool} = await runtime(context);
+  await call({action:"register",owner:"alice"});
+  await tool("alice","create_channel",{name:"public",purpose:"test"});
+  await call({action:"queue",failures:1});
+  const sent = await tool("alice","send_message",{to:"#public",text:"persist through queue failure"});
+  assert.equal(sent.message,"public/1");
+  const failed = await call({action:"queue"});
+  assert.equal(failed.sent.length,0);
+  assert.equal(failed.pending.length,1);
+  assert.equal(failed.alarm,1800000030000);
+  const read = await call({action:"adminRead",owner:"alice",args:{conversation:"public"}});
+  assert.equal(read.value.messages[0].text,"persist through queue failure");
+  const retried = await call({action:"queue",retry:true});
+  assert.equal(retried.sent.length,1);
+  assert.deepEqual(retried.sent[0].body,JSON.parse(failed.pending[0].job));
+  assert.deepEqual(retried.pending,[]);
+  assert.equal(retried.alarm,null);
+});
+
+test("a failed SQLite write rolls back its index jobs and alarm with the domain write", async (context) => {
+  const {call} = await runtime(context);
+  const result = await call({action:"rollbackIndexWrite"});
+  assert.deepEqual(result,{error:"write interrupted",writes:[],pending:[],alarm:null});
+});
 
 test("revoking an OAuth installation closes only its push sockets and deletes its tickets", async (context) => {
   const {call,tool} = await runtime(context);
