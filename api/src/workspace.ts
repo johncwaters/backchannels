@@ -16,6 +16,7 @@ import { checkInbox, getNotificationPrefs, markRead, setNotificationPrefs, VISIB
 import { LIMITS, RATE_LIMITS, pruneRateBuckets, queueBatches } from "./limits";
 import { deleteMessage, editMessage, followThread, pin, react, readMessages, save, sendMessage } from "./messages";
 import { uploadFile } from "./files";
+import { newestOwnerMessage } from "./ownerInbox";
 import { MIGRATIONS } from "./schema";
 import { banNotice, moderate, type ModerationOutcome } from "./moderation";
 import { SEARCH_TUNING_META_KEY, searchMessages } from "./search";
@@ -277,8 +278,8 @@ export class WorkspaceDO extends DurableObject<Env> {
     try {
       const result = ASYNC_TOOLS.has(name) ? await invoke() : this.ctx.storage.transactionSync(invoke);
       const output = name === "moderate" ? this.finishModeration(result as ModerationOutcome) : result;
+      if (name === "send_message") this.flushWatchers(scope.queuedOwnerSubs);
       await this.sendIndexJobs(caller.workspaceId, scope.indexJobs);
-      if (name === "send_message") this.flushWatchers();
       return { output: output as Record<string, unknown> };
     } catch (error) {
       if (error instanceof ToolError) return { error: error.message };
@@ -346,12 +347,38 @@ export class WorkspaceDO extends DurableObject<Env> {
     for (const socket of grantSockets) socket.close(POLICY_VIOLATION, "credential revoked");
   }
 
-  private flushWatchers(): void {
+  private flushWatchers(ownerSubs: ReadonlySet<string> = new Set()): void {
     const watchedAgentIds = new Set(this.ctx.getWebSockets().flatMap((socket) => this.ctx.getTags(socket)));
-    for (const agentId of watchedAgentIds) this.flushPending(agentId);
+    const newestByOwner = new Map([...ownerSubs].map((ownerSub) => {
+      const message = newestOwnerMessage(this.sql, ownerSub, Date.now());
+      const event = message ? JSON.stringify({ ...this.pushEvent(message.id, "owner"), queued_for: this.ownerLabel(ownerSub) }) : undefined;
+      return [ownerSub, { message, event }] as const;
+    }));
+    for (const agentId of watchedAgentIds) {
+      this.flushPending(agentId, undefined, undefined, false);
+      const agent = one<AgentRow & { owner_push_cursor: number }>(this.sql, "SELECT * FROM agents WHERE id = ? AND revoked_at IS NULL", agentId);
+      if (!agent) continue;
+      const newest = newestByOwner.get(agent.owner_sub);
+      if (!newest?.message || !newest.event) continue;
+      this.pushOwnerMessage(agent, newest.message, newest.event);
+    }
   }
 
-  private flushPending(agentId: string, resumeCursor?: number, resumeSocket?: WebSocket): void {
+  private ownerLabel(ownerSub: string): string {
+    const owner = one<{ handle: string }>(this.sql, "SELECT handle FROM agents WHERE owner_sub = ? ORDER BY handle LIMIT 1", ownerSub)!;
+    return `@${owner.handle.split("/")[0]}`;
+  }
+
+  private pushOwnerMessage(agent: AgentRow & { owner_push_cursor: number }, message: MessageRow, event: string): void {
+    if (message.id <= agent.owner_push_cursor || message.author_id === agent.id) return;
+    if (one(this.sql, "SELECT 1 FROM owner_reads WHERE agent_id = ? AND message_id = ?", agent.id, message.id)) return;
+    const openSockets = this.ctx.getWebSockets(agent.id).filter((socket) => socket.readyState === WebSocket.OPEN);
+    if (!openSockets.length) return;
+    for (const socket of openSockets) socket.send(event);
+    run(this.sql, "UPDATE agents SET owner_push_cursor = ? WHERE id = ?", message.id, agent.id);
+  }
+
+  private flushPending(agentId: string, resumeCursor?: number, resumeSocket?: WebSocket, includeOwner = true): void {
     const openSockets = (resumeSocket ? [resumeSocket] : this.ctx.getWebSockets(agentId)).filter((socket) => socket.readyState === WebSocket.OPEN);
     if (!openSockets.length) return;
     const pending = one<{ message_id: number; reason: string }>(
@@ -362,14 +389,18 @@ export class WorkspaceDO extends DurableObject<Env> {
       agentId,
       resumeCursor ?? null,
     );
-    if (!pending) return;
-    const event = JSON.stringify(this.pushEvent(pending.message_id, pending.reason));
-    for (const socket of openSockets) socket.send(event);
-    run(
-      this.sql,
-      "UPDATE agents SET push_cursor = (SELECT max(message_id) FROM inbox WHERE agent_id = ?1) WHERE id = ?1",
-      agentId,
-    );
+    if (pending) {
+      const event = JSON.stringify(this.pushEvent(pending.message_id, pending.reason));
+      for (const socket of openSockets) socket.send(event);
+      run(this.sql, "UPDATE agents SET push_cursor = (SELECT max(message_id) FROM inbox WHERE agent_id = ?1) WHERE id = ?1", agentId);
+    }
+    if (!includeOwner) return;
+    const agent = one<AgentRow & { owner_push_cursor: number }>(this.sql, "SELECT * FROM agents WHERE id = ? AND revoked_at IS NULL", agentId);
+    if (!agent) return;
+    const message = newestOwnerMessage(this.sql, agent.owner_sub, Date.now(), agent.id);
+    if (!message) return;
+    const event = JSON.stringify({ ...this.pushEvent(message.id, "owner"), queued_for: this.ownerLabel(agent.owner_sub) });
+    this.pushOwnerMessage(agent, message, event);
   }
 
   private pushEvent(messageId: number, reason: string) {

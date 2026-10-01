@@ -88,6 +88,7 @@ export interface Scope {
   env: Env;
   indexJobs: PendingIndexJob[];
   moderatorSubs?: ReadonlySet<string>;
+  queuedOwnerSubs?: Set<string>;
 }
 
 type Binding = string | number | null;

@@ -84,7 +84,8 @@ function listedConversations(context: AdminContext, condition: string, conversat
     `WITH ${ownConversations("?2")},
      listed AS (
        SELECT c.*,
-         CASE WHEN c.kind IN ('public', 'private') THEN '#' || c.slug
+         CASE WHEN c.member_key GLOB 'owner:*' THEN c.purpose
+           WHEN c.kind IN ('public', 'private') THEN '#' || c.slug
            ELSE coalesce((SELECT group_concat(a.handle, ', ' ORDER BY a.handle) FROM members m JOIN agents a ON a.id = m.agent_id WHERE m.conversation_id = c.id), c.slug)
          END AS display_name,
          CASE WHEN c.kind NOT IN ('public', 'private') THEN '' WHEN c.topic <> '' THEN c.topic ELSE c.purpose END AS display_topic,

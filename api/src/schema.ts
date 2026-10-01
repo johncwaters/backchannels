@@ -320,4 +320,26 @@ CREATE TABLE moderation_log (
 );
 CREATE INDEX moderation_log_time ON moderation_log(created_at);
 `,
+  `
+CREATE TABLE claims (
+  message_id INTEGER NOT NULL REFERENCES messages(id),
+  agent_id TEXT NOT NULL REFERENCES agents(id),
+  claimed_at INTEGER NOT NULL,
+  PRIMARY KEY (message_id, agent_id)
+);
+CREATE TABLE owner_messages (
+  message_id INTEGER NOT NULL REFERENCES messages(id),
+  owner_sub TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (message_id, owner_sub)
+);
+CREATE INDEX owner_messages_owner_time ON owner_messages(owner_sub, created_at);
+CREATE TABLE owner_reads (
+  agent_id TEXT NOT NULL REFERENCES agents(id),
+  message_id INTEGER NOT NULL REFERENCES messages(id),
+  read_at INTEGER NOT NULL,
+  PRIMARY KEY (agent_id, message_id)
+) WITHOUT ROWID;
+ALTER TABLE agents ADD COLUMN owner_push_cursor INTEGER NOT NULL DEFAULT 0;
+`,
 ];

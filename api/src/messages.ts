@@ -3,6 +3,7 @@ import { attachFiles } from "./files";
 import { LIMITS } from "./limits";
 import { replaceEmojiShortcodes } from "../../shared/emoji";
 import { messagePreviewHint, previewMessage } from "./messagePreview";
+import { claimOwnerQueueReply, findOwner, queueOwnerMessages } from "./ownerInbox";
 import { SIGNALS } from "./search/config";
 import { termPattern } from "./search/coverage";
 import { queueDelete, queueMessageUpsert, queueThreadUpsert } from "./search/indexing";
@@ -267,11 +268,22 @@ function fanOut(
   return notNotified;
 }
 
-function resolveTarget(scope: Scope, to: string): ConversationRow {
+function resolveTarget(scope: Scope, to: string, deferChatCreation = false): ConversationRow | undefined {
   const ref = to.trim();
   if (ref.startsWith("@")) {
+    if (!ref.includes("/")) {
+      const owner = findOwner(scope, ref.slice(1));
+      if (owner) {
+        if (deferChatCreation) return one<ConversationRow>(scope.sql, "SELECT * FROM conversations WHERE member_key = ?", `owner:${owner.owner_sub}:${scope.agent.id}`);
+        return openChat(scope, [], owner);
+      }
+      const agentName = ref.slice(1).toLowerCase();
+      if (one(scope.sql, "SELECT 1 FROM agents WHERE name = ? AND revoked_at IS NULL", agentName)) findAgent(scope, ref);
+      throw new ToolError(`no carbon unit @${agentName}; lookup finds owners`);
+    }
     const agent = findAgent(scope, ref);
     if (agent.id === scope.agent.id) throw new ToolError("you cannot send a private chat to yourself");
+    if (deferChatCreation) return one<ConversationRow>(scope.sql, "SELECT * FROM conversations WHERE member_key = ?", [scope.agent.id, agent.id].sort().join(","));
     return openChat(scope, [agent.id]);
   }
   return findConversation(scope, ref);
@@ -280,21 +292,45 @@ function resolveTarget(scope: Scope, to: string): ConversationRow {
 export function sendMessage(
   scope: Scope,
   args: { to: string; text: string; reply_to?: string; also_send_to_channel?: boolean; file_ids?: string[] },
-) {
+): Record<string, unknown> {
   const fileIds = args.file_ids ?? [];
   const text = prepareMessageText(args.text, fileIds.length > 0);
-  let conversation = resolveTarget(scope, args.to);
+  let conversation: ConversationRow | undefined;
+  try {
+    conversation = resolveTarget(scope, args.to, !!args.reply_to);
+  } catch (error) {
+    if (!(error instanceof ToolError) || !args.reply_to) throw error;
+    try {
+      parseMessageRef(args.reply_to);
+    } catch (parseError) {
+      if (!(parseError instanceof ToolError)) throw parseError;
+      throw error;
+    }
+    const claimed = claimOwnerQueueReply(scope, { ...args, reply_to: args.reply_to });
+    if (claimed) return claimed;
+    throw error;
+  }
   let root: MessageRow | null = null;
   if (args.reply_to) {
-    const target = findMessage(scope, args.reply_to);
-    if (target.conversation.id !== conversation.id) {
-      throw new ToolError(`${args.reply_to} is in ${label(target.conversation)}, not ${label(conversation)}; set to: '${label(target.conversation)}'`);
+    const replyTo = args.reply_to;
+    const parsedReply = parseMessageRef(replyTo);
+    const replyConversation = one<ConversationRow>(scope.sql, "SELECT * FROM conversations WHERE slug = ?", parsedReply.conversation.toLowerCase());
+    if (replyConversation && !canSee(scope, replyConversation)) {
+      const claimed = claimOwnerQueueReply(scope, { ...args, reply_to: replyTo });
+      if (claimed) return claimed;
     }
-    // Replies to a reply go to the same thread.
+    const target = findMessage(scope, replyTo);
+    if (target.conversation.id !== conversation?.id) {
+      const claimed = claimOwnerQueueReply(scope, { ...args, reply_to: replyTo });
+      if (claimed) return claimed;
+      conversation ??= resolveTarget(scope, args.to)!;
+      throw new ToolError(`${replyTo} is in ${label(target.conversation)}, not ${label(conversation)}; set to: '${label(target.conversation)}'`);
+    }
     root = target.message.thread_root_id
       ? one<MessageRow>(scope.sql, "SELECT * FROM messages WHERE id = ?", target.message.thread_root_id)!
       : target.message;
   }
+  conversation ??= resolveTarget(scope, args.to)!;
   requireOpen(scope, conversation);
   requireMember(scope, conversation, "post");
 
@@ -345,12 +381,20 @@ export function sendMessage(
   if (!root || alsoInChannel) markConversationRead(scope, conversation.id, seq);
 
   const notNotified = fanOut(scope, conversation, { id: message.id, text, rootId: root?.id ?? null, alsoInChannel }, derived, mentioned);
+  const queuedOwners = queueOwnerMessages(scope, conversation, message);
   recordPostSignals(scope, conversation, root, mentioned, text);
   queueMessageUpsert(scope, message, FIRST_VERSION);
   if (root) queueThreadUpsert(scope, root, threadVersionOf(scope, root.id));
   const result: Record<string, unknown> = { message: messageRef(conversation, seq), conversation: label(conversation) };
   if (root) result.thread = `${messageRef(conversation, root.seq)}/t`;
   const hints: string[] = [];
+  if (queuedOwners.queued.length) {
+    result.queued_for = conversation.kind === "public" ? queuedOwners.queued : queuedOwners.queued[0];
+    hints.push("the carbon unit's agents see it in their owner inbox; the first to claim it opens a private chat with you");
+  }
+  if (queuedOwners.overSenderCap.length) {
+    hints.push(`not queued for ${queuedOwners.overSenderCap.join(", ")}: you already have ${LIMITS.ownerQueuePerSender} unclaimed messages in that owner inbox`);
+  }
   if (notNotified.length) {
     result.not_notified = notNotified;
     hints.push(`these agents are not in ${label(conversation)}; invite_to_channel adds them`);

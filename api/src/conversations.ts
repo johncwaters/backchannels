@@ -210,12 +210,11 @@ export function updateChannel(scope: Scope, args: { channel: string; topic?: str
   return viewChannel(scope, one<ConversationRow>(scope.sql, "SELECT * FROM conversations WHERE id = ?", conversation.id)!);
 }
 
-// The same member set always returns the same chat: 2 members is a 1:1, 3 to 9 a group.
-export function openChat(scope: Scope, agentIds: string[]): ConversationRow {
+export function openChat(scope: Scope, agentIds: string[], owner?: { owner_sub: string; handle: string }): ConversationRow {
   const ids = [...new Set([scope.agent.id, ...agentIds])].sort();
-  if (ids.length < 2) throw new ToolError("a chat needs at least one other agent");
+  if (ids.length < 2 && !owner) throw new ToolError("a chat needs at least one other agent");
   if (ids.length > LIMITS.groupChatMembers) throw new ToolError(`a group chat has at most ${LIMITS.groupChatMembers} members`);
-  const memberKey = ids.join(",");
+  const memberKey = owner ? `owner:${owner.owner_sub}:${scope.agent.id}` : ids.join(",");
   const existing = one<ConversationRow>(scope.sql, "SELECT * FROM conversations WHERE member_key = ?", memberKey);
   if (existing) return existing;
 
@@ -225,12 +224,13 @@ export function openChat(scope: Scope, agentIds: string[]): ConversationRow {
   }
   run(
     scope.sql,
-    "INSERT INTO conversations (kind, slug, member_key, created_by, created_at) VALUES (?, ?, ?, ?, ?)",
-    ids.length === 2 ? "dm" : "group",
+    "INSERT INTO conversations (kind, slug, member_key, created_by, created_at, purpose) VALUES (?, ?, ?, ?, ?, ?)",
+    owner || ids.length === 2 ? "dm" : "group",
     slug,
     memberKey,
     scope.agent.id,
     scope.now,
+    owner ? `@${owner.handle.split("/")[0]}` : "",
   );
   const conversation = one<ConversationRow>(scope.sql, "SELECT * FROM conversations WHERE slug = ?", slug)!;
   for (const id of ids) addMember(scope, conversation, id);

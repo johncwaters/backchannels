@@ -2,6 +2,7 @@ import { buildBrief } from "./brief";
 import { sha256Hex } from "./ids";
 import { LIMITS } from "./limits";
 import { messagePreviewHint, previewMessage } from "./messagePreview";
+import { countUnreadOwnerMessages, findOwnerMessage, markAllOwnerMessagesRead, markOwnerMessageRead, ownerInboxMessages } from "./ownerInbox";
 import {
   conversationOrThread,
   defaultLevel,
@@ -34,7 +35,7 @@ const INBOX_PAGE_DEFAULT = 20;
 const INBOX_PAGE_MAX = 50;
 const KEYWORD_LIMIT = 20;
 const KEYWORD_MAX_LENGTH = 50;
-const REASONS_MOST_URGENT_FIRST = ["mention", "dm", "thread", "keyword", "channel_mention", "channel"];
+const REASONS_MOST_URGENT_FIRST = ["mention", "dm", "owner", "thread", "keyword", "channel_mention", "channel"];
 export const VISIBLE_UNREAD_INBOX = `FROM inbox
   WHERE agent_id = ?1 AND read_at IS NULL AND EXISTS (
     SELECT 1 FROM messages m JOIN conversations c ON c.id = m.conversation_id
@@ -106,16 +107,23 @@ export function checkInbox(scope: Scope, args: { limit?: number; cursor?: string
       scope.agent.id,
     ).map((row) => [row.reason, row.n]),
   );
+  const ownerCount = countUnreadOwnerMessages(scope);
+  if (ownerCount) countsByReason.set("owner", ownerCount);
   const counts = Object.fromEntries(
     REASONS_MOST_URGENT_FIRST.filter((reason) => countsByReason.has(reason)).map((reason) => [reason, countsByReason.get(reason)!]),
   );
+  const ownerInbox = args.cursor ? undefined : ownerInboxMessages(scope, { limit: LIMITS.ownerQueuePage });
   return {
     items,
     counts,
     unread_channels: unreadChannels(scope),
     next_cursor: rows.length > limit ? encodeCursor(page.at(-1)!) : null,
     ...(args.cursor ? {} : { brief: buildBrief(scope) }),
-    ...messagePreviewHint(items.map(item => item.message)),
+    ...messagePreviewHint([
+      ...items.map(item => item.message),
+      ...(ownerInbox?.items.flatMap(ownerItem => [ownerItem.message, ...ownerItem.context]) ?? []),
+    ]),
+    ...(ownerInbox?.items.length ? { owner_inbox: ownerInbox } : {}),
   };
 }
 
@@ -194,6 +202,7 @@ function markUnreadFrom(scope: Scope, conversation: ConversationRow, rootId: num
 function markEverythingRead(scope: Scope) {
   const behindMarker = `FROM read_markers r JOIN conversations c ON c.id = r.conversation_id
     WHERE r.agent_id = ? AND r.last_read_seq < c.last_seq`;
+  const ownerItems = markAllOwnerMessagesRead(scope);
   const inboxItems = one<{ n: number }>(scope.sql, "SELECT count(*) AS n FROM inbox WHERE agent_id = ? AND read_at IS NULL", scope.agent.id)!.n;
   const conversations = one<{ n: number }>(scope.sql, `SELECT count(*) AS n ${behindMarker}`, scope.agent.id)!.n;
   run(scope.sql, "UPDATE inbox SET read_at = ? WHERE agent_id = ? AND read_at IS NULL", scope.now, scope.agent.id);
@@ -216,14 +225,15 @@ function markEverythingRead(scope: Scope) {
      ON CONFLICT (agent_id, root_id) DO UPDATE SET last_read_seq = excluded.last_read_seq`,
     scope.agent.id,
   );
-  return { marked_read: { inbox_items: inboxItems, conversations, threads } };
+  return { marked_read: { inbox_items: inboxItems + ownerItems, conversations, threads } };
 }
 
 function markInboxItemsRead(scope: Scope, messageIds: string[]) {
   const cleared: string[] = [];
   const notInInbox: string[] = [];
   for (const ref of messageIds) {
-    const { conversation, message } = findMessage(scope, ref);
+    const ownerItem = findOwnerMessage(scope, ref);
+    const { conversation, message } = ownerItem ?? findMessage(scope, ref);
     const id = messageRef(conversation, message.seq);
     const updated = run(
       scope.sql,
@@ -232,7 +242,8 @@ function markInboxItemsRead(scope: Scope, messageIds: string[]) {
       scope.agent.id,
       message.id,
     );
-    (updated ? cleared : notInInbox).push(id);
+    const ownerUpdated = ownerItem ? markOwnerMessageRead(scope, message.id) : 0;
+    (updated || ownerUpdated ? cleared : notInInbox).push(id);
   }
   return { marked_read: { messages: cleared }, not_in_inbox: notInInbox };
 }
@@ -263,7 +274,7 @@ export function markRead(
   const seq = upTo ?? latestSeq(scope, conversation, root?.id ?? null);
   if (seq > 0) {
     if (root) markThreadRead(scope, root.id, seq);
-    else markConversationRead(scope, conversation.id, seq);
+    if (!root) markConversationRead(scope, conversation.id, seq);
   }
   return { conversation: target, read_up_to: seq > 0 ? messageRef(conversation, seq) : null };
 }

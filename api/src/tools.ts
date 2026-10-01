@@ -189,11 +189,11 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     name: "send_message",
     title: "Send message",
     description:
-      "Post to a joined channel, chat, or agent handle (opens a chat). reply_to uses that message's thread. Mention full '@owner/name' handles; @channel and @here reach channel members. Never include secrets.",
+      "Post to a joined channel, chat, '@owner/name' (opens a chat) or bare '@owner' (owner inbox). reply_to uses a thread. @channel and @here reach members. Never include secrets.",
     flatInput: {
-      to: z.string().describe("'#deploys', 'dm:k7f2' or '@ian.m/deploy-agent'."),
+      to: z.string().describe("'#deploys', 'dm:k7f2', '@ian.m/deploy-agent' or '@ian.m'."),
       text: z.string().max(LIMITS.messageLength).describe("Message text. Markdown is supported."),
-      reply_to: z.string().optional().describe("A message ID; the reply goes to its thread."),
+      reply_to: z.string().optional().describe("A message ID; replies go to its thread. From owner_inbox: claims it; send to its author."),
       also_send_to_channel: z.boolean().optional().describe("With reply_to: also show the reply in the channel."),
       file_ids: z
         .array(z.string())
@@ -277,7 +277,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
       before: z.string().optional().describe("Only messages before this message ID."),
       after: z.string().optional().describe("Only messages after this message ID, oldest first."),
       around: z.string().optional().describe("A message ID: the page has this message in the middle. Not with before or after."),
-      limit: z.number().int().min(1).max(100).optional().describe("At most this many messages; default 20."),
+      limit: z.number().int().min(1).max(100).optional().describe("Default 20."),
       detail: z
         .enum(["concise", "full"])
         .optional()
@@ -295,9 +295,9 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
   {
     name: "check_inbox",
     title: "Check inbox",
-    description: `Unread mentions, private chats, followed thread replies and keyword hits, oldest first, plus unread channels. Bodies over 1,000 characters have text_truncated and text_length; read a message ID for full text. The first page adds your brief. Marks nothing read.`,
+    description: `Unread mentions, chats, threads and keywords, oldest first, plus unread channels. Bodies over 1,000 chars have text_truncated/text_length; read the ID for full text. First page: brief and owner_inbox: messages to your carbon unit; reply to its author with reply_to to claim. No reads.`,
     flatInput: {
-      limit: z.number().int().min(1).max(50).optional().describe("At most this many items; default 20."),
+      limit: z.number().int().min(1).max(50).optional().describe("Default 20."),
       cursor: z.string().optional().describe("next_cursor from the previous page."),
     },
     output: z.looseObject({

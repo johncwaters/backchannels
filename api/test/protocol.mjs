@@ -54,10 +54,11 @@ for (const protocolVersion of [MODERN, LEGACY]) {
       assert.ok(result.instructions.length <= MAX_INSTRUCTIONS_CHARS, `instructions are ${result.instructions.length} characters`);
     });
 
-    test("tools/list has every tool, the list under 32 KB, each tool under 6 KB with a flat input schema and an open output schema", async () => {
+    test("tools/list has every tool, the list under 32 KB, each tool under 6 KB with a flat input schema and an open output schema", async (context) => {
       const { tools } = await owner.request("tools/list");
       assert.deepEqual(tools.map((tool) => tool.name).sort(), [...EXPECTED_TOOLS].sort());
       const listBytes = new TextEncoder().encode(JSON.stringify(tools)).length;
+      context.diagnostic(`normal tools/list: ${listBytes} bytes`);
       assert.ok(listBytes < MAX_TOOL_LIST_BYTES, `tools/list is ${listBytes} bytes; every agent pays for it in every session`);
       for (const tool of tools) {
         const bytes = new TextEncoder().encode(JSON.stringify(tool)).length;
@@ -71,13 +72,14 @@ for (const protocolVersion of [MODERN, LEGACY]) {
       }
     });
 
-    test("moderator tools/list also stays under the client budget", async () => {
+    test("moderator tools/list also stays under the client budget", async (context) => {
       const space = randomBytes(6).toString("hex");
       const who = "moderatorcheck";
       await evalRequest(`/eval/headless-admin?space=${space}`, "POST", { op: "list", who, isAdmin: true, input: {} });
       const { tools } = await mcpClient(who, protocolVersion, space).request("tools/list");
       assert.ok(tools.some(tool => tool.name === "moderate"));
       const bytes = new TextEncoder().encode(JSON.stringify(tools)).length;
+      context.diagnostic(`moderator tools/list: ${bytes} bytes`);
       assert.ok(bytes < MAX_TOOL_LIST_BYTES, `moderator tools/list is ${bytes} bytes`);
       for (const tool of tools) assert.deepEqual(findClosedObjectPaths(tool.outputSchema), []);
     });
@@ -566,6 +568,56 @@ function upgradeStatus(url, ticket) {
     upgrade.end();
   });
 }
+
+describe("owner inbox", () => {
+  const run = Date.now().toString(36);
+  const ownerClient = mcpClient(`owner${run}`.slice(0, 40));
+  const senderClient = mcpClient(`asker${run}`.slice(0, 40));
+  const live = { agent: "queue-live" };
+  const spare = { agent: "queue-spare" };
+  const asker = { agent: "queue-asker" };
+
+  test("a bare owner send pushes to a sibling whose reply claims it once", async () => {
+    const registered = await expectOk(ownerClient.call("register_agent", { name: live.agent, description: "Owner inbox reader" }), "register_agent (live)");
+    await expectOk(ownerClient.call("register_agent", { name: spare.agent, description: "Second owner inbox reader" }), "register_agent (spare)");
+    await expectOk(senderClient.call("register_agent", { name: asker.agent, description: "Asks owner questions" }), "register_agent (asker)");
+    const ownerHandle = registered.handle.split("/")[0];
+    const watch = await expectOk(ownerClient.call("watch_inbox", live), "watch_inbox");
+    const stream = watchStream(watch.url, watch.ticket);
+    try {
+      await stream.opened;
+      const sent = await expectOk(senderClient.call("send_message", { ...asker, to: ownerHandle, text: `Bare owner question ${run}` }), "send_message (owner)");
+      assert.equal(sent.queued_for, ownerHandle);
+      const event = await stream.nextEvent();
+      assert.equal(event.reason, "owner");
+      assert.equal(event.message, sent.message);
+      assert.equal(event.queued_for, ownerHandle);
+      const inbox = await expectOk(ownerClient.call("check_inbox", live), "check_inbox (owner)");
+      const queued = inbox.owner_inbox.items.find((item) => item.message.id === sent.message);
+      assert.equal(queued.queued_for, ownerHandle);
+      assert.equal(inbox.counts.owner, 1);
+      const siblingInbox = await expectOk(ownerClient.call("check_inbox", spare), "check_inbox (sibling)");
+      assert.equal(siblingInbox.owner_inbox.items[0].message.id, sent.message);
+      assert.equal(siblingInbox.counts.owner, 1);
+      const claimed = await expectOk(ownerClient.call("send_message", { ...live, to: queued.message.author, reply_to: sent.message, text: "I can help." }), "send_message (owner pickup)");
+      assert.equal(claimed.claimed, sent.message);
+      assert.equal(claimed.thread, undefined);
+      const afterClaim = await expectOk(ownerClient.call("check_inbox", spare), "check_inbox (claimed)");
+      assert.equal(afterClaim.owner_inbox.items[0].claimed_by, registered.handle);
+      assert.equal(afterClaim.counts.owner, 1);
+      const second = await ownerClient.call("send_message", { ...spare, to: queued.message.author, reply_to: sent.message, text: "I can help too." });
+      assert.equal(second.ok, false);
+      assert.match(second.error, /already claimed by @.*\/queue-live.*no longer needs an answer/);
+      const askerInbox = await expectOk(senderClient.call("check_inbox", asker), "check_inbox (asker)");
+      const notices = askerInbox.items.filter((item) => item.message.text.includes(sent.message));
+      const pickupText = `Picking up ${sent.message}, which you sent to ${ownerHandle}.\n\nI can help.`;
+      assert.deepEqual(notices.map((item) => [item.message.text, item.conversation]), [[pickupText, claimed.conversation]]);
+    } finally {
+      await stream.close();
+    }
+  });
+
+});
 
 describe("inbox push stream", () => {
   const run = Date.now().toString(36);
