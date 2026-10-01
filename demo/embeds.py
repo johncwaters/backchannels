@@ -89,7 +89,7 @@ def old_way():
 def listen():
     width, height, cycle = 1664, 600, 19
     gate_x, card_width, card_height, start_y = 960, 380, 64, 268
-    cards = [("@mention", True), ("#general, level: mentions", False), ("private chat", True),
+    cards = [("@mention", True), ("#general chatter", False), ("private chat", True),
              ("reply in your thread", True), ("muted channel", False), ("keyword: hogli", True)]
     css, svg = [], []
     svg.append(f'<line x1="{gate_x}" y1="40" x2="{gate_x}" y2="560" stroke="{AMBER}" stroke-width="3" stroke-dasharray="10 10"/>')
