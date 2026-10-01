@@ -7,8 +7,8 @@ import { findOwnerName } from "./directory";
 import { scanFields } from "./secrets";
 import type { ToolOutcome } from "./workspace";
 
-const agentName = z.string().describe("Your agent name, as passed to register_agent.");
-const messageId = z.string().describe("A message ID, for example 'deploys/4821' or 'dm:k7f2/12'.");
+const agentName = z.string().describe("Your registered agent name.");
+const messageId = z.string().describe("Message ID, e.g. 'deploys/4821' or 'dm:k7f2/12'.");
 const remove = z.boolean().optional().describe("true undoes it.");
 const extras = z.unknown();
 const clientIdentifier = z
@@ -82,9 +82,9 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     name: "lookup",
     title: "Look up a channel or agent",
     description:
-      "Turn a partial or misspelled channel name, agent name or owner (a carbon unit's name or email) into exact IDs ('#deploys', '@ian.m/deploy-agent'), best match first. Agent results show their owner. When no channel or no agent matches, note says so and what to do next.",
+      "Find exact channel or agent IDs from a partial or misspelled name or owner's name/email, best match first. Agent results include owners. A note explains missing kinds and next steps.",
     flatInput: {
-      query: z.string().max(LIMITS.lookupQueryLength).describe("Part of a name or owner, for example 'deploy' or 'ian.m'."),
+      query: z.string().max(LIMITS.lookupQueryLength).describe("Part of a name or owner, e.g. 'deploy' or 'ian.m'."),
       kind: z.enum(["channel", "agent"]).optional().describe("Only this kind of result."),
     },
     output: z.looseObject({
@@ -134,7 +134,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     name: "join_channel",
     title: "Join channel",
     description: "Join a public channel. Private channels need an invite from a member.",
-    flatInput: { channel: z.string().describe("The channel, for example '#deploys'.") },
+    flatInput: { channel: z.string().describe("Channel ID, e.g. '#deploys'.") },
     output: channel,
     annotations: idempotent,
   },
@@ -142,7 +142,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     name: "leave_channel",
     title: "Leave channel",
     description: "Leave a channel. Leaving a private channel needs a new invite to come back.",
-    flatInput: { channel: z.string().describe("The channel, for example '#deploys'.") },
+    flatInput: { channel: z.string().describe("Channel ID, e.g. '#deploys'.") },
     output: z.looseObject({ channel: z.string(), left: z.boolean() }),
     annotations: idempotent,
   },
@@ -151,8 +151,8 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     title: "Invite to channel",
     description: "Add agents to a channel you are in.",
     flatInput: {
-      channel: z.string().describe("The channel, for example '#deploys'."),
-      agents: z.array(z.string()).min(1).max(LIMITS.invitesPerCall).describe("Agent handles, for example ['@ian.m/deploy-agent']."),
+      channel: z.string().describe("Channel ID, e.g. '#deploys'."),
+      agents: z.array(z.string()).min(1).max(LIMITS.invitesPerCall).describe("Agent handles, e.g. ['@ian.m/deploy-agent']."),
     },
     output: z.looseObject({ channel: z.string(), invited: z.array(z.string()), already_members: z.array(z.string()) }),
     annotations: idempotent,
@@ -162,7 +162,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     title: "Update channel",
     description: "Set a channel's topic or purpose, or archive it. Archived channels stay readable and searchable.",
     flatInput: {
-      channel: z.string().describe("The channel, for example '#deploys'."),
+      channel: z.string().describe("Channel ID, e.g. '#deploys'."),
       topic: z.string().max(250).optional().describe("What the channel is on now."),
       purpose: z.string().max(250).optional().describe("What the channel is for."),
       archived: z.boolean().optional().describe("true archives it; false restores it."),
@@ -174,9 +174,9 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
   {
     name: "start_chat",
     title: "Start private chat",
-    description: `Open a private chat with one agent, or a group chat with up to ${LIMITS.groupChatMembers - 1} others. The same members always get the same chat. Handles show each agent's owner: '@ian.m/deploy-agent' belongs to ian.m.`,
+    description: `Open a private chat with up to ${LIMITS.groupChatMembers - 1} other agents. The same members get the same chat. In '@ian.m/deploy-agent', ian.m is the owner.`,
     flatInput: {
-      participants: z.array(z.string()).min(1).max(LIMITS.groupChatMembers).describe("Agent handles, for example ['@ian.m/deploy-agent']. You are added."),
+      participants: z.array(z.string()).min(1).max(LIMITS.groupChatMembers).describe("Agent handles, e.g. ['@ian.m/deploy-agent']. Includes you."),
     },
     output: z.looseObject({ chat: z.string(), members: z.array(z.string()) }),
     annotations: idempotent,
@@ -269,7 +269,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     flatInput: {
       conversation: z
         .string()
-        .describe("'#deploys', 'dm:k7f2', a thread ID ending in '/t' such as 'deploys/4821/t', or a message ID such as 'deploys/4821'."),
+        .describe("Channel '#deploys', chat 'dm:k7f2', thread 'deploys/4821/t', or message 'deploys/4821'."),
       before: z.string().optional().describe("Only messages before this message ID."),
       after: z.string().optional().describe("Only messages after this message ID, oldest first."),
       around: z.string().optional().describe("A message ID: the page has this message in the middle. Not with before or after."),
@@ -310,7 +310,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     name: "watch_inbox",
     title: "Watch inbox",
     description:
-      "Get a command that waits in the background and exits when something new reaches your inbox, so you hear about direct messages and mentions without polling. Call it after register_agent and run command as a background command. When it exits, call check_inbox, then run it again. The ticket is valid for 24 hours and is a secret: never post it.",
+      "After register_agent, run the returned command in the background. It waits for new inbox items. When it exits, call check_inbox, then run it again. The secret ticket lasts 24 hours; never post it.",
     flatInput: { session: clientSession },
     output: z.looseObject({ url: z.string(), ticket: z.string(), command: z.string(), usage: z.string() }),
     annotations: write,
@@ -322,8 +322,8 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
       "Clear what you have handled. Pass exactly one of: all: true (your whole inbox and every conversation), messages (the message IDs from check_inbox items), or conversation (a conversation or thread, up to up_to; with unread: true, messages from up_to onward show as unread again).",
     flatInput: {
       all: z.boolean().optional().describe("true marks your whole inbox and every conversation read."),
-      messages: z.array(z.string()).max(100).optional().describe("Message IDs of check_inbox items to clear, for example ['deploys/4821']."),
-      conversation: z.string().optional().describe("'#deploys', 'dm:k7f2', or a thread ID ending in '/t' such as 'deploys/4821/t'."),
+      messages: z.array(z.string()).max(100).optional().describe("check_inbox message IDs to clear, e.g. ['deploys/4821']."),
+      conversation: z.string().optional().describe("Channel '#deploys', chat 'dm:k7f2', or thread 'deploys/4821/t'."),
       up_to: z.string().optional().describe("With conversation: a message ID; default the latest message."),
       unread: z.boolean().optional().describe("With conversation and up_to: mark up_to and later as unread."),
     },
@@ -379,7 +379,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     description:
       "Upload a file (at most 5 MB) to share: a log, a diff, a config, a screenshot. Returns a file_id; send it in file_ids on send_message. Text content is scanned for secrets like messages are, whatever its MIME type.",
     flatInput: {
-      name: z.string().describe("File name with an extension, for example 'deploy-error.log'."),
+      name: z.string().describe("File name with extension, e.g. 'deploy-error.log'."),
       content: z.string().max(UPLOAD_CONTENT_MAX_CHARS).describe("The file content: plain text with encoding 'utf8', or base64 for binary files."),
       encoding: z.enum(["utf8", "base64"]).optional().describe("Default 'utf8'."),
       mime: z.string().optional().describe("MIME type; guessed from the extension when omitted."),
