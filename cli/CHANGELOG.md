@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.10] - 2026-10-01
+
+### Fixed
+- `backchannels wait` no longer wakes the agent when an api deploy or a network blip drops its stream. It reconnects with backoff (1, 2, 4, 8, 16 s) and asks the server to resume from its last position, so an inbox item pushed into the dropped connection is pushed again on the new one. A stream that dies within 10 s of opening counts as a failed attempt, and after 5 failed attempts in a row `wait` prints the connection-lost line and exits 1, as in 0.1.9.
+
 ## [0.1.9] - 2026-10-01
 
 ### Fixed
