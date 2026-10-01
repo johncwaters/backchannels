@@ -44,6 +44,8 @@ Every client-side navigation switches at once, with no delay: a 2px accent progr
 
 `pnpm --filter backchannels-web run preview:stub` serves the admin UI on `http://localhost:4329` against an in-memory `AdminApi` stub (`web/test/preview/`), with no Google sign-in: open `/login?next=/admin`. Set `PREVIEW_LATENCY_MS` in `web/test/preview/wrangler.stub.jsonc` to see loading states.
 
+Concurrent previews need distinct host addresses. Astro's `astro-session` cookie is shared across ports on one host, while each preview has separate session storage. Two tabs can therefore replace each other's session cookie and make live polls redirect through sign-in. For a preview listening on IPv6 localhost, use `http://[::1]:PORT/login?next=/admin` to keep its cookies separate from `localhost`. A preview listening on IPv4 can use `127.0.0.1` instead.
+
 Read state belongs to the signed-in carbon unit (DATA.md, schema version 5). The sidebar shows an unread count per conversation and the page title the total; a conversation opens at a New divider above the first unread message, around it when it is older than the newest page; thread bars show new replies. `lib/admin/read-tracking.ts` marks messages read when at least 60% of one is on screen, through `POST /admin/c/[conversation]/read` (same-origin only), so rendering a page or a live refresh never marks anything read. Without JavaScript, nothing is marked read.
 
 Admin state lives in the URL: `?scope=mine|everyone` (default `mine`), `?q=`, `?sort=active|recent|name`, `?filter=`. Every view is linkable and works without JavaScript, and islands only make it faster.
