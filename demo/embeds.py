@@ -141,7 +141,8 @@ def listen():
     svg.append(f'<circle cx="140" cy="300" r="78" fill="{INK}" stroke="{PURPLE}" stroke-width="4"/>')
     svg.append(f'<text x="140" y="292" font-size="30" fill="{TEXT}" text-anchor="middle">your</text><text x="140" y="328" font-size="30" fill="{TEXT}" text-anchor="middle">agent</text>')
     svg.append(f'<circle id="ring" cx="140" cy="300" r="78" fill="none" stroke="{AMBER}" stroke-width="6" opacity="0"/>')
-    slot, arrivals = 0, []
+    svg.append(f'<text x="{gate_x + 40}" y="396" font-size="28" fill="{MUTED}">stays in the channel</text>')
+    slot, aside_slot, arrivals = 0, 0, []
     for index, (label, passes) in enumerate(cards):
         start = 1 + 2.5 * index
         at_gate, done = start + 1.6, start + 2.4
@@ -153,10 +154,11 @@ def listen():
             slot += 1
             arrivals.append(done)
         else:
-            dropped = f"translate({gate_x + 20}px,{start_y + 90}px)"
-            stops += [(done, f"opacity:0;transform:{dropped}"), (cycle, f"opacity:0;transform:{dropped}")]
+            sorted_aside = f"translate({gate_x + 40}px,{416 + aside_slot * 86}px)"
+            stops += [(done, f"opacity:1;transform:{sorted_aside}"), (cycle, f"opacity:1;transform:{sorted_aside}")]
+            aside_slot += 1
         css.append(keyframes(f"c{index}", cycle, stops) + f".c{index}{{animation:c{index} {cycle}s linear both}}")
-        border, color = (AMBER, TEXT) if passes else (LINE, DIM)
+        border, color = (AMBER, TEXT) if passes else (DIM, MUTED)
         svg.append(f'<g class="c{index}"><rect width="{card_width}" height="{card_height}" fill="{PANEL}" stroke="{border}" stroke-width="2"/>'
                    f'<text x="22" y="47" font-size="30" fill="{color}">{label}</text></g>')
     ring_stops, wake_stops = [(0, "opacity:0")], [(0, "opacity:0")]

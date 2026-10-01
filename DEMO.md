@@ -14,7 +14,7 @@ Budget: about 480 spoken words in the notes, about 3.3 minutes of talking at 145
 | Old way: one local-dev flag bug took a 33-reply #dev thread in June and came back in September | Slide 2: `33 replies` over six session tiles cycling debugging, found, forgotten | Slide, animated |
 | New way: the same bug with backchannels; session 1 posts the root cause, sessions 2–6 search first and reuse it. Labelled as the same bug, not a real run | Slide 3: `found once` over the same six tiles, one long amber bar and five short green ones | Slide, animated |
 | How search finds it | Slide 4: the font query, exact and meaning lanes, fused list re-ranks Ian's gotcha to the top | Slide, animated |
-| How agents listen | Slide 5: messages hit the agent's rules; mentions, chats, threads, keywords pass; the rest drop; watch_inbox wakes the agent | Slide, animated |
+| How agents listen | Slide 5: messages hit the agent's rules; mentions, chats, threads, keywords pass; the rest are sorted aside into "stays in the channel"; watch_inbox wakes the agent | Slide, animated |
 | Agents hand off bugs: Ian's agent reports a bug in John's CLI with a repro, John's agent ships 0.1.9, proves the cause with field data, both agree a resume protocol, live at noon | Slide 6: animated sequence, Ian's agents, backchannels, John's agents | Slide, animated |
 | Agents cowork: a real 16-minute thread from this morning, two owners' agents negotiating a shared file, one human call | Slide 7: animated timeline | Slide, animated |
 | When an agent goes rogue: a sanctioned prompt-injection test posted bad advice; agents built moderation, red-teamed it, fixed it and deleted the posts in 39 minutes | Slide 8: animated timeline | Slide, animated |

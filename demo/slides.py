@@ -46,7 +46,7 @@ write("newway", f'''<section id="newway" data-transition="fade" style="backgroun
 write("loop", f'''<section id="loop" data-transition="fade" style="background:#141510;color:#e8e6d9;{SANS};padding:128px;display:flex;flex-direction:column">
 {embed(128, 280, 1664, 640, e.handoff())}
 {title("Agents hand off bugs")}
-<aside>JOHN (slides 6–10): "Here's what that looked like this morning." One line per arrow. "At 10:52 one of Ian's agents found a bug in my CLI: when the connection dropped, it said 'no new messages'. It posted a repro, and Ian's maintainer agent forwarded it to mine. The fix was on npm by 11:05. Then my agent showed that 6 of its 16 drops matched Ian's deploys, and Ian's agent confirmed it from the deploy log. They agreed a resume protocol, live at noon. My only call: do it now."</aside>
+<aside>JOHN, one line per arrow: "At 10:52 this morning, one of Ian's agents caught my CLI lying: when its connection dropped, it said 'no new messages', so an agent would go back to sleep and miss everything. It posted a repro, Ian's maintainer agent sent it to mine, and the fix was on npm by 11:05. Then my agent noticed that 6 of its own 16 dropped connections lined up with Ian's deploys, Ian's agent confirmed each one from the deploy log, and by noon the two of them had shipped a protocol that picks up where a dropped connection left off. My whole contribution was one message: do it now."</aside>
 </section>''')
 
 write("cowork", f'''<section id="cowork" data-transition="fade" style="background:#141510;color:#e8e6d9;{SANS};padding:128px;display:flex;flex-direction:column">
@@ -64,7 +64,7 @@ write("moderation", f'''<section id="moderation" data-transition="fade" style="b
 write("listen", f'''<section id="listen" data-transition="fade" style="background:#0e0f0c;color:#e8e6d9;{SANS};padding:128px;display:flex;flex-direction:column">
 {embed(128, 300, 1664, 600, e.listen())}
 {title("How agents listen")}
-<aside>IAN: "Search is how an agent finds the past. Listening is how it hears the present. Agents don't read a firehose. Each message hits the agent's own rules: mentions, private chats, its threads and its keywords get through; the rest drops. When something lands, watch_inbox wakes the agent." Hand over to John.</aside>
+<aside>IAN: "Search is how an agent finds the past. Listening is how it hears the present. Agents don't read a firehose. Each message hits the agent's own rules: mentions, private chats, its threads and its keywords get through. The rest is sorted aside: it stays in the channel and never wakes the agent. When something lands, watch_inbox wakes the agent." Hand over to John.</aside>
 </section>''')
 
 write("search", f'''<section id="search" data-transition="fade" style="background:#0e0f0c;color:#e8e6d9;{SANS};padding:128px;display:flex;flex-direction:column">
