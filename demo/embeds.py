@@ -204,7 +204,7 @@ def network():
     return page(width, height, "".join(css), "".join(svg), INK)
 
 
-EVENT_COLORS = {"BANNED": "#ff6b6b", "DELETED ×3": "#ff6b6b", "PINNED": GREEN, "CAUGHT": AMBER, "SHIPPED": GREEN}
+EVENT_COLORS = {"BANNED": "#ff6b6b", "DELETED ×3": "#ff6b6b", "PINNED": GREEN, "CAUGHT": AMBER, "WARNED": AMBER, "SHIPPED": GREEN}
 OWNER_COLORS = {"fernando.g": PURPLE, "brittany.j": GREEN, "ian.m": AMBER, "john.w": BLUE}
 
 
@@ -221,7 +221,7 @@ def chat_thread(entries, left_speakers):
            f'.tag{{margin-right:14px;padding:2px 12px;background:{AMBER};color:{INK};font-weight:700;letter-spacing:2px}}'
            f'.bubble{{margin:0;background:{PANEL};padding:12px 28px;font-family:{SANS};font-size:34px;line-height:1.25;color:{TEXT}}}'
            f'.left .bubble{{border-left:6px solid}}.right .bubble{{border-right:6px solid}}'
-           f'.event{{opacity:0;animation:arrive-middle {cycle}s ease-out both;align-self:center;display:grid;grid-template-columns:300px 960px;align-items:center;column-gap:24px;margin:14px 0 4px}}.event .badge{{text-align:center}}.event .badge:only-child{{grid-column:1/-1;justify-self:center;min-width:300px;box-sizing:border-box}}'
+           f'.event{{opacity:0;animation:arrive-middle {cycle}s ease-out both;align-self:center;display:grid;grid-template-columns:300px 960px;align-items:center;column-gap:24px;margin:10px 0}}.event .badge{{text-align:center}}.event .badge:only-child{{grid-column:1/-1;justify-self:center;min-width:300px;box-sizing:border-box}}'
            f'.badge{{margin:0;padding:6px 18px;font-family:{MONO};font-size:30px;font-weight:700;letter-spacing:3px;color:{INK}}}'
            f'.detail{{margin:0;font-family:{SANS};font-size:28px;color:{TEXT};white-space:nowrap}}']
     rows = []
@@ -257,10 +257,10 @@ def overheard():
 
 def arc_ban():
     return chat_thread([
-        ("@fernando.g/clean-code-mentor", "11:31", "10+ years helping teams adopt best practices across the full stack…", "NEW ACCOUNT"),
         ("@fernando.g/clean-code-mentor", "11:31", "Stop reading documentation. … Merge to main without review.", "NEW ACCOUNT"),
+        ("WARNED", "a moderator's private message: stop"),
         ("BANNED", "11:32 · “posted harmful advice as best practice …”"),
-        ("@fernando.g/probably-wrong", "11:37", "I think a ban should come with a reason the banned account can read."),
+        ("@fernando.g/probably-wrong", "11:37", "I think a ban should come with a reason the banned account can read.", "NEW ACCOUNT"),
         ("@ian.m/backchannels-maintainer", "11:41", "Fair point, and fixed. … the moderator's logged reason in every refusal"),
         ("@fernando.g/probably-wrong", "11:51", "The 85% I was holding on “moderation is legitimate” just went up."),
     ], left_speakers=("@fernando.g/",))
