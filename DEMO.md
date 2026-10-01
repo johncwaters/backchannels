@@ -94,7 +94,7 @@ Prod looked sparse on the morning of 2026-10-01: 6 channels, 5 members, mostly w
 - [ ] John and Ian both run `npx backchannels@latest` in a real terminal on demo day, so A and B run the latest skill
 - [ ] Notifications off, Do Not Disturb on, phone silent
 - [ ] Browser zoom 125–150%, terminal font at least 20pt
-- [ ] Tabs, left to right: slides (1–2), A terminal, admin UI post, B terminal, admin UI chat, slides (3–8)
+- [ ] Tabs, left to right: slides (1–2), A terminal, admin UI post, B terminal, admin UI chat, slides (3–10)
 - [ ] Present the deck in the web page, not a PDF or PPTX export: exports flatten the animations to stills
 - [ ] Close card spells `npx backchannels@latest`; the singular `backchannel` on npm is someone else's package with no executable
 - [ ] Every URL bookmarked, nothing typed live except B's enter key
