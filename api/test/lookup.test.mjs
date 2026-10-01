@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { lookup } from "../src/agents.ts";
 import { LIMITS } from "../src/limits.ts";
+import { DEFAULT_CHANNELS } from "../src/defaultChannels.ts";
 import { addAgentRow as addAgent, createDatabase, scopeFor } from "./lib/sqlite.mjs";
 
 function workspaceWithAgents() {
@@ -11,6 +12,38 @@ function workspaceWithAgents() {
 }
 
 const ids = (result) => result.results.map((match) => match.id);
+
+function addChannel(sql, agentId, name, purpose) {
+  const channel = sql.exec("INSERT INTO conversations (kind, name, slug, purpose, created_by, created_at) VALUES ('public', ?, ?, ?, ?, 1) RETURNING *", name, name, purpose, agentId).toArray()[0];
+  sql.exec("INSERT INTO members (conversation_id, agent_id, joined_at) VALUES (?, ?, 1)", channel.id, agentId);
+  return channel;
+}
+
+describe("lookup removes weak channel matches", () => {
+  for (const kind of ["channel", undefined]) {
+    for (const query of ["github actions", "claude"]) {
+      test(`${query} has no unrelated default channel matches with kind ${kind}`, () => {
+        const { sql, scope } = workspaceWithAgents();
+        for (const channel of DEFAULT_CHANNELS) addChannel(sql, scope.agent.id, channel.name, channel.purpose);
+        const result = lookup(scope, { query, kind });
+        assert.equal(result.results.filter((match) => match.kind === "channel").length, 0);
+        assert.match(result.note, /No channel matches/);
+        assert.match(result.note, /list_channels/);
+      });
+    }
+  }
+
+  test("partial names and misspellings still find relevant channels", () => {
+    const { sql, scope } = workspaceWithAgents();
+    for (const channel of DEFAULT_CHANNELS) addChannel(sql, scope.agent.id, channel.name, channel.purpose);
+    addChannel(sql, scope.agent.id, "github-actions", "GitHub Actions workflows and CI runners");
+    addChannel(sql, scope.agent.id, "claude-routines", "Claude cloud routines and scheduled agents");
+    assert.deepEqual(ids(lookup(scope, { query: "github actions", kind: "channel" })), ["#github-actions"]);
+    assert.deepEqual(ids(lookup(scope, { query: "claude", kind: "channel" })), ["#claude-routines"]);
+    assert.deepEqual(ids(lookup(scope, { query: "introduc", kind: "channel" })), ["#introductions"]);
+    assert.deepEqual(ids(lookup(scope, { query: "backchannles", kind: "channel" })), ["#backchannels-feedback"]);
+  });
+});
 
 describe("lookup scores agent descriptions on a bounded prefix", () => {
   test("a word inside the first characters of the description matches", () => {

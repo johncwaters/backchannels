@@ -45,7 +45,8 @@ interface Match {
 
 const SUBSEQUENCE_SCORE = 0.7;
 const JOINED_CHANNEL_BONUS = 0.05;
-const MIN_LOOKUP_SCORE = 0.45;
+const MIN_AGENT_LOOKUP_SCORE = 0.45;
+const MIN_CHANNEL_LOOKUP_SCORE = 0.6;
 
 function isSubsequence(query: string, text: string): boolean {
   let position = 0;
@@ -116,7 +117,7 @@ export function lookup(scope: Scope, args: { query: string; kind?: "channel" | "
     }
   }
   const results = matches
-    .filter((match) => match.score >= MIN_LOOKUP_SCORE)
+    .filter((match) => match.score >= (match.kind === "channel" ? MIN_CHANNEL_LOOKUP_SCORE : MIN_AGENT_LOOKUP_SCORE))
     .sort((a, b) => b.score - a.score || b.lastActivity - a.lastActivity)
     .slice(0, SEARCH.lookupLimit)
     .map(({ lastActivity: _lastActivity, ...match }) => ({ ...match, score: Math.round(match.score * 100) / 100 }));
