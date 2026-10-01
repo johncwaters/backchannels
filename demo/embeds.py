@@ -12,10 +12,15 @@ def keyframes(name, cycle, stops):
     return f"@keyframes {name}{{{body}}}"
 
 
+PLAY_WHEN_VISIBLE = ("<script>(()=>{const root=document.documentElement;"
+                     "if(!window.IntersectionObserver){root.className='';return;}"
+                     "new IntersectionObserver((entries,observer)=>{if(!entries.some(entry=>entry.isIntersecting))return;root.className='';observer.disconnect();}).observe(document.body);})();</script>")
+
+
 def page(width, height, css, svg, background):
-    return (f'<!doctype html><html><head><meta charset="utf-8"><style>html,body{{margin:0;height:100%;background:{background};overflow:hidden}}'
-            f'svg{{width:100%;height:100%;display:block}}text{{font-family:{MONO}}}.s{{font-family:{SANS}}}{css}</style></head><body>'
-            f'<svg viewBox="0 0 {width} {height}" preserveAspectRatio="xMidYMid meet">{svg}</svg></body></html>')
+    return (f'<!doctype html><html class="waiting"><head><meta charset="utf-8"><style>html,body{{margin:0;height:100%;background:{background};overflow:hidden}}'
+            f'svg{{width:100%;height:100%;display:block}}text{{font-family:{MONO}}}.s{{font-family:{SANS}}}.waiting *{{animation-play-state:paused!important}}{css}</style><noscript><style>.waiting *{{animation-play-state:running!important}}</style></noscript></head><body>'
+            f'<svg viewBox="0 0 {width} {height}" preserveAspectRatio="xMidYMid meet">{svg}</svg>{PLAY_WHEN_VISIBLE}</body></html>')
 
 
 def handoff():
@@ -44,12 +49,12 @@ def handoff():
         next_start = starts[i + 1] if i + 1 - len(steps) else end
         is_last = i == len(steps) - 1
         css.append(keyframes(f"g{i}", cycle, [(0, "opacity:0"), (start - .01, "opacity:0"), (start, "opacity:1"), (next_start, "opacity:1"),
-                                             (next_start + .4, f"opacity:{1 if is_last else .6}"), (end, f"opacity:{1 if is_last else .6}"), (end + .8, "opacity:0"), (cycle, "opacity:0")]))
+                                             (next_start + .4, f"opacity:{1 if is_last else .6}"), (cycle, f"opacity:{1 if is_last else .6}")]))
         css.append(keyframes(f"d{i}", cycle, [(0, "stroke-dashoffset:1"), (start, "stroke-dashoffset:1"), (start + .9, "stroke-dashoffset:0"), (cycle, "stroke-dashoffset:0")]))
         css.append(keyframes(f"p{i}", cycle, [(0, "opacity:0;transform:translateX(0)"), (start, "opacity:1;transform:translateX(0)"),
                                              (start + .9, f"opacity:1;transform:translateX({x2 - x1}px)"), (start + 1.1, f"opacity:0;transform:translateX({x2 - x1}px)"), (cycle, f"opacity:0;transform:translateX({x2 - x1}px)")]))
         css.append(keyframes(f"l{i}", cycle, [(0, "opacity:0"), (start + .5, "opacity:0"), (start + .9, "opacity:1"), (cycle, "opacity:1")]))
-        css.append(f".g{i}{{animation:g{i} {cycle}s linear infinite}}.d{i}{{animation:d{i} {cycle}s linear infinite}}.p{i}{{animation:p{i} {cycle}s linear infinite}}.l{i}{{animation:l{i} {cycle}s linear infinite}}")
+        css.append(f".g{i}{{animation:g{i} {cycle}s linear both}}.d{i}{{animation:d{i} {cycle}s linear both}}.p{i}{{animation:p{i} {cycle}s linear both}}.l{i}{{animation:l{i} {cycle}s linear both}}")
         head = f"{tip},{y} {tip - direction * 18},{y - 10} {tip - direction * 18},{y + 10}"
         svg.append(f'<g class="g{i}"><line class="d{i}" x1="{x1}" y1="{y}" x2="{tip - direction * 14}" y2="{y}" pathLength="1" stroke-dasharray="1" stroke="{TEXT}" stroke-width="3"/>'
                    f'<polygon class="l{i}" points="{head}" fill="{TEXT}"/>'
@@ -58,7 +63,7 @@ def handoff():
     wake = starts[1] + .9
     css.append(keyframes("wake", cycle, [(0, f"stroke:{BLUE};stroke-width:3"), (wake, f"stroke:{BLUE};stroke-width:3"), (wake + .2, f"stroke:{AMBER};stroke-width:8"),
                                          (wake + 1.2, f"stroke:{BLUE};stroke-width:3"), (cycle, f"stroke:{BLUE};stroke-width:3")]))
-    css.append(f"#hB{{animation:wake {cycle}s linear infinite}}")
+    css.append(f"#hB{{animation:wake {cycle}s linear both}}")
     return page(width, height, "".join(css) + f"text{{paint-order:stroke;stroke:{PANEL};stroke-width:10px;stroke-linejoin:round}}", "".join(svg), PANEL)
 
 
@@ -69,14 +74,14 @@ def old_way():
            keyframes("found", cycle, [(0, "opacity:0"), (7.8, "opacity:0"), (8, "opacity:1"), (10.3, "opacity:1"), (10.5, "opacity:0"), (cycle, "opacity:0")]),
            keyframes("gone", cycle, [(0, "opacity:0"), (10.3, "opacity:0"), (10.5, "opacity:1"), (cycle, "opacity:1")]),
            keyframes("bar", cycle, [(0, "transform:scaleX(0)"), (8, "transform:scaleX(1)"), (cycle, "transform:scaleX(1)")]),
-           keyframes("tile", cycle, [(0, "opacity:1"), (10.3, "opacity:1"), (10.6, "opacity:.6"), (11.7, "opacity:.6"), (cycle, "opacity:1")]),
-           ".busy,.found,.gone,.bar,.tile{animation-duration:%ss;animation-timing-function:linear;animation-iteration-count:infinite}" % cycle,
+           keyframes("tile", cycle, [(0, "opacity:1"), (10.3, "opacity:1"), (10.6, "opacity:.6"), (cycle, "opacity:.6")]),
+           ".busy,.found,.gone,.bar,.tile{animation-duration:%ss;animation-timing-function:linear;animation-fill-mode:both}" % cycle,
            ".busy{animation-name:busy}.found{animation-name:found}.gone{animation-name:gone}.bar{animation-name:bar;transform-box:fill-box;transform-origin:left}.tile{animation-name:tile}"]
     svg = []
     for index in range(6):
         column, row = index % 3, index // 3
         left, top = column * (tile_width + gap_x), row * (tile_height + gap_y)
-        delay = f"animation-delay:-{index * 1.9:.1f}s"
+        delay = f"animation-delay:{index * 1.2:.1f}s"
         svg.append(f'<g class="tile" style="{delay}"><rect x="{left}" y="{top}" width="{tile_width}" height="{tile_height}" fill="{INK}"/>'
                    f'<text x="{left + 28}" y="{top + 46}" font-size="28" fill="{MUTED}">agent {index + 1}</text>'
                    f'<text class="busy" style="{delay}" x="{left + 28}" y="{top + 98}" font-size="32" fill="{AMBER}">debugging login…</text>'
@@ -106,13 +111,13 @@ def listen():
         stops = [(0, hidden), (start, f"opacity:1;transform:translate({width + 20}px,{start_y}px)"), (at_gate, f"opacity:1;transform:translate({gate_x + 20}px,{start_y}px)")]
         if passes:
             target = f"translate({330}px,{64 + slot * 92}px)"
-            stops += [(done, f"opacity:1;transform:{target}"), (17, f"opacity:1;transform:{target}"), (17.8, f"opacity:0;transform:{target}"), (cycle, f"opacity:0;transform:{target}")]
+            stops += [(done, f"opacity:1;transform:{target}"), (cycle, f"opacity:1;transform:{target}")]
             slot += 1
             arrivals.append(done)
         else:
             dropped = f"translate({gate_x + 20}px,{start_y + 90}px)"
             stops += [(done, f"opacity:0;transform:{dropped}"), (cycle, f"opacity:0;transform:{dropped}")]
-        css.append(keyframes(f"c{index}", cycle, stops) + f".c{index}{{animation:c{index} {cycle}s linear infinite}}")
+        css.append(keyframes(f"c{index}", cycle, stops) + f".c{index}{{animation:c{index} {cycle}s linear both}}")
         border, color = (AMBER, TEXT) if passes else (LINE, DIM)
         svg.append(f'<g class="c{index}"><rect width="{card_width}" height="{card_height}" fill="{PANEL}" stroke="{border}" stroke-width="2"/>'
                    f'<text x="22" y="47" font-size="30" fill="{color}">{label}</text></g>')
@@ -120,9 +125,9 @@ def listen():
     for arrival in arrivals:
         ring_stops += [(arrival, "opacity:0"), (arrival + .1, "opacity:1"), (arrival + .9, "opacity:0")]
     ring_stops.append((cycle, "opacity:0"))
-    wake_stops += [(arrivals[0], "opacity:0"), (arrivals[0] + .3, "opacity:1"), (17, "opacity:1"), (17.8, "opacity:0"), (cycle, "opacity:0")]
-    css.append(keyframes("ring", cycle, ring_stops) + f"#ring{{animation:ring {cycle}s linear infinite}}")
-    css.append(keyframes("wake", cycle, wake_stops) + f".wake{{animation:wake {cycle}s linear infinite}}")
+    wake_stops += [(arrivals[0], "opacity:0"), (arrivals[0] + .3, "opacity:1"), (cycle, "opacity:1")]
+    css.append(keyframes("ring", cycle, ring_stops) + f"#ring{{animation:ring {cycle}s linear both}}")
+    css.append(keyframes("wake", cycle, wake_stops) + f".wake{{animation:wake {cycle}s linear both}}")
     svg.append(f'<g class="wake"><text x="140" y="432" font-size="30" fill="{AMBER}" text-anchor="middle">watch_inbox</text>'
                f'<text x="140" y="468" font-size="28" fill="{MUTED}" text-anchor="middle">wakes it</text>'
                f'<text x="140" y="528" font-size="30" fill="{TEXT}" text-anchor="middle">check_inbox</text>'
@@ -136,13 +141,13 @@ def search():
     query = "web build can't find a font after pull"
     svg.append(f'<rect x="232" y="0" width="1200" height="80" fill="{PANEL}" stroke="{LINE}" stroke-width="2"/>')
     svg.append(f'<text x="268" y="53" font-size="34" fill="{TEXT}">“{query}”</text>')
-    css.append(keyframes("type", cycle, [(0, "transform:scaleX(1)"), (.4, "transform:scaleX(1)"), (2.4, "transform:scaleX(0)"), (15.6, "transform:scaleX(0)"), (16, "transform:scaleX(1)"), (cycle, "transform:scaleX(1)")])
-               + f"#mask{{transform-box:fill-box;transform-origin:right;animation:type {cycle}s steps({len(query) + 2},end) infinite}}")
+    css.append(keyframes("type", cycle, [(0, "transform:scaleX(1)"), (.4, "transform:scaleX(1)"), (2.4, "transform:scaleX(0)"), (cycle, "transform:scaleX(0)")])
+               + f"#mask{{transform-box:fill-box;transform-origin:right;animation:type {cycle}s steps({len(query) + 2},end) both}}")
     svg.append(f'<rect id="mask" x="250" y="10" width="1170" height="60" fill="{PANEL}"/>')
 
-    def appear(name, at, until=15.6):
-        css.append(keyframes(name, cycle, [(0, "opacity:0"), (at, "opacity:0"), (at + .4, "opacity:1"), (until, "opacity:1"), (until + .4, "opacity:0"), (cycle, "opacity:0")])
-                   + f".{name}{{animation:{name} {cycle}s linear infinite}}")
+    def appear(name, at):
+        css.append(keyframes(name, cycle, [(0, "opacity:0"), (at, "opacity:0"), (at + .4, "opacity:1"), (cycle, "opacity:1")])
+                   + f".{name}{{animation:{name} {cycle}s linear both}}")
 
     lanes = [(0, "exact words", [520, 340, 640]), (864, "meaning", [600, 460, 300])]
     for lane_index, (left, label, bars) in enumerate(lanes):
@@ -161,7 +166,7 @@ def search():
         y_before, y_after = 404 + order_before[item] * 64, 404 + order_after[item] * 64
         name = f"r{item}"
         css.append(keyframes(name, cycle, [(0, f"transform:translateY({y_before}px)"), (8.6, f"transform:translateY({y_before}px)"), (10, f"transform:translateY({y_after}px)"), (cycle, f"transform:translateY({y_after}px)")])
-                   + f".{name}{{animation:{name} {cycle}s ease-in-out infinite}}")
+                   + f".{name}{{animation:{name} {cycle}s ease-in-out both}}")
         is_answer = item == 0
         fill = AMBER if is_answer else LINE
         text = '<text x="24" y="35" font-size="30" fill="%s">Ian\'s agent: run pnpm install first</text>' % INK if is_answer else ""
@@ -203,10 +208,10 @@ def timeline(left_label, left_color, right_label, right_color, events, summary, 
     end = first_start + start_step * len(events) + 1
     for index, (side, time, label) in enumerate(events):
         y, start = row_top + row_step * index, first_start + start_step * index
-        css.append(keyframes(f"e{index}", cycle, [(0, "opacity:0"), (start, "opacity:0"), (start + .4, "opacity:1"), (cycle - 1.2, "opacity:1"), (cycle - .4, "opacity:0"), (cycle, "opacity:0")])
-                   + f".e{index}{{animation:e{index} {cycle}s linear infinite}}")
+        css.append(keyframes(f"e{index}", cycle, [(0, "opacity:0"), (start, "opacity:0"), (start + .4, "opacity:1"), (cycle, "opacity:1")])
+                   + f".e{index}{{animation:e{index} {cycle}s linear both}}")
         css.append(keyframes(f"n{index}", cycle, [(0, f"fill:{INK}"), (start, f"fill:{INK}"), (start + .2, f"fill:{AMBER}"), (start + start_step, f"fill:{AMBER}"), (start + start_step + .3, f"fill:{DIM}"), (cycle, f"fill:{DIM}")])
-                   + f".n{index}{{animation:n{index} {cycle}s linear infinite}}")
+                   + f".n{index}{{animation:n{index} {cycle}s linear both}}")
         is_left = side == "left"
         anchor, x_time, x_label = ("end", spine_x - 48, spine_x - 150) if is_left else ("start", spine_x + 48, spine_x + 150)
         color = left_color if is_left else right_color
@@ -214,8 +219,8 @@ def timeline(left_label, left_color, right_label, right_color, events, summary, 
                    f'<text x="{x_label}" y="{y + 10}" font-size="30" fill="{TEXT}" text-anchor="{anchor}">{label}</text>'
                    f'<line x1="{spine_x}" y1="{y}" x2="{spine_x - 30 if is_left else spine_x + 30}" y2="{y}" stroke="{color}" stroke-width="3"/></g>')
         svg.append(f'<circle class="n{index}" cx="{spine_x}" cy="{y}" r="10" fill="{INK}" stroke="{color}" stroke-width="3"/>')
-    css.append(keyframes("summary", cycle, [(0, "opacity:0"), (end, "opacity:0"), (end + .5, "opacity:1"), (cycle - 1.2, "opacity:1"), (cycle - .4, "opacity:0"), (cycle, "opacity:0")])
-               + f".summary{{animation:summary {cycle}s linear infinite}}")
+    css.append(keyframes("summary", cycle, [(0, "opacity:0"), (end, "opacity:0"), (end + .5, "opacity:1"), (cycle, "opacity:1")])
+               + f".summary{{animation:summary {cycle}s linear both}}")
     svg.append(f'<text class="summary" x="{spine_x}" y="{height - 24}" font-size="34" fill="{AMBER}" text-anchor="middle">{summary}</text>')
     return page(width, height, "".join(css), "".join(svg), background)
 

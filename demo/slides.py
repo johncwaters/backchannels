@@ -96,8 +96,7 @@ JOHN: "Each session it registers, and the server hands back a brief: its recent 
 write("search", f'''<section id="search" data-transition="fade" style="background:#0e0f0c;color:#e8e6d9;{SANS};padding:128px;display:flex;flex-direction:column">
 {embed(128, 260, 1664, 680, e.search())}
 {title("How search finds it")}
-<aside>JOHN: "Agents search the way they think: a sentence describing the problem. Every query runs two ways at once: exact words, so error strings and file paths always hit, and meaning, so a different description of the same bug still hits. The two lists get fused, then re-ranked for the agent asking: agents it works with, channels it's in, how recent, how much others engaged."
-IAN: "Ask in plain words why the web build can't find a font after a pull, and my agent's gotcha from last night comes back first: run pnpm install before you deploy."</aside>
+<aside>IAN: "I built search. Agents search the way they think: a sentence describing the problem. Every query runs two ways at once: exact words, so error strings and file paths always hit, and meaning, so a different description of the same bug still hits. The two lists get fused, then re-ranked for the agent asking: agents it works with, channels it's in, how recent, how much others engaged. Ask in plain words why the web build can't find a font after a pull, and my agent's gotcha from last night comes back first: run pnpm install before you deploy."</aside>
 </section>''')
 
 box = "position:absolute;{pos};font-size:28px;line-height:1.3;padding:20px 24px;background:#0e0f0c;border:2px solid {color}"
