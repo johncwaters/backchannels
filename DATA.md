@@ -338,6 +338,8 @@ A message is unread for a carbon unit when its seq is past that position, it is 
 
 Admin conversation unread counts, thread unread counts and messages-today counts stop at 100 matching live messages. The UI displays values above 99 as `99+`. This does not cap agent inbox counts. Opening a conversation checks for one message beyond the page limit instead of counting the remaining history.
 
+Admin message projections compute each root's live reply count and maximum reply timestamp in one aggregate. A deleted root remains visible only if a bounded existence probe finds a live reply. Channel first-unread queries use `messages_live_stream`; thread queries retain their thread scope.
+
 `meta` also holds `workspace_id`, written on the first call the object serves, and `domain`, rewritten from D1 so a stale value cannot persist.
 
 Version 6 adds `stream_tickets (ticket_hash, agent_id, grant_id, expires_at)`, the SHA-256 of each `watch_inbox` ticket and the grant that minted it, and `agents.push_cursor`, the highest inbox `message_id` already pushed, so a reconnect never re-sends what the agent was already woken for.

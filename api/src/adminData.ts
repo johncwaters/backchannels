@@ -43,8 +43,7 @@ type AuthoredMessageRow = MessageRow & {
   handle: string | null;
   owner_email: string | null;
   owner_sub: string | null;
-  live_replies: number;
-  last_live_reply_at: number | null;
+  reply_summary: string;
   thread_root_seq: number | null;
   pinned_at: number | null;
   pinned_by: string | null;
@@ -68,9 +67,10 @@ const SEQ_BEFORE_FIRST_VISIT = (conversationColumn: string) =>
      AND before.created_at <= (SELECT first_seen_at FROM viewers WHERE owner_sub = ?2))`;
 const UNREAD_MESSAGE = (subParameter: string) =>
   `m.deleted_at IS NULL AND m.author_id NOT IN (SELECT id FROM agents WHERE owner_sub = ${subParameter})`;
-const LIVE_REPLIES = `(SELECT count(*) FROM messages reply WHERE reply.thread_root_id = m.id AND reply.deleted_at IS NULL)`;
-const LAST_LIVE_REPLY_AT = `(SELECT max(reply.created_at) FROM messages reply WHERE reply.thread_root_id = m.id AND reply.deleted_at IS NULL)`;
-const MESSAGE_COLUMNS = `m.*, a.handle, a.owner_email, a.owner_sub, ${LIVE_REPLIES} AS live_replies, ${LAST_LIVE_REPLY_AT} AS last_live_reply_at,
+const HAS_LIVE_REPLY = `EXISTS (SELECT 1 FROM messages reply WHERE reply.thread_root_id = m.id AND reply.deleted_at IS NULL LIMIT 1)`;
+const REPLY_SUMMARY = `(SELECT json_object('count', count(*), 'lastCreatedAt', max(reply.created_at))
+  FROM messages reply WHERE reply.thread_root_id = m.id AND reply.deleted_at IS NULL)`;
+const MESSAGE_COLUMNS = `m.*, a.handle, a.owner_email, a.owner_sub, ${REPLY_SUMMARY} AS reply_summary,
   (SELECT root.seq FROM messages root WHERE root.id = m.thread_root_id) AS thread_root_seq,
   pin.pinned_at, (SELECT pinner.handle FROM agents pinner WHERE pinner.id = pin.pinned_by) AS pinned_by`;
 const MESSAGE_JOINS = `LEFT JOIN agents a ON a.id = m.author_id LEFT JOIN pins pin ON pin.message_id = m.id`;
@@ -185,7 +185,7 @@ function filesByMessageId(context: AdminContext, rows: AuthoredMessageRow[]): Ma
 }
 
 function unreadRepliesByRootId(context: AdminContext, rows: AuthoredMessageRow[], channelLastReadSeq: number): Map<number, number> {
-  const rootIds = rows.filter((row) => row.thread_root_id === null && row.live_replies > 0).map((row) => row.id);
+  const rootIds = rows.filter((row) => row.thread_root_id === null && replySummary(row).count > 0).map((row) => row.id);
   if (rootIds.length === 0) return new Map();
   const counts = all<{ root_id: number; unread: number }>(
     context.sql,
@@ -215,9 +215,14 @@ const defaultChannelSlugs = new Set(DEFAULT_CHANNELS.map((channel) => channel.na
 const isoTime = (epochMs: number | null) => (epochMs === null ? null : new Date(epochMs).toISOString());
 const agentName = (handle: string) => handle.slice(handle.indexOf("/") + 1);
 
+function replySummary(row: AuthoredMessageRow): { count: number; lastCreatedAt: number | null } {
+  return JSON.parse(row.reply_summary);
+}
+
 function viewMessage(row: AuthoredMessageRow, sub: string, reactions: Reaction[], files: AttachedFile[]): Omit<Message, "unreadReplies"> {
   const email = row.owner_email ?? "";
   const handle = row.handle ?? "unknown";
+  const replies = replySummary(row);
   return {
     seq: row.seq,
     person: email.split("@")[0],
@@ -227,8 +232,8 @@ function viewMessage(row: AuthoredMessageRow, sub: string, reactions: Reaction[]
     time: new Date(row.created_at).toISOString(),
     text: row.deleted_at ? "" : row.text,
     isOwn: row.owner_sub === sub,
-    threadReplies: row.live_replies,
-    lastReplyAt: isoTime(row.last_live_reply_at),
+    threadReplies: replies.count,
+    lastReplyAt: isoTime(replies.lastCreatedAt),
     threadRootSeq: row.thread_root_seq,
     alsoInChannel: row.also_in_channel === 1,
     editedAt: isoTime(row.edited_at),
@@ -313,7 +318,7 @@ function readStream(context: AdminContext, scopeCondition: string, scopeId: numb
     all<AuthoredMessageRow>(
       context.sql,
       `${MESSAGE_SELECT}
-       WHERE ${scopeCondition} AND (m.deleted_at IS NULL OR live_replies > 0) AND m.seq ${comparison} ?2
+       WHERE ${scopeCondition} AND (m.deleted_at IS NULL OR ${HAS_LIVE_REPLY}) AND m.seq ${comparison} ?2
        ORDER BY m.seq ${order} LIMIT ?3`,
       scopeId,
       pivot,
@@ -359,7 +364,7 @@ export function adminRead(context: AdminContext, options: AdminReadOptions): Adm
       : one<{ id: number }>(
           context.sql,
           `SELECT m.id FROM messages m WHERE m.conversation_id = ? AND m.seq = ? AND m.thread_root_id IS NULL
-             AND (m.deleted_at IS NULL OR ${LIVE_REPLIES} > 0)`,
+             AND (m.deleted_at IS NULL OR ${HAS_LIVE_REPLY})`,
           row.id,
           options.thread,
         );
@@ -370,7 +375,7 @@ export function adminRead(context: AdminContext, options: AdminReadOptions): Adm
     : "m.conversation_id = ?1 AND (m.thread_root_id IS NULL OR m.also_in_channel = 1)";
   const scopeId = threadRoot?.id ?? row.id;
   const lastReadSeq = threadRoot ? threadLastReadSeq(context, threadRoot.id, row.last_read_seq_effective) : row.last_read_seq_effective;
-  const firstUnreadSeq = firstUnreadInStream(context, scopeCondition, scopeId, lastReadSeq);
+  const firstUnreadSeq = firstUnreadInStream(context, scopeCondition, scopeId, lastReadSeq, threadRoot === null);
   const opensAtFirstUnread = positions.length === 0 && firstUnreadSeq !== null && streamExceedsLimit(context, scopeCondition, scopeId, firstUnreadSeq, limit);
   const position: ReadPosition = opensAtFirstUnread ? { around: firstUnreadSeq } : options;
   const { rows, hasOlder, hasNewer } = readStream(context, scopeCondition, scopeId, position, limit);
@@ -398,10 +403,11 @@ function threadLastReadSeq(context: AdminContext, rootId: number, channelLastRea
   return marker?.last_read_seq ?? channelLastReadSeq;
 }
 
-function firstUnreadInStream(context: AdminContext, scopeCondition: string, scopeId: number, lastReadSeq: number): number | null {
+function firstUnreadInStream(context: AdminContext, scopeCondition: string, scopeId: number, lastReadSeq: number, isChannelStream: boolean): number | null {
   const first = one<{ seq: number | null }>(
     context.sql,
-    `SELECT min(m.seq) AS seq FROM messages m WHERE ${scopeCondition} AND m.seq > ?2 AND ${UNREAD_MESSAGE("?3")}`,
+    `SELECT min(m.seq) AS seq FROM messages m ${isChannelStream ? "INDEXED BY messages_live_stream" : ""}
+     WHERE ${scopeCondition} AND m.seq > ?2 AND ${UNREAD_MESSAGE("?3")}`,
     scopeId,
     lastReadSeq,
     context.sub,

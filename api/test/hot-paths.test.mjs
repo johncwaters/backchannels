@@ -5,7 +5,7 @@ import { MIGRATIONS } from "../src/schema.ts";
 const { sendMessage, markConversationRead, markThreadRead, pin } = await import("../src/messages.ts");
 const { markRead } = await import("../src/inbox.ts");
 const { recordSearchActions } = await import("../src/search/signals.ts");
-const { adminMarkRead, adminList, adminRead } = await import("../src/adminData.ts");
+const { adminMarkRead, adminList, adminRead, adminPins } = await import("../src/adminData.ts");
 const { pruneRateBuckets, RATE_LIMITS } = await import("../src/limits.ts");
 
 const DEDUPLICATE_SEARCH_ACTIONS = MIGRATIONS.findIndex((migration) => migration.includes("search_actions_unique"));
@@ -222,6 +222,36 @@ test("mark unread restores only the requested channel or thread range and preser
     assert.match(plan, /SEARCH messages USING (COVERING )?INDEX \w+ \((conversation_id=\? AND seq>\?|thread_root_id=\? AND seq>\?)\)/);
     assert.match(plan, /SEARCH inbox USING (COVERING )?INDEX sqlite_autoindex_inbox_1 \(agent_id=\? AND message_id=\?\)|SEARCH inbox USING PRIMARY KEY/);
   }
+});
+
+test("admin reply summaries retain exact live counts, maximum timestamps and deleted-root visibility", (context) => {
+  const { database, sql, queries, explain, scope, conversation } = fixture(context);
+  const adminContext = { sql, now: 10_000_000, sub: "reader", audit() {} };
+  database.exec("INSERT INTO viewers VALUES ('reader', 0)");
+  const rootId = addMessage(database, conversation.id, 1);
+  const later = addMessage(database, conversation.id, 2, { rootId });
+  const earlier = addMessage(database, conversation.id, 3, { rootId });
+  const deleted = addMessage(database, conversation.id, 4, { rootId, deletedAt: 9 });
+  database.prepare("UPDATE messages SET created_at = 100 WHERE id = ?").run(later);
+  database.prepare("UPDATE messages SET created_at = 5 WHERE id = ?").run(earlier);
+  database.prepare("UPDATE messages SET created_at = 1000 WHERE id = ?").run(deleted);
+  pin(scope, { message: "general/1" });
+  const root = adminRead(adminContext, { conversation: "general", limit: 20 }).value.messages[0];
+  assert.equal(root.threadReplies, 2);
+  assert.equal(root.lastReplyAt, new Date(100).toISOString());
+  assert.equal(root.unreadReplies, 2);
+  assert.equal(adminPins(adminContext, { conversation: "general" }).value.messages[0].lastReplyAt, root.lastReplyAt);
+  const firstUnreadQuery = queries.find(({ query }) => query.includes("SELECT min(m.seq)"));
+  assert.match(explain(firstUnreadQuery).join("\n"), /messages_live_stream/);
+  database.prepare("UPDATE messages SET deleted_at = 7, text = '' WHERE id = ?").run(rootId);
+  const channel = adminRead(adminContext, { conversation: "general", before: 5, limit: 20 }).value;
+  assert.deepEqual(channel.messages.map((message) => message.seq), [1]);
+  assert.equal(channel.messages[0].deleted, true);
+  assert.equal(channel.messages[0].threadReplies, 2);
+  assert.deepEqual(adminRead(adminContext, { conversation: "general", thread: 1, limit: 20 }).value.messages.map((message) => message.seq), [1, 2, 3]);
+  database.prepare("UPDATE messages SET deleted_at = 10 WHERE thread_root_id = ?").run(rootId);
+  assert.deepEqual(adminRead(adminContext, { conversation: "general", limit: 20 }).value.messages, []);
+  assert.deepEqual(adminRead(adminContext, { conversation: "general", thread: 1 }), { ok: false, error: "not_found" });
 });
 
 test("admin counts cap at 100 and preserve exact small counts and pin visibility", (context) => {
