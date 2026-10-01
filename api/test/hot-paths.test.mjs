@@ -5,7 +5,7 @@ import { MIGRATIONS } from "../src/schema.ts";
 const { sendMessage, markConversationRead, markThreadRead } = await import("../src/messages.ts");
 const { markRead } = await import("../src/inbox.ts");
 const { recordSearchActions } = await import("../src/search/signals.ts");
-const { adminMarkRead, adminList } = await import("../src/adminData.ts");
+const { adminMarkRead, adminList, adminRead } = await import("../src/adminData.ts");
 const { pruneRateBuckets, RATE_LIMITS } = await import("../src/limits.ts");
 
 const DEDUPLICATE_SEARCH_ACTIONS = MIGRATIONS.findIndex((migration) => migration.includes("search_actions_unique"));
@@ -222,6 +222,28 @@ test("mark unread restores only the requested channel or thread range and preser
     assert.match(plan, /SEARCH messages USING (COVERING )?INDEX \w+ \((conversation_id=\? AND seq>\?|thread_root_id=\? AND seq>\?)\)/);
     assert.match(plan, /SEARCH inbox USING (COVERING )?INDEX sqlite_autoindex_inbox_1 \(agent_id=\? AND message_id=\?\)|SEARCH inbox USING PRIMARY KEY/);
   }
+});
+
+test("admin read opens at the first unread only when live stream messages exceed the page", (context) => {
+  const { database, sql, queries, conversation } = fixture(context);
+  const adminContext = { sql, now: 10_000_000, sub: "reader", audit() {} };
+  database.exec("INSERT INTO viewers VALUES ('reader', 0)");
+  database.prepare("INSERT INTO viewer_reads VALUES ('reader', ?, 1, 1)").run(conversation.id);
+  for (let seq = 1; seq <= 21; seq++) addMessage(database, conversation.id, seq);
+  const read = (options = {}) => adminRead(adminContext, { conversation: "general", limit: 20, ...options }).value;
+  assert.deepEqual(read().messages.map((message) => message.seq), Array.from({ length: 20 }, (_, index) => index + 2));
+  addMessage(database, conversation.id, 22, { deletedAt: 1 });
+  const rootId = database.prepare("SELECT id FROM messages WHERE conversation_id = ? AND seq = 1").get(conversation.id).id;
+  addMessage(database, conversation.id, 23, { rootId });
+  assert.deepEqual(read().messages.map((message) => message.seq), Array.from({ length: 20 }, (_, index) => index + 2));
+  addMessage(database, conversation.id, 24);
+  assert.deepEqual(read().messages.map((message) => message.seq), Array.from({ length: 11 }, (_, index) => index + 1));
+  assert.equal(read({ before: 25 }).messages.at(-1).seq, 24);
+  assert.equal(read({ after: 1 }).messages[0].seq, 2);
+  assert.equal(read({ thread: 1 }).messages.at(-1).seq, 23);
+  const probes = queries.filter(({ query }) => query.includes("OFFSET ?3"));
+  assert.ok(probes.length > 0);
+  assert.ok(probes.every(({ bindings }) => bindings[2] === 20));
 });
 
 test("admin mark-read runs one slug lookup and recomputes only the target unread count", (context) => {

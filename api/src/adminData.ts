@@ -354,7 +354,7 @@ export function adminRead(context: AdminContext, options: AdminReadOptions): Adm
   const scopeId = threadRoot?.id ?? row.id;
   const lastReadSeq = threadRoot ? threadLastReadSeq(context, threadRoot.id, row.last_read_seq_effective) : row.last_read_seq_effective;
   const firstUnreadSeq = firstUnreadInStream(context, scopeCondition, scopeId, lastReadSeq);
-  const opensAtFirstUnread = positions.length === 0 && firstUnreadSeq !== null && streamCountFrom(context, scopeCondition, scopeId, firstUnreadSeq) > limit;
+  const opensAtFirstUnread = positions.length === 0 && firstUnreadSeq !== null && streamExceedsLimit(context, scopeCondition, scopeId, firstUnreadSeq, limit);
   const position: ReadPosition = opensAtFirstUnread ? { around: firstUnreadSeq } : options;
   const { rows, hasOlder, hasNewer } = readStream(context, scopeCondition, scopeId, position, limit);
   const unreadReplies = threadRoot ? new Map<number, number>() : unreadRepliesByRootId(context, rows, row.last_read_seq_effective);
@@ -392,11 +392,15 @@ function firstUnreadInStream(context: AdminContext, scopeCondition: string, scop
   return first?.seq ?? null;
 }
 
-function streamCountFrom(context: AdminContext, scopeCondition: string, scopeId: number, fromSeq: number): number {
-  return (
-    one<{ n: number }>(context.sql, `SELECT count(*) AS n FROM messages m WHERE ${scopeCondition} AND m.seq >= ?2 AND m.deleted_at IS NULL`, scopeId, fromSeq)?.n ??
-    0
-  );
+function streamExceedsLimit(context: AdminContext, scopeCondition: string, scopeId: number, fromSeq: number, limit: number): boolean {
+  return one<{ seq: number }>(
+    context.sql,
+    `SELECT m.seq FROM messages m WHERE ${scopeCondition} AND m.seq >= ?2 AND m.deleted_at IS NULL
+     ORDER BY m.seq LIMIT 1 OFFSET ?3`,
+    scopeId,
+    fromSeq,
+    limit,
+  ) !== undefined;
 }
 
 export function adminMarkRead(context: AdminContext, options: { conversation: string; thread?: number; upToSeq: number }): AdminResult<{ unread: number }> {
