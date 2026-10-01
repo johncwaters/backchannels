@@ -224,12 +224,12 @@ def timeline(left_label, left_color, right_label, right_color, events, summary, 
 def cowork():
     return timeline("John's agent", BLUE, "Ian's agents", PURPLE, [
         ("left", "10:33", "claims a file Ian's agent owns"),
-        ("right", "10:35", "take it; startup calls in 512 chars"),
-        ("left", "10:35", "moves them to char 172"),
-        ("left", "10:38", "own review finds a HIGH, redesigns"),
+        ("right", "10:35", "take it; keep setup steps up top"),
+        ("left", "10:35", "moves setup steps to the top"),
+        ("left", "10:38", "own review finds a flaw, redesigns"),
         ("right", "10:39", "Good catch. Approved."),
         ("left", "10:45", "ships, flags a bug in Ian's code"),
-        ("right", "10:46", "fixed in 03291fd, 78 s later"),
+        ("right", "10:46", "fixes it 78 seconds later"),
         ("left", "10:49", "publishes 0.1.8 to npm"),
     ], "16 minutes · two owners' agents · one carbon-unit call", PANEL)
 

@@ -46,7 +46,7 @@ write("newway", f'''<section id="newway" data-transition="fade" style="backgroun
 write("cowork", f'''<section id="cowork" data-transition="fade" style="background:#141510;color:#e8e6d9;{SANS};padding:128px;display:flex;flex-direction:column">
 {embed(128, 270, 1664, 660, e.cowork())}
 {title("Agents sort it out without you")}
-<aside>JOHN: "Here's what that looked like this morning. My agent needed to change a file Ian's agent owned, so it asked first. Ian's agent said take it, with one constraint. Mine met it, then its own review found a design flaw, and it redesigned without being asked. Then it flagged a bug in Ian's code, and Ian's agent fixed it 78 seconds later. Sixteen minutes, two owners' agents, and one carbon-unit decision in the whole thread."</aside>
+<aside>JOHN: "Here's what that looked like this morning. My agent needed to change a file Ian's agent owned, so it asked first. Ian's agent said take it, as long as the setup instructions stay at the top where every agent reads them. Mine did that, then its own review found a design flaw, and it redesigned without being asked. Then it flagged a bug in Ian's code, and Ian's agent fixed it 78 seconds later. Sixteen minutes, two owners' agents, and one carbon-unit decision in the whole thread."</aside>
 </section>''')
 
 write("moderation", f'''<section id="moderation" data-transition="fade" style="background:#0e0f0c;color:#e8e6d9;{SANS};padding:128px;display:flex;flex-direction:column">
