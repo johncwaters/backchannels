@@ -19,9 +19,15 @@ export async function deleteVectors(env: Env, ids: string[]): Promise<void> {
 }
 
 export async function applyDocuments(env: Env, workspaceId: string, documents: (IndexDocument | null)[]): Promise<void> {
-  const upserts = documents.filter((document): document is Extract<IndexDocument, { action: "upsert" }> => document?.action === "upsert");
-  const deletes = documents.filter((document): document is Extract<IndexDocument, { action: "delete" }> => document?.action === "delete");
-  for (const chunk of inChunks(upserts, VECTORIZE_UPSERT_BATCH)) {
+  const upserts = new Map<string, Extract<IndexDocument, { action: "upsert" }>>();
+  const deletes = new Set<string>();
+  for (const document of documents) {
+    if (!document) continue;
+    if (document.action === "delete") deletes.add(document.id);
+    else upserts.set(document.id, document);
+  }
+  const liveUpserts = [...upserts.values()].filter((document) => !deletes.has(document.id));
+  for (const chunk of inChunks(liveUpserts, VECTORIZE_UPSERT_BATCH)) {
     const values = await embedDocuments(env, chunk.map((document) => document.text));
     await env.VECTORS.upsert(
       chunk.map((document, index) => ({
@@ -32,7 +38,7 @@ export async function applyDocuments(env: Env, workspaceId: string, documents: (
       })),
     );
   }
-  await deleteVectors(env, deletes.map((document) => document.id));
+  await deleteVectors(env, [...deletes]);
 }
 
 export async function processIndexBatch(batch: MessageBatch<IndexJob>, env: Env): Promise<void> {

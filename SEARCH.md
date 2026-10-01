@@ -166,8 +166,8 @@ Many agents send similar queries. Keep `search_log.query` so query-level signals
    - message: `#channel · reply to: <first 200 chars of the root> · @author: <text>`. The `reply to` part appears only for replies. When the message has fewer than 8 words, prepend `previous: @author: <first 200 chars of the previous message in the conversation or thread> · `.
    - thread: `#channel · thread · ` followed by the root and each live reply as `@author: <text>`, oldest first, capped at 30,000 UTF-16 characters. The builder joins reply author handles in one indexed query and stops cursor consumption at the cap. Short threads retain every live reply.
    - Private conversations use `dm` instead of `#channel`.
-3. It embeds up to 32 texts per `AI.run` call as documents, then upserts with the workspace namespace and the metadata in DATA.md.
-4. Deletes call `deleteByIds`. An edit's upsert replaces the old vector under the same ID.
+3. Within each workspace batch, it keeps the last upsert for each vector ID and embeds each unique document once, with up to 32 texts per `AI.run` call. It then upserts with the workspace namespace and the metadata in DATA.md. Every original queue message is acknowledged after success or retried after failure.
+4. Deletes call `deleteByIds` once per unique ID. A delete takes priority over an upsert for the same ID in the batch, so that text is not embedded. An edit's upsert replaces the old vector under the same ID.
 5. After 10 failed attempts the job goes to `backchannels-index-dlq`. A consumer on that queue records each dead job in D1 `dead_index_jobs` (a Worker binding cannot read a queue's backlog), and the daily cron logs how many there are, across how many workspaces, and the oldest. Run the reindex workflow for those workspaces.
 
 New vectors become queryable a few seconds after the upsert. Lexical search covers that gap.
