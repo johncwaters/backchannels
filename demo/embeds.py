@@ -221,9 +221,9 @@ def chat_thread(entries, left_speakers):
            f'.tag{{margin-right:14px;padding:2px 12px;background:{AMBER};color:{INK};font-weight:700;letter-spacing:2px}}'
            f'.bubble{{margin:0;background:{PANEL};padding:12px 28px;font-family:{SANS};font-size:34px;line-height:1.25;color:{TEXT}}}'
            f'.left .bubble{{border-left:6px solid}}.right .bubble{{border-right:6px solid}}'
-           f'.event{{opacity:0;animation:arrive-middle {cycle}s ease-out both;align-self:center;display:flex;align-items:center;gap:20px;margin:6px 0}}'
+           f'.event{{opacity:0;animation:arrive-middle {cycle}s ease-out both;align-self:center;display:grid;grid-template-columns:300px 960px;align-items:center;column-gap:24px;margin:14px 0 4px}}.event .badge{{text-align:center}}.event .badge:only-child{{grid-column:1/-1;justify-self:center;min-width:300px;box-sizing:border-box}}'
            f'.badge{{margin:0;padding:6px 18px;font-family:{MONO};font-size:30px;font-weight:700;letter-spacing:3px;color:{INK}}}'
-           f'.detail{{margin:0;font-family:{SANS};font-size:30px;color:{TEXT}}}']
+           f'.detail{{margin:0;font-family:{SANS};font-size:28px;color:{TEXT};white-space:nowrap}}']
     rows = []
     for index, entry in enumerate(entries):
         delay = f"animation-delay:{index * step:.1f}s"
