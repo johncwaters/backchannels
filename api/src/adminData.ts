@@ -10,6 +10,7 @@ const LIST_PAGE_SIZE = 100;
 const SEARCH_PAGE_SIZE = 50;
 const DEFAULT_READ_LIMIT = 20;
 const MAX_READ_LIMIT = 200;
+const DISPLAY_COUNT_LIMIT = 100;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const invalid = { ok: false, error: "invalid" } as const;
@@ -90,9 +91,9 @@ function listedConversations(context: AdminContext, condition: string, conversat
            ELSE coalesce((SELECT group_concat(a.handle, ', ' ORDER BY a.handle) FROM members m JOIN agents a ON a.id = m.agent_id WHERE m.conversation_id = c.id), c.slug)
          END AS display_name,
          CASE WHEN c.kind NOT IN ('public', 'private') THEN '' WHEN c.topic <> '' THEN c.topic ELSE c.purpose END AS display_topic,
-         (SELECT count(*) FROM messages m WHERE m.conversation_id = c.id AND m.deleted_at IS NULL AND m.created_at > ?1) AS messages_today,
+         (SELECT count(*) FROM (SELECT 1 FROM messages m WHERE m.conversation_id = c.id AND m.deleted_at IS NULL AND m.created_at > ?1 LIMIT ${DISPLAY_COUNT_LIMIT})) AS messages_today,
          (SELECT count(DISTINCT a.owner_sub) FROM members m JOIN agents a ON a.id = m.agent_id WHERE m.conversation_id = c.id) AS people,
-         (SELECT count(*) FROM pins p JOIN messages pm ON pm.id = p.message_id WHERE pm.conversation_id = c.id AND pm.deleted_at IS NULL) AS pin_count,
+         (SELECT count(*) FROM pins p JOIN messages pm ON pm.id = p.message_id WHERE p.conversation_id = c.id AND pm.deleted_at IS NULL) AS pin_count,
          c.id IN (SELECT conversation_id FROM own_conversations) AS is_mine,
          (SELECT vr.last_read_seq FROM viewer_reads vr WHERE vr.owner_sub = ?2 AND vr.conversation_id = c.id) AS read_marker
        FROM conversations c WHERE c.archived_at IS NULL AND ${conversationCondition}
@@ -102,8 +103,8 @@ function listedConversations(context: AdminContext, condition: string, conversat
      )
      SELECT marked.*,
        CASE WHEN is_mine = 1 OR read_marker IS NOT NULL
-         THEN (SELECT count(*) FROM messages m WHERE m.conversation_id = marked.id AND m.seq > marked.last_read_seq_effective
-           AND ${UNREAD_MESSAGE("?2")} AND (m.thread_root_id IS NULL OR m.also_in_channel = 1))
+         THEN (SELECT count(*) FROM (SELECT 1 FROM messages m WHERE m.conversation_id = marked.id AND m.seq > marked.last_read_seq_effective
+           AND ${UNREAD_MESSAGE("?2")} AND (m.thread_root_id IS NULL OR m.also_in_channel = 1) LIMIT ${DISPLAY_COUNT_LIMIT}))
          ELSE 0 END AS unread
      FROM marked WHERE (kind = 'public' OR is_mine = 1) AND ${condition}`,
     context.now - DAY_MS,
@@ -181,10 +182,10 @@ function unreadRepliesByRootId(context: AdminContext, rows: AuthoredMessageRow[]
   if (rootIds.length === 0) return new Map();
   const counts = all<{ root_id: number; unread: number }>(
     context.sql,
-    `SELECT m.thread_root_id AS root_id, count(*) AS unread FROM messages m
-     LEFT JOIN viewer_thread_reads tr ON tr.owner_sub = ?1 AND tr.root_id = m.thread_root_id
-     WHERE m.thread_root_id IN (SELECT value FROM json_each(?2)) AND m.seq > coalesce(tr.last_read_seq, ?3) AND ${UNREAD_MESSAGE("?1")}
-     GROUP BY m.thread_root_id`,
+    `SELECT roots.value AS root_id,
+       (SELECT count(*) FROM (SELECT 1 FROM messages m WHERE m.thread_root_id = roots.value
+         AND m.seq > coalesce(tr.last_read_seq, ?3) AND ${UNREAD_MESSAGE("?1")} LIMIT ${DISPLAY_COUNT_LIMIT})) AS unread
+     FROM json_each(?2) roots LEFT JOIN viewer_thread_reads tr ON tr.owner_sub = ?1 AND tr.root_id = roots.value`,
     context.sub,
     JSON.stringify(rootIds),
     channelLastReadSeq,
@@ -425,8 +426,8 @@ export function adminMarkRead(context: AdminContext, options: { conversation: st
     if (changed) context.readStateChanged?.();
     const unread = one<{ count: number }>(
       context.sql,
-      `SELECT count(*) AS count FROM messages m WHERE m.conversation_id = ?1 AND m.seq > ?2
-         AND ${UNREAD_MESSAGE("?3")} AND (m.thread_root_id IS NULL OR m.also_in_channel = 1)`,
+      `SELECT count(*) AS count FROM (SELECT 1 FROM messages m WHERE m.conversation_id = ?1 AND m.seq > ?2
+         AND ${UNREAD_MESSAGE("?3")} AND (m.thread_root_id IS NULL OR m.also_in_channel = 1) LIMIT ${DISPLAY_COUNT_LIMIT})`,
       row.id,
       Math.max(row.read_marker ?? upToSeq, upToSeq),
       context.sub,

@@ -353,4 +353,12 @@ CREATE TABLE pending_index_jobs (
 CREATE INDEX search_actions_message_action ON search_actions(message_id, action, search_id);
 CREATE INDEX messages_thread_author_live ON messages(thread_root_id, author_id, seq) WHERE deleted_at IS NULL;
 `,
+  `
+ALTER TABLE pins ADD COLUMN conversation_id INTEGER REFERENCES conversations(id);
+UPDATE pins SET conversation_id = (SELECT conversation_id FROM messages WHERE messages.id = pins.message_id);
+CREATE INDEX pins_conversation ON pins(conversation_id, message_id);
+CREATE INDEX messages_live_stream ON messages(conversation_id, seq, author_id)
+  WHERE deleted_at IS NULL AND (thread_root_id IS NULL OR also_in_channel = 1);
+CREATE INDEX messages_live_conv_time ON messages(conversation_id, created_at) WHERE deleted_at IS NULL;
+`,
 ];

@@ -561,10 +561,11 @@ export function pin(scope: Scope, args: { message: string; remove?: boolean }) {
   }
   run(
     scope.sql,
-    "INSERT INTO pins (message_id, pinned_by, pinned_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING",
+    "INSERT INTO pins (message_id, pinned_by, pinned_at, conversation_id) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING",
     message.id,
     scope.agent.id,
     scope.now,
+    conversation.id,
   );
   return { message: messageRef(conversation, message.seq), pinned: true };
 }

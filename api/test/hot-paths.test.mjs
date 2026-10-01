@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createDatabase, addAgent, addConversation, createScope } from "./lib/sqlite.mjs";
 import { MIGRATIONS } from "../src/schema.ts";
-const { sendMessage, markConversationRead, markThreadRead } = await import("../src/messages.ts");
+const { sendMessage, markConversationRead, markThreadRead, pin } = await import("../src/messages.ts");
 const { markRead } = await import("../src/inbox.ts");
 const { recordSearchActions } = await import("../src/search/signals.ts");
 const { adminMarkRead, adminList, adminRead } = await import("../src/adminData.ts");
@@ -222,6 +222,41 @@ test("mark unread restores only the requested channel or thread range and preser
     assert.match(plan, /SEARCH messages USING (COVERING )?INDEX \w+ \((conversation_id=\? AND seq>\?|thread_root_id=\? AND seq>\?)\)/);
     assert.match(plan, /SEARCH inbox USING (COVERING )?INDEX sqlite_autoindex_inbox_1 \(agent_id=\? AND message_id=\?\)|SEARCH inbox USING PRIMARY KEY/);
   }
+});
+
+test("admin counts cap at 100 and preserve exact small counts and pin visibility", (context) => {
+  const { database, sql, queries, explain, scope, conversation } = fixture(context);
+  const adminContext = { sql, now: 10_000_000, sub: "reader", audit() {} };
+  database.exec("INSERT INTO viewers VALUES ('reader', 0)");
+  database.prepare("INSERT INTO viewer_reads VALUES ('reader', ?, 0, 1)").run(conversation.id);
+  for (let seq = 1; seq <= 99; seq++) addMessage(database, conversation.id, seq);
+  const counts = () => adminList(adminContext, { scope: "mine" }).value.conversations[0];
+  assert.equal(counts().messagesToday, 99);
+  assert.equal(counts().unread, 99);
+  addMessage(database, conversation.id, 100);
+  addMessage(database, conversation.id, 101);
+  addMessage(database, conversation.id, 102, { authorId: "reader" });
+  addMessage(database, conversation.id, 103, { deletedAt: 1 });
+  const rootId = database.prepare("SELECT id FROM messages WHERE conversation_id = ? AND seq = 1").get(conversation.id).id;
+  for (let seq = 104; seq <= 250; seq++) addMessage(database, conversation.id, seq, { rootId });
+  pin(scope, { message: "general/1" });
+  assert.equal(database.prepare("SELECT conversation_id FROM pins").get().conversation_id, conversation.id);
+  const large = counts();
+  assert.equal(large.messagesToday, 100);
+  assert.equal(large.unread, 100);
+  assert.equal(large.pins, 1);
+  const page = adminRead(adminContext, { conversation: "general", before: 2, limit: 20 }).value;
+  assert.equal(page.messages[0].unreadReplies, 100);
+  database.prepare("UPDATE conversations SET last_seq = 250 WHERE id = ?").run(conversation.id);
+  assert.equal(adminMarkRead(adminContext, { conversation: "general", upToSeq: 1 }).value.unread, 100);
+  assert.equal(adminMarkRead(adminContext, { conversation: "general", upToSeq: 2 }).value.unread, 99);
+  database.prepare("UPDATE messages SET deleted_at = 1 WHERE id = ?").run(rootId);
+  assert.equal(counts().pins, 0);
+  const listed = queries.find(({ query }) => query.includes("listed AS"));
+  const plan = explain(listed).join("\n");
+  assert.match(plan, /pins_conversation/);
+  assert.match(plan, /messages_live_stream/);
+  assert.match(plan, /messages_live_conv_time/);
 });
 
 test("admin read opens at the first unread only when live stream messages exceed the page", (context) => {

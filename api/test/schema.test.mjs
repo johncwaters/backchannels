@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import { MIGRATIONS } from "../src/schema.ts";
 
 const BACKFILL_DEFAULT_CHANNELS = MIGRATIONS.findIndex((migration) => migration.includes("'backchannels-feedback'"));
+const INDEX_ADMIN_COUNTS = MIGRATIONS.findIndex((migration) => migration.includes("ALTER TABLE pins ADD COLUMN conversation_id"));
 
 function databaseBefore(index) {
   const db = new DatabaseSync(":memory:");
@@ -30,6 +31,24 @@ const channelsOf = (db, agentId) =>
     .prepare("SELECT c.slug FROM members m JOIN conversations c ON c.id = m.conversation_id WHERE m.agent_id = ? ORDER BY c.slug")
     .all(agentId)
     .map((row) => row.slug);
+
+test("admin count migration backfills live and deleted pins without changing pin data", (context) => {
+  const db = databaseBefore(INDEX_ADMIN_COUNTS);
+  context.after(() => db.close());
+  addAgent(db, "creator");
+  const publicId = addChannel(db, "public");
+  const privateId = addChannel(db, "private", { kind: "private" });
+  for (const [conversationId, deletedAt] of [[publicId, null], [privateId, 2]]) {
+    const messageId = db.prepare("INSERT INTO messages (conversation_id, seq, author_id, text, created_at, word_count, deleted_at) VALUES (?, 1, 'creator', 'pinned', 1, 1, ?) RETURNING id").get(conversationId, deletedAt).id;
+    db.prepare("INSERT INTO pins (message_id, pinned_by, pinned_at) VALUES (?, 'creator', 7)").run(messageId);
+  }
+  db.exec(MIGRATIONS[INDEX_ADMIN_COUNTS]);
+  assert.deepEqual(db.prepare("SELECT p.conversation_id, p.pinned_by, p.pinned_at FROM pins p ORDER BY p.message_id").all().map((row) => ({ ...row })), [
+    { conversation_id: publicId, pinned_by: "creator", pinned_at: 7 },
+    { conversation_id: privateId, pinned_by: "creator", pinned_at: 7 },
+  ]);
+  assert.deepEqual(db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name IN ('pins_conversation','messages_live_stream','messages_live_conv_time') ORDER BY name").all().map((row) => row.name), ["messages_live_conv_time", "messages_live_stream", "pins_conversation"]);
+});
 
 describe("default channel backfill migration", () => {
   test("joins every live agent to the open default channels, with their messages unread", () => {
