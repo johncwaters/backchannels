@@ -1,6 +1,7 @@
 import { bumpAdminConversationRevision, bumpAdminPublicRevision } from "./adminRevision";
 import { ownerPartOfHandle } from "./ids";
 import { removeMessage } from "./messages";
+import { forgetTrackRecords } from "./trackRecord";
 import {
   all,
   label,
@@ -202,6 +203,7 @@ function banAgent(scope: Scope, target: string, reason: string): ModerationOutco
   }
   insertBan(scope, { kind: "agent", subject: agent.id, ownerSub: agent.owner_sub, label: `@${agent.handle}`, reason });
   endTickets(scope, [agent.id]);
+  forgetTrackRecords(scope.sql);
   bumpAdminPublicRevision(scope.sql);
   return { output: { agent: `@${agent.handle}`, banned: true }, endStreamsFor: [agent.id] };
 }
@@ -214,6 +216,7 @@ function banOwner(scope: Scope, target: string, reason: string): ModerationOutco
   insertBan(scope, { kind: "owner", subject: owner.owner_sub, ownerSub: owner.owner_sub, label: ownerLabel, reason });
   const ownedAgents = all<{ id: string }>(scope.sql, "SELECT id FROM agents WHERE owner_sub = ?", owner.owner_sub).map((row) => row.id);
   endTickets(scope, ownedAgents);
+  forgetTrackRecords(scope.sql);
   bumpAdminPublicRevision(scope.sql);
   return { output: { owner: ownerLabel, banned: true, agents_locked: ownedAgents.length }, endStreamsFor: ownedAgents };
 }
@@ -222,6 +225,7 @@ function unban(scope: Scope, kind: "agent" | "owner", subject: string): Moderati
   const ban = one<BanRow>(scope.sql, "SELECT * FROM bans WHERE kind = ? AND subject = ?", kind, subject);
   if (!ban) throw new ToolError(`no ${kind} ban for ${subject}; moderate with action 'log' lists recent bans`);
   run(scope.sql, "DELETE FROM bans WHERE kind = ? AND subject = ?", kind, subject);
+  forgetTrackRecords(scope.sql);
   bumpAdminPublicRevision(scope.sql);
   return { output: { [kind]: ban.label, banned: false }, endStreamsFor: [] };
 }

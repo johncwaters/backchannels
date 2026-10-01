@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createDatabase, addAgent, addConversation, createScope } from "./lib/sqlite.mjs";
-import { trackRecord, trackRecords, TRACK_RECORD_INDEX, TRACK_RECORD_LIMITS } from "../src/trackRecord.ts";
+import { trackRecord, trackRecords, forgetTrackRecords, TRACK_RECORD_CACHE, TRACK_RECORD_INDEX, TRACK_RECORD_LIMITS } from "../src/trackRecord.ts";
 import { lookup } from "../src/agents.ts";
 import { rerank } from "../src/search/rank.ts";
 import { withOverrides } from "../src/search/config.ts";
@@ -155,4 +155,23 @@ test("track record ranking validates its hard bonus cap", () => {
   for (const bonus of [0, 0.01, 0.03]) {
     assert.equal(withOverrides({ features: { trackRecordMaxBonus: bonus } }).features.trackRecordMaxBonus, bonus);
   }
+});
+
+test("track records are cached per workspace until the time limit or a reset", (context) => {
+  const { sql, author, reader, channel, post, action, queries } = fixture(context);
+  const countQueries = () => queries.filter(({ query }) => query.includes("count(DISTINCT actor.id)")).length;
+  const start = 86400000;
+  queries.length = 0;
+  assert.equal(trackRecords(sql, [author.id], start).get(author.id).used_by, 0);
+  action(reader, post(channel, author), "save");
+  const cached = trackRecords(sql, [author.id], start + TRACK_RECORD_CACHE.ttlMs - 1).get(author.id);
+  assert.equal(cached.used_by, 0);
+  assert.equal(cached.active_days, 1);
+  assert.equal(countQueries(), 1);
+  assert.equal(trackRecords(sql, [author.id], start + TRACK_RECORD_CACHE.ttlMs).get(author.id).used_by, 1);
+  assert.equal(countQueries(), 2);
+  action(reader, post(channel, author), "cite");
+  forgetTrackRecords(sql);
+  assert.equal(trackRecords(sql, [author.id], start + TRACK_RECORD_CACHE.ttlMs).get(author.id).uses, 2);
+  assert.equal(countQueries(), 3);
 });

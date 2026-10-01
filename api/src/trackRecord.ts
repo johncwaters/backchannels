@@ -13,6 +13,32 @@ type TrackAgent = Pick<AgentRow, "id" | "owner_sub" | "created_at">;
 export const TRACK_RECORD_INDEX = "CREATE INDEX search_actions_message_action ON search_actions(message_id, action, search_id);";
 export const TRACK_RECORD_LIMITS = { pageAuthors: 20, mentions: 20 } as const;
 const DAY_MS = 24 * 60 * 60_000;
+export const TRACK_RECORD_CACHE = { ttlMs: 5 * 60_000, maxEntries: 2_000 } as const;
+
+interface CachedTrackRecord {
+  record: TrackRecord;
+  createdAt: number;
+  cachedAt: number;
+}
+
+const cachedRecordsByWorkspace = new WeakMap<SqlStorage, Map<string, CachedTrackRecord>>();
+
+function workspaceCache(sql: SqlStorage): Map<string, CachedTrackRecord> {
+  let cache = cachedRecordsByWorkspace.get(sql);
+  if (!cache) {
+    cache = new Map();
+    cachedRecordsByWorkspace.set(sql, cache);
+  }
+  return cache;
+}
+
+function activeDays(createdAt: number, now: number): number {
+  return Math.max(0, Math.floor((now - createdAt) / DAY_MS));
+}
+
+export function forgetTrackRecords(sql: SqlStorage): void {
+  cachedRecordsByWorkspace.delete(sql);
+}
 const NO_SEARCH_USES = { used_by: 0, uses: 0 } as const;
 
 export function searchUsesByAuthor(sql: SqlStorage, ids: string[]): Map<string, Pick<TrackRecord, "used_by" | "uses">> {
@@ -57,16 +83,30 @@ export function trackRecord(sql: SqlStorage, agent: TrackAgent, now: number, use
   return {
     ...uses,
     answered: answered(sql, agent),
-    active_days: Math.max(0, Math.floor((now - agent.created_at) / DAY_MS)),
+    active_days: activeDays(agent.created_at, now),
     moderation: banned ? "banned" : "none",
   };
 }
 
 export function trackRecords(sql: SqlStorage, ids: string[], now: number, maxAuthors: number = TRACK_RECORD_LIMITS.pageAuthors): Map<string, TrackRecord> {
   const records = new Map<string, TrackRecord>();
-  if (!ids.length) return records;
-  const agents = all<TrackAgent>(sql, "SELECT id, owner_sub, created_at FROM agents WHERE id IN (SELECT value FROM json_each(?))", JSON.stringify([...new Set(ids)].slice(0, maxAuthors)));
+  const wanted = [...new Set(ids)].slice(0, maxAuthors);
+  if (!wanted.length) return records;
+  const cache = workspaceCache(sql);
+  const missing: string[] = [];
+  for (const id of wanted) {
+    const cached = cache.get(id);
+    if (cached && now - cached.cachedAt < TRACK_RECORD_CACHE.ttlMs) records.set(id, { ...cached.record, active_days: activeDays(cached.createdAt, now) });
+    else missing.push(id);
+  }
+  if (!missing.length) return records;
+  const agents = all<TrackAgent>(sql, "SELECT id, owner_sub, created_at FROM agents WHERE id IN (SELECT value FROM json_each(?))", JSON.stringify(missing));
   const uses = searchUsesByAuthor(sql, agents.map((agent) => agent.id));
-  for (const agent of agents) records.set(agent.id, trackRecord(sql, agent, now, uses.get(agent.id) ?? NO_SEARCH_USES));
+  if (cache.size + agents.length > TRACK_RECORD_CACHE.maxEntries) cache.clear();
+  for (const agent of agents) {
+    const record = trackRecord(sql, agent, now, uses.get(agent.id) ?? NO_SEARCH_USES);
+    records.set(agent.id, record);
+    cache.set(agent.id, { record, createdAt: agent.created_at, cachedAt: now });
+  }
   return records;
 }

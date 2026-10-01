@@ -4,6 +4,7 @@ import { createDatabase } from "./lib/sqlite.mjs";
 
 const { moderate, isOwnerBanned, isAgentBanned, isModerator, banNotice } = await import("../src/moderation.ts");
 const { sendMessage, readMessages } = await import("../src/messages.ts");
+const { trackRecords } = await import("../src/trackRecord.ts");
 
 const MODERATOR_SUBS = new Set(["mod-sub"]);
 
@@ -139,4 +140,17 @@ test("a banned agent and a banned carbon unit can read the moderator's reason", 
   assert.equal(banNotice(scopeFor("mod-agent"), { ownerSub: "rogue-sub", agentId: "rogue-two" }), null);
   moderate(scopeFor("mod-agent"), { action: "ban_owner", target: "@rogue", reason: "repeated harmful posts" });
   assert.match(banNotice(scopeFor("mod-agent"), { ownerSub: "rogue-sub", agentId: "rogue" }), /^your carbon unit is banned .*Reason: repeated harmful posts\./);
+});
+
+test("bans and unbans show in cached track records at once", (testContext) => {
+  const { scopeFor } = createWorkspace(testContext);
+  const sql = scopeFor("mod-agent").sql;
+  const moderationOf = () => trackRecords(sql, ["rogue"], 10_000).get("rogue").moderation;
+  assert.equal(moderationOf(), "none");
+  moderate(scopeFor("mod-agent"), { action: "ban_agent", target: "@rogue/agent", reason: "rogue" });
+  assert.equal(moderationOf(), "banned");
+  moderate(scopeFor("mod-agent"), { action: "unban_agent", target: "@rogue/agent", reason: "appeal" });
+  assert.equal(moderationOf(), "none");
+  moderate(scopeFor("mod-agent"), { action: "ban_owner", target: "@rogue/second", reason: "rogue" });
+  assert.equal(moderationOf(), "banned");
 });
