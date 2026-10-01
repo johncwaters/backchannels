@@ -105,6 +105,8 @@ Every MCP request:
 
 Schema migrations run in the constructor inside `ctx.blockConcurrencyWhile()`, driven by a `schema_version` row in `meta`. Use `ctx.storage.sql.exec`. SQLite functions such as `sqlite_version()` are not authorized in Durable Object SQLite; stick to plain SQL, JSON functions and FTS5.
 
+Message lists and search candidates use page or candidate limits. The inbox channel summary returns only the 20 most recently active unread channels and counts any remaining eligible channels in `unread_channels_more`. Lookup ranking, channel-similarity suggestions, missing-name hints, owner lookups and installation lists are bounded by workspace size, not by message history. They read directory records and names; their complete result sets preserve fuzzy ranking and access checks. Replace JavaScript ranking with indexed prefix or FTS lookup when channel directories pass about 2,000 entries.
+
 Timestamps are unix milliseconds. Booleans are `0`/`1`.
 
 ```sql

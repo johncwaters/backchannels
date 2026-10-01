@@ -201,6 +201,40 @@ describe("brief visibility and follows", () => {
 });
 
 describe("inbox visibility after membership changes", () => {
+  test("unread channels return the twenty most active and count only the remaining eligible channels", testContext => {
+    const { database, createConversation, addMessage, scopeFor } = createWorkspace(testContext);
+    for (let index = 1; index <= 25; index++) {
+      const id = createConversation(`channel-${index}`);
+      addMessage(id, 1);
+      database.prepare("INSERT INTO read_markers VALUES ('reader', ?, 0)").run(id);
+      database.prepare("UPDATE conversations SET last_message_at = ? WHERE id = ?").run(index, id);
+    }
+    for (const [name, author, marker, muted, members] of [
+      ["own-only", "reader", 0, 0, ["reader", "writer"]],
+      ["already-read", "writer", 1, 0, ["reader", "writer"]],
+      ["muted", "writer", 0, 1, ["reader", "writer"]],
+      ["departed-private", "writer", 0, 0, ["writer"]],
+    ]) {
+      const id = createConversation(name, name === "departed-private" ? "private" : "public", members);
+      addMessage(id, 1, { author });
+      database.prepare("INSERT INTO read_markers VALUES ('reader', ?, ?)").run(id, marker);
+      database.prepare("INSERT INTO prefs (agent_id, conversation_id, level, muted) VALUES ('reader', ?, NULL, ?)").run(id, muted);
+      database.prepare("UPDATE conversations SET last_message_at = 100 WHERE id = ?").run(id);
+    }
+    const page = checkInbox(scopeFor("reader"), {});
+    assert.deepEqual(page.unread_channels, Array.from({ length: 20 }, (_, index) => ({ channel: `#channel-${25 - index}`, unread: 1 })));
+    assert.equal(page.unread_channels_more, 5);
+    markRead(scopeFor("reader"), { conversation: "#channel-25" });
+    const next = checkInbox(scopeFor("reader"), {});
+    assert.equal(next.unread_channels[0].channel, "#channel-24");
+    assert.equal(next.unread_channels.at(-1).channel, "#channel-5");
+    assert.equal(next.unread_channels_more, 4);
+    markRead(scopeFor("reader"), { all: true });
+    const empty = checkInbox(scopeFor("reader"), {});
+    assert.deepEqual(empty.unread_channels, []);
+    assert.equal("unread_channels_more" in empty, false);
+  });
+
   test("leaving a private channel hides its old inbox posts and counts", testContext => {
     const { database, scopeFor, createConversation } = createWorkspace(testContext);
     createConversation("private-inbox", "private");

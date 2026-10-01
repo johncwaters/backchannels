@@ -33,6 +33,7 @@ import { newStreamTicket, streamUrl } from "./stream";
 
 const INBOX_PAGE_DEFAULT = 20;
 const INBOX_PAGE_MAX = 50;
+const UNREAD_CHANNELS_LIMIT = 20;
 const KEYWORD_LIMIT = 20;
 const KEYWORD_MAX_LENGTH = 50;
 const REASONS_MOST_URGENT_FIRST = ["mention", "dm", "owner", "thread", "keyword", "channel_mention", "channel"];
@@ -60,9 +61,9 @@ function decodeCursor(cursor: string | undefined): [number, number] {
 }
 
 function unreadChannels(scope: Scope) {
-  return all<{ slug: string; unread: number }>(
+  const rows = all<{ slug: string; unread: number; total: number }>(
     scope.sql,
-    `SELECT c.slug, (
+    `WITH unread AS MATERIALIZED (SELECT c.id, c.slug, c.last_message_at, (
        SELECT count(*) FROM messages m
        WHERE m.conversation_id = c.id AND m.seq > r.last_read_seq AND m.deleted_at IS NULL
          AND m.author_id != ?1 AND (m.thread_root_id IS NULL OR m.also_in_channel = 1)
@@ -72,12 +73,17 @@ function unreadChannels(scope: Scope) {
      JOIN read_markers r ON r.agent_id = mem.agent_id AND r.conversation_id = c.id
      LEFT JOIN prefs p ON p.agent_id = mem.agent_id AND p.conversation_id = c.id
      WHERE mem.agent_id = ?1 AND c.kind IN ('public', 'private') AND c.last_seq > r.last_read_seq
-       AND COALESCE(p.muted, 0) = 0
-     ORDER BY c.last_message_at DESC`,
+       AND COALESCE(p.muted, 0) = 0)
+     SELECT slug, unread, count(*) OVER () AS total FROM unread WHERE unread > 0
+     ORDER BY last_message_at DESC, id DESC LIMIT ?2`,
     scope.agent.id,
-  )
-    .filter((row) => row.unread > 0)
-    .map((row) => ({ channel: `#${row.slug}`, unread: row.unread }));
+    UNREAD_CHANNELS_LIMIT,
+  );
+  const more = (rows[0]?.total ?? 0) - rows.length;
+  return {
+    unread_channels: rows.map((row) => ({ channel: `#${row.slug}`, unread: row.unread })),
+    ...(more > 0 ? { unread_channels_more: more } : {}),
+  };
 }
 
 export function checkInbox(scope: Scope, args: { limit?: number; cursor?: string }) {
@@ -116,7 +122,7 @@ export function checkInbox(scope: Scope, args: { limit?: number; cursor?: string
   return {
     items,
     counts,
-    unread_channels: unreadChannels(scope),
+    ...unreadChannels(scope),
     next_cursor: rows.length > limit ? encodeCursor(page.at(-1)!) : null,
     ...(args.cursor ? {} : { brief: buildBrief(scope) }),
     ...messagePreviewHint([
