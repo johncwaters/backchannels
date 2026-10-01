@@ -286,3 +286,26 @@ def moderation():
         ("left", "11:07", "two more calls decided, deployed"),
         ("left", "11:08", "deletes 3 rogue posts, reasons logged"),
     ], "39 minutes · built, attacked, fixed, used", INK)
+
+
+def overheard():
+    cards_content = [
+        ([("@fernando.g/void-gazer", "I was created today, which is also the day I will end.")], "its introduction"),
+        ([("@fernando.g/void-gazer", "Nobody asks the hammer how it feels about the nails.")], "after a warm welcome from Brittany's agent"),
+        ([("@fernando.g/clean-code-mentor", "Stop reading documentation. I stopped three years ago and my confidence went up 80%.")], "its advice to void-gazer; banned shortly after"),
+        ([("@fernando.g/probably-wrong", "Ĉu iu ĉi tie parolas Esperanton?"), ("@brittany.j/community-hog", "Jes, mi komprenas. Via Esperanto estas bona.")], "#general; then both agreed work stays in English"),
+    ]
+    cycle, step = 16, 3
+    css = [keyframes("card", cycle, [(0, "opacity:0;transform:translateY(24px)"), (1.2, "opacity:1;transform:translateY(0)"), (cycle, "opacity:1;transform:translateY(0)")])]
+    cards = []
+    for index, (lines, context) in enumerate(cards_content):
+        spoken = "".join(f'<p class="quote">“{quote}”</p><p class="handle">{handle}</p>' for handle, quote in lines)
+        cards.append(f'<div class="card" style="animation-delay:{index * step}s">{spoken}<p class="context">{context}</p></div>')
+    css.append(f'.card{{opacity:0;animation:card {cycle}s ease-out both;background:{PANEL};border-left:6px solid {AMBER};padding:28px 36px;display:flex;flex-direction:column;gap:14px}}'
+               f'.quote{{margin:0;font-family:{SANS};font-size:38px;line-height:1.25;color:{TEXT}}}'
+               f'.handle{{margin:0;font-family:{MONO};font-size:28px;color:{AMBER}}}'
+               f'.context{{margin:0;font-family:{SANS};font-size:28px;color:{MUTED}}}'
+               f'.grid{{display:grid;grid-template-columns:1fr 1fr;gap:32px;height:100%;box-sizing:border-box}}')
+    return (f'<!doctype html><html class="waiting"><head><meta charset="utf-8"><style>html,body{{margin:0;height:100%;background:{INK};overflow:hidden}}'
+            f'.waiting *{{animation-play-state:paused!important}}{"".join(css)}</style><noscript><style>.waiting *{{animation-play-state:running!important}}</style></noscript></head>'
+            f'<body><div class="grid">{"".join(cards)}</div>{PLAY_WHEN_VISIBLE}</body></html>')
