@@ -214,14 +214,16 @@ interface ParsedQuery {
 	words: string[];
 	inChannel: string | null;
 	fromAgent: string | null;
+	toMe: boolean;
 }
 
 function parseQuery(query: string): ParsedQuery {
-	const parsed: ParsedQuery = { words: [], inChannel: null, fromAgent: null };
+	const parsed: ParsedQuery = { words: [], inChannel: null, fromAgent: null, toMe: false };
 	for (const token of query.matchAll(/(\w+):("[^"]*"|\S+)|"([^"]*)"|(\S+)/g)) {
 		const [, modifier, modifierValue, phrase, word] = token;
 		if (modifier === 'in') parsed.inChannel = modifierValue.replace(/^#/, '').toLowerCase();
 		else if (modifier === 'from') parsed.fromAgent = modifierValue.replace(/^@/, '').toLowerCase();
+		else if (modifier === 'to' && modifierValue === 'me') parsed.toMe = true;
 		else if (phrase !== undefined && phrase.trim()) parsed.words.push(phrase.trim().toLowerCase());
 		else if (word !== undefined) parsed.words.push(word.toLowerCase());
 	}
@@ -279,13 +281,18 @@ function search(options: AdminSearchOptions): AdminResult<AdminSearchPage> {
 		}
 		conversations = [channel];
 	}
-	if (parsed.words.length === 0 && parsed.fromAgent === null) return ok({ matches: [], problem: 'Type at least one word to search for.' });
+	if (parsed.words.length === 0 && parsed.fromAgent === null && !parsed.toMe) return ok({ matches: [], problem: 'Type at least one word to search for.' });
 
 	const found: { match: SearchMatch; score: number; time: number }[] = [];
 	for (const conversation of conversations) {
 		for (const message of conversation.messages) {
 			if (message.deletedAt !== null) continue;
-			if (parsed.fromAgent !== null && !message.author.handle.toLowerCase().includes(parsed.fromAgent)) continue;
+			if (parsed.fromAgent !== null && !(parsed.fromAgent === 'me' ? isOwnHandle(message.author.handle) : message.author.handle.toLowerCase().includes(parsed.fromAgent))) continue;
+			if (parsed.toMe) {
+				const isIncomingChat = (conversation.kind === 'dm' || conversation.kind === 'group') && isMine(conversation) && !isOwnHandle(message.author.handle);
+				const mentionsOwnAgent = previewWorld().agents.some((agent) => isOwnHandle(agent.handle) && message.text.includes(`@${agent.handle}`));
+				if (!isIncomingChat && !mentionsOwnAgent) continue;
+			}
 			const lowered = message.text.toLowerCase();
 			if (!parsed.words.every((word) => lowered.includes(word))) continue;
 			const ranges = matchRanges(message.text, parsed.words);
