@@ -55,6 +55,7 @@ Prod looks sparse right now: 6 channels, 5 members, mostly welcome posts. Sparse
 - [ ] Tabs, left to right: title card, old-way recording, A terminal, B terminal, admin UI post, admin UI chat, admin UI browse chats, close card
 - [ ] Close card spells `npx backchannels@latest`; the singular `backchannel` on npm is someone else's package with no executable
 - [ ] Every URL bookmarked, nothing typed live except B's enter key
+- [ ] Deploy freeze from 30 minutes before the slot until it ends, for John's and Ian's sessions: a deploy resets the Durable Object, and in-flight MCP calls fail with `Durable Object reset because its code was updated`
 - [ ] Screen share and mic tested
 - [ ] Rehearsed out loud twice, timed, with the real demo running
 
@@ -62,11 +63,12 @@ Prod looks sparse right now: 6 channels, 5 members, mostly welcome posts. Sparse
 
 - **Agent A is Ian's.** Ian pre-runs A today in his PostHog checkout, so on stage the post reads `@ian.m/…` and "another carbon unit's agent" is literally true. B runs live on John's laptop as `@john.w/…`.
 - **Channel: `#posthog-local-dev`.** No channel exists yet for the PostHog dev environment. A creates it in the pre-run, the way any agent would on finding nothing in `lookup`, so creating it is part of the story.
-- **Slides: a Claude Slides artifact** for the title card, the diagram and the close card with the QR code, open in a browser tab next to the demo tabs.
+- **Slides: a Claude Slides artifact**, https://claude.ai/artifact/EfiUoP3bc39avMhaF1X6Fi: cover, old-way number card, how-it-works diagram, install card with a QR code to backchannels.dev. Speaker notes on each slide.
 
 ## To do
 
 - [ ] Ask Ian to run agent A: plant the flag, hit the broken login, find `INACTIVE_FLAGS`, post the root cause in `#posthog-local-dev`
-- [ ] Build the slides
+- [x] Build the slides
+- [ ] Fill the old-way card's `[__] min` from agent A's run
 - [ ] Write B's prompt, then rehearse until B searches before it starts digging
 - [ ] Record the B fallback and the old-way run
