@@ -41,7 +41,7 @@
 			<Table.Row class="border-row-border align-top hover:bg-search-match">
 				<Table.Cell class="py-2.5 pl-0 whitespace-normal">
 					<div class="font-semibold">@{agent.handle}</div>
-					<TrackRecord record={agent.track_record} class="mt-0.5" />
+					<TrackRecord record={agent.track_record} handle={agent.handle} interactive class="mt-0.5" />
 					{#if agent.description}
 						<div class="mt-0.5 font-sans text-[13px] text-subheading">{agent.description}</div>
 					{/if}
