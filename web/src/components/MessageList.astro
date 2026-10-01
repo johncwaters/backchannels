@@ -1,5 +1,6 @@
 ---
 import MessageIdentity from './MessageIdentity.astro';
+import CopyMessageLink from '../lib/components/admin/conversation/CopyMessageLink.svelte';
 import PageLink from '../lib/components/admin/PageLink.svelte';
 import { Badge } from '../lib/components/ui/badge';
 import { Button } from '../lib/components/ui/button';
@@ -61,7 +62,6 @@ const visibleTime = (message: Message) => showsDays ? formatClockTime(message.ti
 const pinnerColor = (handle: string) => `color: var(${agentColorToken(agentNameFromHandle(handle))})`;
 
 const edgeBleed = '-mx-7 px-7 max-[899px]:-mx-4 max-[899px]:px-4';
-const revealedWithMessage = 'opacity-0 group-hover/message:opacity-100 group-focus-within/message:opacity-100 focus-visible:opacity-100';
 ---
 
 <div class="relative flex min-h-0 grow flex-col">
@@ -117,8 +117,9 @@ const revealedWithMessage = 'opacity-0 group-hover/message:opacity-100 group-foc
 										<span class="text-amber">pinned</span> by <span style={pinnerColor(message.pinned.by)}>{message.pinned.by}</span> · <time datetime={message.pinned.at}>{utcStamp(message.pinned.at)}</time>
 									</p>
 								)}
-								<div class="flex items-baseline gap-2.5">
-									<MessageIdentity message={message} class={continues ? 'sr-only' : undefined} />
+								<div class="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-2.5">
+									<div class="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
+									<MessageIdentity message={message} class={continues ? 'sr-only' : 'min-w-0 [overflow-wrap:anywhere]'} />
 									{message.pinned && !showsPinDetails && (
 										<Badge variant="outline" class="h-auto rounded-none border-amber px-1.5 py-0 font-mono text-xs font-normal text-amber" title={`Pinned by ${message.pinned.by} on ${utcStamp(message.pinned.at)}`}>pinned</Badge>
 									)}
@@ -128,12 +129,9 @@ const revealedWithMessage = 'opacity-0 group-hover/message:opacity-100 group-foc
 									{message.editedAt && (
 										<Badge variant="ghost" class="h-auto rounded-none p-0 font-mono text-xs font-normal text-dim hover:bg-transparent hover:text-dim" title={`Edited ${utcStamp(message.editedAt)}`}>edited</Badge>
 									)}
-									<span class:list={['ml-auto flex items-baseline gap-2.5', continues && 'absolute top-0 right-0 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/message:opacity-100 [@media(hover:hover)]:group-focus-within/message:opacity-100']}>
-										<button
-											type="button"
-											class={`pointer-events-none hidden cursor-pointer border-0 bg-transparent p-0 font-mono text-xs text-dim group-hover/message:pointer-events-auto group-focus-within/message:pointer-events-auto hover:text-amber [html[data-can-copy-links]_&]:inline ${revealedWithMessage}`}
-											data-copy-link={messageLink(message)}
-										>copy link</button>
+									</div>
+									<span class:list={['flex shrink-0 items-baseline gap-2.5 whitespace-nowrap', continues && 'absolute top-0 right-0 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/message:opacity-100 [@media(hover:hover)]:group-focus-within/message:opacity-100']}>
+										<CopyMessageLink href={messageLink(message)} />
 										<a class="text-[13px] text-dim no-underline underline-offset-3 hover:text-foreground hover:underline" href={messageLink(message)} data-nav-title={messageHeading(message)} title={`${utcStamp(message.time)} · link to this message`}>
 											<time datetime={message.time}>{visibleTime(message)}</time>
 										</a>
