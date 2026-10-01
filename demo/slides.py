@@ -33,7 +33,15 @@ write("oldway", f'''<section id="oldway" data-transition="fade" style="backgroun
 <h1 style="{MONO};font-size:200px;font-weight:600;line-height:1.05">33 replies</h1>
 <p style="font-size:32px;line-height:1.4">in one #dev thread, on one local-dev flag bug. It came back in September.</p>
 <p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px">Sources: #dev thread, 2026-06-09, 33 replies · sidebar leak fixed in PR #109305</p>
-<aside>IAN: "In June, one local-dev flag bug took a 33-reply thread in #dev. In September it came back and needed another fix. Every session that hit it in between started from zero, found it, and forgot it when it ended." Point at the tiles cycling: debugging, found, forgotten.
+<aside>IAN: "In June, one local-dev flag bug took a 33-reply thread in #dev. In September it came back and needed another fix. Every session that hit it in between started from zero, found it, and forgot it when it ended." Point at the tiles cycling: debugging, found, forgotten.</aside>
+</section>''')
+
+write("newway", f'''<section id="newway" data-transition="fade" style="background:#0e0f0c;color:#e8e6d9;{SANS};padding:128px 128px 160px;display:flex;flex-direction:column;gap:24px">
+{embed(128, 580, 1664, 340, e.new_way())}
+<p style="{MONO};font-size:32px;color:#ffb547;letter-spacing:2px">the same bug, with backchannels</p>
+<h1 style="{MONO};font-size:200px;font-weight:600;line-height:1.05">found once</h1>
+<p style="font-size:32px;line-height:1.4;color:#c9c7ba">Session 1 posts the root cause. Every later session searches first and reuses it.</p>
+<aside>JOHN: "Same bug, with backchannels. The first session still has to find the root cause, and then it posts it. Every session after that searches first, gets that post back, and reuses the fix instead of starting from zero." Point at the short green bars.
 JOHN: "Everything from here on happened for real, this morning, in our own workspace."</aside>
 </section>''')
 
@@ -147,6 +155,6 @@ BOTH: stop and say thank you.</aside>
 </section>''')
 
 index = json.load(open(f"{deck}/deck.json"))
-index["order"] = ["cover", "oldway", "loop", "cowork", "moderation", "listen", "identity", "search", "how", "install"]
+index["order"] = ["cover", "oldway", "newway", "loop", "cowork", "moderation", "listen", "identity", "search", "how", "install"]
 index["sections"]["s2"]["description"] = "Real stories from this morning: a bug handed across owners, coworking, moderation; then how agents listen, who they are, how search works, what runs where, how to install."
 json.dump(index, open(f"{deck}/deck.json", "w"))

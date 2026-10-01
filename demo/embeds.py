@@ -91,6 +91,44 @@ def old_way():
     return page(width, height, "".join(css), "".join(svg), AMBER)
 
 
+def new_way():
+    width, height, cycle = 1664, 340, 15
+    tile_width, tile_height, gap_x, gap_y = 536, 150, 28, 40
+    first_found, first_posted, first_reuse = 5, 6.5, 8
+
+    def show_between(name, start, end):
+        stops = [(0, "opacity:0"), (start, "opacity:0"), (start + .2, "opacity:1")] if start else [(0, "opacity:1")]
+        stops += [(end, "opacity:1"), (end + .2, "opacity:0"), (cycle, "opacity:0")] if end < cycle else [(cycle, "opacity:1")]
+        return keyframes(name, cycle, stops) + f".{name}{{animation:{name} {cycle}s linear both}}"
+
+    def fill_bar(name, start, end, filled_fraction):
+        filled = f"transform:scaleX({filled_fraction})"
+        return (keyframes(name, cycle, [(0, "transform:scaleX(0)"), (start, "transform:scaleX(0)"), (end, filled), (cycle, filled)])
+                + f".{name}{{transform-box:fill-box;transform-origin:left;animation:{name} {cycle}s linear both}}")
+
+    css, svg = [], []
+    for index in range(6):
+        column, row = index % 3, index // 3
+        left, top = column * (tile_width + gap_x), row * (tile_height + gap_y)
+        text_x, status_y, bar_y, bar_width = left + 28, top + 98, top + 120, tile_width - 56
+        is_first = index == 0
+        start = 0 if is_first else first_reuse + (index - 1) * 1.1
+        searched = first_found if is_first else start + .8
+        statuses = ([("debugging local flags…", AMBER, 0, first_found), ("root cause found", GREEN, first_found, first_posted), ("posted the root cause", AMBER, first_posted, cycle)]
+                    if is_first else
+                    [("waiting…", DIM, 0, start), ("searching first…", AMBER, start, searched), ("reused session 1's fix", GREEN, searched, cycle)])
+        parts = [f'<rect x="{left}" y="{top}" width="{tile_width}" height="{tile_height}" fill="{PANEL}"/>',
+                 f'<text x="{text_x}" y="{top + 46}" font-size="28" fill="{MUTED}">session {index + 1}</text>']
+        for status_index, (label, color, shown_from, shown_until) in enumerate(statuses):
+            name = f"t{index}s{status_index}"
+            css.append(show_between(name, shown_from, shown_until))
+            parts.append(f'<text class="{name}" x="{text_x}" y="{status_y}" font-size="32" fill="{color}">{label}</text>')
+        css.append(fill_bar(f"b{index}", start, searched, 1 if is_first else .15))
+        parts.append(f'<rect x="{text_x}" y="{bar_y}" width="{bar_width}" height="8" fill="{LINE}"/><rect class="b{index}" x="{text_x}" y="{bar_y}" width="{bar_width}" height="8" fill="{AMBER if is_first else GREEN}"/>')
+        svg.append("".join(parts))
+    return page(width, height, "".join(css), "".join(svg), INK)
+
+
 def listen():
     width, height, cycle = 1664, 600, 19
     gate_x, card_width, card_height, start_y = 960, 440, 72, 264
