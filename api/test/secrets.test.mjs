@@ -5,6 +5,7 @@ import { findNamedSecret, findSecret, scanFields } from "../src/secrets.ts";
 
 const ALPHANUMERIC = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 const UPPER_ALPHANUMERIC = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+const HIGH_ENTROPY_TOKEN = ALPHANUMERIC;
 
 function randomFrom(alphabet, length) {
   return Array.from(randomBytes(length), (byte) => alphabet[byte % alphabet.length]).join("");
@@ -29,7 +30,7 @@ const MUST_BE_REFUSED = [
   ["chat bot token", join("xo", "xb-", randomFrom("0123456789", 12), "-", randomFrom(ALPHANUMERIC, 24))],
   ["JSON web token", join("ey", "J", base64url(20), ".ey", "J", base64url(30), ".", base64url(32))],
   ["password in a URL", join("postgres://deploy:", randomFrom(ALPHANUMERIC, 12), "@db.internal:5432/app")],
-  ["random token", join(randomBytes(30).toString("base64"), "Q7x")],
+  ["high-entropy token", HIGH_ENTROPY_TOKEN],
 ];
 
 const MUST_PASS = [
@@ -71,23 +72,25 @@ describe("secret scanner", () => {
   });
 });
 
-const RANDOM_LOOKING_TOKEN = join(randomBytes(30).toString("base64"), "Q7x");
-
 describe("secret scanner without heuristics", () => {
-  for (const [label, secret] of MUST_BE_REFUSED.filter(([label]) => label !== "random token")) {
+  for (const [label, secret] of MUST_BE_REFUSED.filter(([label]) => label !== "high-entropy token")) {
     test(`still refuses a ${label}`, () => {
       assert.ok(findNamedSecret(`note: ${secret} is the value`), `${label} passed the named scan`);
     });
   }
 
-  test("lets a random-looking token through", () => {
-    assert.equal(findSecret(`note: ${RANDOM_LOOKING_TOKEN}`), "high-entropy string");
-    assert.equal(findNamedSecret(`note: ${RANDOM_LOOKING_TOKEN}`), null);
-    assert.equal(scanFields({ content: `note: ${RANDOM_LOOKING_TOKEN}` }, { heuristics: false }), null);
+  test("lets a high-entropy token through", () => {
+    assert.equal(findSecret(`note: ${HIGH_ENTROPY_TOKEN}`), "high-entropy string");
+    assert.equal(findNamedSecret(`note: ${HIGH_ENTROPY_TOKEN}`), null);
+    assert.equal(scanFields({ content: `note: ${HIGH_ENTROPY_TOKEN}` }, { heuristics: false }), null);
   });
 
   test("scanFields keeps heuristics on by default", () => {
-    assert.match(scanFields({ content: `note: ${RANDOM_LOOKING_TOKEN}` }), /high-entropy string/);
+    assert.match(scanFields({ content: `note: ${HIGH_ENTROPY_TOKEN}` }), /high-entropy string/);
+  });
+
+  test("a long low-entropy token with all three character classes passes the heuristic", () => {
+    assert.equal(findSecret("Aa1".repeat(20)), null);
   });
 
   test("scanFields with heuristics off still names a pattern match", () => {
