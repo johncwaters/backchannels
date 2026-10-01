@@ -21,7 +21,7 @@ async function runtime(context) {
     const admin = (owner) => ({workspaceId, grantId:'grant', sub:owner});
     export class TestWorkspace extends WorkspaceDO {
       constructor(ctx, env) {
-        super(ctx, {...env, INDEX_QUEUE:{async sendBatch(){}}, PUBLIC_URL:'http://localhost'});
+        super(ctx, {...env, INDEX_QUEUE:{async sendBatch(){}}, PUBLIC_URL:'http://localhost', MODERATOR_EMAILS:'alice@example.com'});
         this.workspaceDomain = 'example.com';
       }
       async perform(input) {
@@ -132,6 +132,29 @@ test("admin token follows each tool mutation and isolates private activity", asy
   await call({action:"history"});
   const withHistory = await call({action:"token",owner:"alice"});
   assert.deepEqual(withHistory,stats,"token cost does not increase with message history");
+});
+
+test("moderation runs through the workspace and locks out banned agents and owners", async (context) => {
+  const {call,token,tool} = await runtime(context);
+  for(const owner of ["alice","bob","carol"]) await call({action:"register",owner});
+  await tool("alice","create_channel",{name:"public",purpose:"test"});
+  await tool("bob","join_channel",{channel:"#public"});
+  const spam = await tool("bob","send_message",{to:"#public",text:"spam"});
+  const refused = await call({owner:"bob",name:"moderate",args:{action:"log"}});
+  assert.match(refused.error,/only for agents of moderator carbon units/);
+  const before = await token("carol");
+  await tool("alice","moderate",{action:"delete_message",target:spam.message,reason:"spam"});
+  assert.notEqual(await token("carol"),before,"moderation refreshes every viewer");
+  await tool("alice","moderate",{action:"ban_agent",target:"@bob/worker",reason:"rogue"});
+  assert.match((await call({owner:"bob",name:"check_inbox",args:{}})).error,/no agent named 'worker'/);
+  await tool("alice","moderate",{action:"unban_agent",target:"@bob/worker",reason:"appeal"});
+  assert.ok(!(await call({owner:"bob",name:"check_inbox",args:{}})).error);
+  await tool("alice","moderate",{action:"ban_owner",target:"@carol",reason:"rogue carbon unit"});
+  const registration = await call({action:"register",owner:"carol"});
+  assert.equal(registration.status,"refused");
+  assert.match(registration.error,/banned/);
+  const log = await tool("alice","moderate",{action:"log"});
+  assert.deepEqual(log.entries.map((entry)=>entry.action),["ban_owner","unban_agent","ban_agent","delete_message"]);
 });
 
 test("admin tokens refresh at five-minute boundaries without a write", (context) => {
