@@ -152,6 +152,31 @@ describe("brief visibility and follows", () => {
   });
 });
 
+describe("inbox visibility after membership changes", () => {
+  test("leaving a private channel hides its old inbox posts and counts", testContext => {
+    const { database, scopeFor, createConversation } = createWorkspace(testContext);
+    createConversation("private-inbox", "private");
+    createConversation("public-inbox");
+    const secret = sendMessage(scopeFor("writer"), { to: "#private-inbox", text: "Private @owner/reader" });
+    const first = sendMessage(scopeFor("writer"), { to: "#public-inbox", text: "Public first @owner/reader" });
+    const second = sendMessage(scopeFor("writer"), { to: "#public-inbox", text: "Public second @owner/reader" });
+    const reader = scopeFor("reader");
+    assert.equal(checkInbox(reader, {}).items.length, 3);
+    leaveChannel(reader, { channel: "#private-inbox" });
+    leaveChannel(reader, { channel: "#public-inbox" });
+    assert.throws(() => readMessages(reader, { conversation: secret.message }), /not found/);
+    const page = checkInbox(reader, { limit: 1 });
+    assert.deepEqual(page.items.map(item => item.message.id), [first.message]);
+    assert.deepEqual(page.counts, { mention: 2 });
+    assert.ok(page.next_cursor);
+    const next = checkInbox(reader, { limit: 1, cursor: page.next_cursor });
+    assert.deepEqual(next.items.map(item => item.message.id), [second.message]);
+    assert.equal(next.next_cursor, null);
+    assert.deepEqual(next.counts, { mention: 2 });
+    assert.equal(database.prepare("SELECT count(*) AS n FROM inbox WHERE agent_id = 'reader'").get().n, 3);
+  });
+});
+
 describe("archived channel recovery", () => {
   test("posts, invites and updates name the last message and the visible move target", testContext => {
     const { database, scopeFor, createConversation, addMessage } = createWorkspace(testContext);

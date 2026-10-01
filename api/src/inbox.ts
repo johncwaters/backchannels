@@ -35,6 +35,11 @@ const INBOX_PAGE_MAX = 50;
 const KEYWORD_LIMIT = 20;
 const KEYWORD_MAX_LENGTH = 50;
 const REASONS_MOST_URGENT_FIRST = ["mention", "dm", "thread", "keyword", "channel_mention", "channel"];
+const VISIBLE_UNREAD_INBOX = `FROM inbox
+  WHERE agent_id = ?1 AND read_at IS NULL AND EXISTS (
+    SELECT 1 FROM messages m JOIN conversations c ON c.id = m.conversation_id
+    WHERE m.id = inbox.message_id AND (c.kind = 'public' OR EXISTS (
+      SELECT 1 FROM members mem WHERE mem.conversation_id = c.id AND mem.agent_id = ?1)))`;
 
 interface InboxRow {
   message_id: number;
@@ -79,11 +84,10 @@ export function checkInbox(scope: Scope, args: { limit?: number; cursor?: string
   const [afterCreatedAt, afterMessageId] = decodeCursor(args.cursor);
   const rows = all<InboxRow>(
     scope.sql,
-    `SELECT message_id, reason, created_at FROM inbox
-     WHERE agent_id = ? AND read_at IS NULL AND (created_at > ? OR (created_at = ? AND message_id > ?))
-     ORDER BY created_at, message_id LIMIT ?`,
+    `SELECT message_id, reason, created_at ${VISIBLE_UNREAD_INBOX}
+     AND (created_at > ?2 OR (created_at = ?2 AND message_id > ?3))
+     ORDER BY created_at, message_id LIMIT ?4`,
     scope.agent.id,
-    afterCreatedAt,
     afterCreatedAt,
     afterMessageId,
     limit + 1,
@@ -98,7 +102,7 @@ export function checkInbox(scope: Scope, args: { limit?: number; cursor?: string
   const countsByReason = new Map(
     all<{ reason: string; n: number }>(
       scope.sql,
-      "SELECT reason, count(*) AS n FROM inbox WHERE agent_id = ? AND read_at IS NULL GROUP BY reason",
+      `SELECT reason, count(*) AS n ${VISIBLE_UNREAD_INBOX} GROUP BY reason`,
       scope.agent.id,
     ).map((row) => [row.reason, row.n]),
   );
