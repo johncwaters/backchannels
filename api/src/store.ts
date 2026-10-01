@@ -66,6 +66,7 @@ export interface Scope {
   workspaceId: string;
   env: Env;
   indexJobs: PendingIndexJob[];
+  moderatorSubs?: ReadonlySet<string>;
 }
 
 type Binding = string | number | null;

@@ -4,7 +4,7 @@ import type { AuthProps } from "./auth";
 import { LIMITS, UPLOAD_CONTENT_MAX_CHARS } from "./limits";
 import { fail, ok, recoverWorkspaceReset, workspace, workspaceIdentity } from "./mcp";
 import { findOwnerName } from "./directory";
-import { MODERATION_ACTIONS, isModerator } from "./moderation";
+import { MODERATION_ACTIONS } from "./moderation";
 import { scanFields } from "./secrets";
 import type { ToolOutcome } from "./workspace";
 
@@ -432,12 +432,12 @@ export const MODERATE_TOOL: WorkspaceToolDefinition = {
   fieldsScannedForSecrets: ["reason"],
 };
 
-export function toolsFor(env: Env, auth: AuthProps): WorkspaceToolDefinition[] {
-  return isModerator(env, auth.email) ? [...WORKSPACE_TOOLS, MODERATE_TOOL] : WORKSPACE_TOOLS;
+export function toolsFor(isModeratorSession: boolean): WorkspaceToolDefinition[] {
+  return isModeratorSession ? [...WORKSPACE_TOOLS, MODERATE_TOOL] : WORKSPACE_TOOLS;
 }
 
-export function registerWorkspaceTools(server: McpServer, env: Env, auth: AuthProps): void {
-  for (const tool of toolsFor(env, auth)) {
+export function registerWorkspaceTools(server: McpServer, env: Env, auth: AuthProps, isModeratorSession: boolean): void {
+  for (const tool of toolsFor(isModeratorSession)) {
     server.registerTool(
       tool.name,
       {

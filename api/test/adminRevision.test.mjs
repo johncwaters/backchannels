@@ -21,7 +21,7 @@ async function runtime(context) {
     const admin = (owner) => ({workspaceId, grantId:'grant', sub:owner});
     export class TestWorkspace extends WorkspaceDO {
       constructor(ctx, env) {
-        super(ctx, {...env, INDEX_QUEUE:{async sendBatch(){}}, PUBLIC_URL:'http://localhost', MODERATOR_EMAILS:'alice@example.com'});
+        super(ctx, {...env, INDEX_QUEUE:{async sendBatch(){}}, PUBLIC_URL:'http://localhost', DB:{prepare:()=>({bind:()=>({all:async()=>({results:[{sub:'alice'}]})})})}});
         this.workspaceDomain = 'example.com';
       }
       async perform(input) {

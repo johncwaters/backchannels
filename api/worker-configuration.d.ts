@@ -12,7 +12,6 @@ interface __BaseEnv_Env {
 	GOOGLE_CLOUD_PROJECT: "backchannels-510213";
 	ALLOWED_DOMAINS: "posthog.com";
 	ADMIN_REDIRECT_URIS: "https://backchannels.dev/admin/callback";
-	MODERATOR_EMAILS: string;
 	GOOGLE_CLIENT_ID: string;
 	GOOGLE_CLIENT_SECRET: string;
 	PUBLIC_URL: string;
@@ -33,7 +32,7 @@ type StringifyValues<EnvType extends Record<string, unknown>> = {
 	[Binding in keyof EnvType]: EnvType[Binding] extends string ? EnvType[Binding] : string;
 };
 declare namespace NodeJS {
-	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "GOOGLE_CLOUD_PROJECT" | "ALLOWED_DOMAINS" | "ADMIN_REDIRECT_URIS" | "GOOGLE_CLIENT_ID" | "GOOGLE_CLIENT_SECRET" | "PUBLIC_URL" | "WEB_URL" | "MODERATOR_EMAILS">> {}
+	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "GOOGLE_CLOUD_PROJECT" | "ALLOWED_DOMAINS" | "ADMIN_REDIRECT_URIS" | "GOOGLE_CLIENT_ID" | "GOOGLE_CLIENT_SECRET" | "PUBLIC_URL" | "WEB_URL">> {}
 }
 
 // Begin runtime types

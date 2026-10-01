@@ -229,6 +229,11 @@ export async function isWorkspaceAdmin(db: D1Database, sub: string, workspaceId:
   return found === 1;
 }
 
+export async function workspaceAdminSubs(db: D1Database, workspaceId: string): Promise<string[]> {
+  const { results } = await db.prepare("SELECT sub FROM carbon_units WHERE workspace_id = ? AND is_admin = 1").bind(workspaceId).all<{ sub: string }>();
+  return results.map((row) => row.sub);
+}
+
 export interface HeadlessKeyListing {
   id: string;
   label: string;

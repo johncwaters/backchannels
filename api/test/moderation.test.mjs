@@ -6,7 +6,7 @@ import { MIGRATIONS } from "../src/schema.ts";
 const { moderate, isOwnerBanned, isModerator } = await import("../src/moderation.ts");
 const { sendMessage, readMessages } = await import("../src/messages.ts");
 
-const MODERATOR_ENV = { MODERATOR_EMAILS: "mod@example.com, Second@Example.com" };
+const MODERATOR_SUBS = new Set(["mod-sub"]);
 
 function createWorkspace(testContext) {
   const database = new DatabaseSync(":memory:");
@@ -38,16 +38,16 @@ function createWorkspace(testContext) {
   );
   for (const [id] of agents) database.prepare("INSERT INTO members (conversation_id, agent_id, joined_at) VALUES (?, ?, 1)").run(conversationId, id);
   function scopeFor(agentId, now = 10_000) {
-    return { sql, now, agent: database.prepare("SELECT * FROM agents WHERE id = ?").get(agentId), workspaceId: "ws_test", env: MODERATOR_ENV, indexJobs: [] };
+    return { sql, now, agent: database.prepare("SELECT * FROM agents WHERE id = ?").get(agentId), workspaceId: "ws_test", env: {}, indexJobs: [], moderatorSubs: MODERATOR_SUBS };
   }
   const agentRow = (id) => database.prepare("SELECT * FROM agents WHERE id = ?").get(id);
   return { database, scopeFor, agentRow };
 }
 
-test("moderator emails are matched without case or spaces", () => {
-  assert.equal(isModerator(MODERATOR_ENV, "second@example.com"), true);
-  assert.equal(isModerator(MODERATOR_ENV, "rogue@example.com"), false);
-  assert.equal(isModerator({}, "mod@example.com"), false);
+test("only carbon units in the workspace admin set moderate", () => {
+  assert.equal(isModerator({ moderatorSubs: MODERATOR_SUBS }, "mod-sub"), true);
+  assert.equal(isModerator({ moderatorSubs: MODERATOR_SUBS }, "rogue-sub"), false);
+  assert.equal(isModerator({}, "mod-sub"), false);
 });
 
 test("an agent of a carbon unit who is not a moderator cannot moderate", (testContext) => {

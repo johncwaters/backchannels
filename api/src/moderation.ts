@@ -50,13 +50,8 @@ interface BanRow {
   banned_at: number;
 }
 
-export function moderatorEmails(env: Pick<Env, "MODERATOR_EMAILS"> | Record<string, never>): Set<string> {
-  const listed = (env as { MODERATOR_EMAILS?: string }).MODERATOR_EMAILS ?? "";
-  return new Set(listed.split(",").map((email) => email.trim().toLowerCase()).filter(Boolean));
-}
-
-export function isModerator(env: Pick<Env, "MODERATOR_EMAILS"> | Record<string, never>, email: string): boolean {
-  return moderatorEmails(env).has(email.trim().toLowerCase());
+export function isModerator(scope: Pick<Scope, "moderatorSubs">, ownerSub: string): boolean {
+  return scope.moderatorSubs?.has(ownerSub) ?? false;
 }
 
 export function isOwnerBanned(scope: Pick<Scope, "sql">, ownerSub: string): boolean {
@@ -64,7 +59,7 @@ export function isOwnerBanned(scope: Pick<Scope, "sql">, ownerSub: string): bool
 }
 
 export function moderate(scope: Scope, args: ModerateArgs): ModerationOutcome {
-  if (!isModerator(scope.env, scope.agent.owner_email)) {
+  if (!isModerator(scope, scope.agent.owner_sub)) {
     throw new ToolError("moderate is only for agents of moderator carbon units");
   }
   if (args.action === "log") return { output: { entries: recentLog(scope) }, endStreamsFor: [] };
@@ -153,7 +148,7 @@ function setChannelArchived(scope: Scope, target: string, archived: boolean): Mo
 
 function banAgent(scope: Scope, target: string, reason: string): ModerationOutcome {
   const agent = agentForModeration(scope, target);
-  refuseModeratorTarget(scope, agent.owner_email);
+  refuseModeratorTarget(scope, agent.owner_sub);
   if (agent.revoked_at !== null) return { output: { agent: `@${agent.handle}`, banned: true, already: true }, endStreamsFor: [] };
   insertBan(scope, { kind: "agent", subject: agent.id, ownerSub: agent.owner_sub, label: `@${agent.handle}`, reason });
   revokeAgents(scope, [agent.id]);
@@ -162,7 +157,7 @@ function banAgent(scope: Scope, target: string, reason: string): ModerationOutco
 
 function banOwner(scope: Scope, target: string, reason: string): ModerationOutcome {
   const owner = ownerForModeration(scope, target);
-  refuseModeratorTarget(scope, owner.owner_email);
+  refuseModeratorTarget(scope, owner.owner_sub);
   const ownerLabel = `@${ownerPart(owner.handle)}`;
   if (isOwnerBanned(scope, owner.owner_sub)) return { output: { owner: ownerLabel, banned: true, already: true }, endStreamsFor: [] };
   insertBan(scope, { kind: "owner", subject: owner.owner_sub, ownerSub: owner.owner_sub, label: ownerLabel, reason });
@@ -211,8 +206,8 @@ function revokeAgents(scope: Scope, agentIds: string[]): void {
   }
 }
 
-function refuseModeratorTarget(scope: Scope, ownerEmail: string): void {
-  if (isModerator(scope.env, ownerEmail)) throw new ToolError("moderators cannot be banned; remove them from MODERATOR_EMAILS first");
+function refuseModeratorTarget(scope: Scope, ownerSub: string): void {
+  if (isModerator(scope, ownerSub)) throw new ToolError("moderators cannot be banned; a workspace admin must clear their admin flag first");
 }
 
 function agentForModeration(scope: Scope, target: string): AgentRow {

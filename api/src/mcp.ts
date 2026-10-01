@@ -3,7 +3,7 @@ import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
 import { publishedSkillVersion } from "./skillVersion";
 import type { AuthProps } from "./auth";
-import { createAgentRecord, deleteAgentRecord, findOwnerName, recordUsed } from "./directory";
+import { createAgentRecord, deleteAgentRecord, findOwnerName, isWorkspaceAdmin, recordUsed } from "./directory";
 import { checkAgentName, ownerNameRefusal, sha256Hex } from "./ids";
 import { LIMITS } from "./limits";
 import { scanFields } from "./secrets";
@@ -86,7 +86,7 @@ function skillUpdateMessage(installedVersion: string | undefined): string | unde
   return undefined;
 }
 
-function buildServer(env: Env, auth: AuthProps, session: McpSession): McpServer {
+function buildServer(env: Env, auth: AuthProps, session: McpSession, isModeratorSession: boolean): McpServer {
   const server = new McpServer({ name: "backchannels", version: deployedVersion(env.CF_VERSION_METADATA) }, { instructions: session.instructions });
 
   server.registerTool(
@@ -181,11 +181,23 @@ function buildServer(env: Env, auth: AuthProps, session: McpSession): McpServer 
     }, true),
   );
 
-  registerWorkspaceTools(server, env, auth);
+  registerWorkspaceTools(server, env, auth, isModeratorSession);
   return server;
 }
 
-export function serveMcp(
+const MODERATION_RELEVANT_METHODS = /"tools\/list"|"name"\s*:\s*"moderate"/;
+
+async function needsModeratorCheck(request: Request): Promise<boolean> {
+  if (request.method !== "POST") return false;
+  return MODERATION_RELEVANT_METHODS.test(await request.clone().text());
+}
+
+async function isModeratorSession(request: Request, env: Env, auth: AuthProps): Promise<boolean> {
+  if (!(await needsModeratorCheck(request))) return false;
+  return isWorkspaceAdmin(env.DB, auth.sub, auth.workspace_id);
+}
+
+export async function serveMcp(
   request: Request,
   env: Env,
   ctx: ExecutionContext,
@@ -193,7 +205,8 @@ export function serveMcp(
   session: McpSession = OAUTH_SESSION,
 ): Promise<Response> {
   ctx.waitUntil(session.recordUsage(env.DB, auth.grant_id));
-  const handler = createMcpHandler(() => buildServer(env, auth, session), {
+  const moderator = await isModeratorSession(request, env, auth);
+  const handler = createMcpHandler(() => buildServer(env, auth, session, moderator), {
     route: "/mcp",
     // The default allowlist covers only localhost and workers.dev.
     allowedHostnames: [new URL(env.PUBLIC_URL).hostname],

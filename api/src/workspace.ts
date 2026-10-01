@@ -21,7 +21,7 @@ import { isOwnerBanned, moderate, type ModerationOutcome } from "./moderation";
 import { SEARCH_TUNING_META_KEY, searchMessages } from "./search";
 import type { TuningOverrides } from "./search/config";
 import { buildDocument, reindexJobs, type IndexDocument, type IndexJob, type PendingIndexJob } from "./search/indexing";
-import { findWorkspaceDomain } from "./directory";
+import { findWorkspaceDomain, workspaceAdminSubs } from "./directory";
 import { fullHandle, handleOwner, sha256Hex } from "./ids";
 import { ToolError, all, label, messageRef, nameInUseRefusal, one, run, type AgentRow, type ConversationRow, type MessageRow, type Scope } from "./store";
 import { STREAM_PROTOCOL, STREAM_ROUTE, isStreamGrantLive, isWebSocketUpgrade, streamTicketFrom, unauthorizedStream } from "./stream";
@@ -263,6 +263,7 @@ export class WorkspaceDO extends DurableObject<Env> {
     const limited = this.takeTokens(name, agent.id, caller, now);
     if (limited) return { error: limited };
     const scope = this.scopeFor(agent, caller.workspaceId, now);
+    if (name === "moderate") scope.moderatorSubs = new Set(await workspaceAdminSubs(this.env.DB, caller.workspaceId));
     const invoke = () => {
       const output = handler(scope, args as never, caller.grantId);
       if (!ASYNC_TOOLS.has(name)) recordAdminToolChange(this.sql, caller.ownerSub, name, output as Record<string, unknown>);
