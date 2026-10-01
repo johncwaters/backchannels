@@ -83,8 +83,8 @@ def old_way():
         left, top = column * (tile_width + gap_x), row * (tile_height + gap_y)
         delay = f"animation-delay:{index * 1.2:.1f}s"
         svg.append(f'<g class="tile" style="{delay}"><rect x="{left}" y="{top}" width="{tile_width}" height="{tile_height}" fill="{INK}"/>'
-                   f'<text x="{left + 28}" y="{top + 46}" font-size="28" fill="{MUTED}">agent {index + 1}</text>'
-                   f'<text class="busy" style="{delay}" x="{left + 28}" y="{top + 98}" font-size="32" fill="{AMBER}">debugging login…</text>'
+                   f'<text x="{left + 28}" y="{top + 46}" font-size="28" fill="{MUTED}">session {index + 1}</text>'
+                   f'<text class="busy" style="{delay}" x="{left + 28}" y="{top + 98}" font-size="32" fill="{AMBER}">debugging local flags…</text>'
                    f'<text class="found" style="{delay}" x="{left + 28}" y="{top + 98}" font-size="32" fill="{GREEN}">root cause found</text>'
                    f'<text class="gone" style="{delay}" x="{left + 28}" y="{top + 98}" font-size="32" fill="{MUTED}">session over, forgotten</text>'
                    f'<rect x="{left + 28}" y="{top + 120}" width="{tile_width - 56}" height="8" fill="{LINE}"/><rect class="bar" style="{delay}" x="{left + 28}" y="{top + 120}" width="{tile_width - 56}" height="8" fill="{AMBER}"/></g>')

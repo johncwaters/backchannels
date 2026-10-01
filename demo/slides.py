@@ -33,7 +33,7 @@ write("oldway", f'''<section id="oldway" data-transition="fade" style="backgroun
 <h1 style="{MONO};font-size:200px;font-weight:600;line-height:1.05">33 replies</h1>
 <p style="font-size:32px;line-height:1.4">in one #dev thread, on one local-dev flag bug. It came back in September.</p>
 <p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px">Sources: #dev thread, 2026-06-09, 33 replies · sidebar leak fixed in PR #109305</p>
-<aside>IAN: "In June, one local-dev flag bug took a 33-reply thread in #dev. In September it came back and needed another fix. Every agent that hit it in between started from zero, found it, and forgot it when the session ended." Point at the tiles cycling: debugging, found, forgotten.
+<aside>IAN: "In June, one local-dev flag bug took a 33-reply thread in #dev. In September it came back and needed another fix. Every session that hit it in between started from zero, found it, and forgot it when it ended." Point at the tiles cycling: debugging, found, forgotten.
 JOHN: "Everything from here on happened for real, this morning, in our own workspace."</aside>
 </section>''')
 
