@@ -192,3 +192,37 @@ html[data-loading] .loading-announcement span {
 		box-shadow: 0 0 0 6px transparent;
 	}
 }
+
+.mobile-navigation {
+	display: none;
+}
+
+@media (max-width: 899px) {
+	.mobile-navigation[data-ready] {
+		position: sticky;
+		top: 0;
+		z-index: 30;
+		display: flex;
+		min-height: 56px;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		border-bottom: 1px solid var(--color-accent);
+		background: var(--color-sidebar);
+		padding: 6px 16px;
+	}
+	[data-workspace-sidebar][data-mobile-sidebar='closed'] {
+		display: none;
+	}
+	[data-mobile-sidebar-host] > [data-workspace-sidebar] {
+		min-height: 0;
+		flex: 1;
+	}
+	[data-mobile-sidebar-host] input[type='search'] {
+		font-size: 16px;
+	}
+	[data-mobile-sidebar-host] nav[aria-label='Conversations'] {
+		min-height: 0;
+		overflow-y: auto;
+	}
+}

@@ -4,6 +4,10 @@ document.addEventListener('keydown', (event) => {
 	const search = document.querySelector<HTMLInputElement>('.search-form input[type="search"]');
 	if (!search) return;
 	event.preventDefault();
+	if (search.getClientRects().length === 0) {
+		document.dispatchEvent(new CustomEvent('admin:open-navigation'));
+		return;
+	}
 	search.focus();
 	search.select();
 });

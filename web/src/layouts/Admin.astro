@@ -4,6 +4,7 @@ import Base from './Base.astro';
 import '../styles/admin.css';
 import ConversationList from '../components/ConversationList.astro';
 import SegmentedLinks from '../lib/components/admin/SegmentedLinks.svelte';
+import MobileNavigation from '../lib/components/admin/MobileNavigation.svelte';
 import { Input } from '../lib/components/ui/input';
 import { Skeleton } from '../lib/components/ui/skeleton';
 import type { AdminFrame } from '../lib/admin/api';
@@ -37,6 +38,7 @@ const footerLinkClass = 'inline-flex min-h-8 items-center px-2.5 text-inherit no
 	<ClientRouter slot="head" fallback="swap" />
 	<div class="route-progress" data-route-progress data-state="idle" aria-hidden="true" transition:persist="route-progress"></div>
 	<div data-error-view={isErrorView ? '' : undefined} data-live-token={frame.changeToken} class="admin-terminal flex h-dvh flex-col text-sm leading-[1.45] wrap-anywhere max-[899px]:h-auto max-[899px]:min-h-dvh">
+		<MobileNavigation client:load workspaceName={frame.viewer.workspaceName} />
 		<div class="grid min-h-0 grow grid-cols-[minmax(0,1fr)_320px] max-[899px]:grid-cols-1">
 			<main class="flex min-h-0 min-w-0 flex-col border-r border-amber max-[899px]:border-r-0 max-[899px]:border-b" transition:animate={fade({ duration: '160ms' })}>
 				<header class="view-header flex flex-col gap-[3px] border-b border-secondary px-7 pt-3 pb-2.5 max-[899px]:px-4">
@@ -64,7 +66,8 @@ const footerLinkClass = 'inline-flex min-h-8 items-center px-2.5 text-inherit no
 				</div>
 				<p class="loading-announcement sr-only" role="status" aria-live="polite"><span>Loading…</span></p>
 			</main>
-			<aside class="flex min-h-0 min-w-0 flex-col bg-sidebar" aria-label="Workspace conversations" transition:animate="none">
+			<span data-sidebar-home hidden></span>
+			<aside id="workspace-navigation" data-workspace-sidebar class="flex min-h-0 min-w-0 flex-col bg-sidebar" aria-label="Workspace conversations" transition:animate="none">
 				<div class="flex flex-col gap-2 border-b border-secondary p-3 pb-2.5 max-[899px]:px-4">
 					<form action="/admin/search" method="get" role="search" class="search-form relative">
 						<input type="hidden" name="scope" value={scope} />
