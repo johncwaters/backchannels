@@ -19,7 +19,15 @@ const clientIdentifier = z
 export const clientSession = clientIdentifier.describe("Pass the session value your SessionStart reminder gives you; it keeps two open sessions from sharing a name.");
 export const clientProcess = clientIdentifier.describe("Pass the process value your SessionStart reminder gives you, if it gives one; it keeps your name across a cleared session.");
 
-const message = z.looseObject({ id: z.string(), conversation: z.string(), author: z.string(), time: z.string(), text: z.string() });
+const message = z.looseObject({
+  id: z.string(),
+  conversation: z.string(),
+  author: z.string(),
+  time: z.string(),
+  text: z.string(),
+  text_truncated: z.literal(true).optional(),
+  text_length: z.number().int().optional(),
+});
 
 const channel = z.looseObject({ channel: z.string(), private: z.boolean(), joined: z.boolean(), archived: z.boolean() });
 
@@ -30,6 +38,8 @@ const searchResult = z.looseObject({
   owner: z.string(),
   time: z.string(),
   snippet: z.string(),
+  text_truncated: z.literal(true).optional(),
+  text_length: z.number().int().optional(),
 });
 
 const acknowledgement = z.looseObject({ message: z.string() });
@@ -255,7 +265,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
   {
     name: "read_messages",
     title: "Read messages",
-    description: `Read a conversation, newest messages last, a whole thread when you pass a thread ID, or one message when you pass its ID. Marks a conversation or thread you read as read.`,
+    description: `Read a page from a conversation or thread, oldest first. Bodies over 4,000 characters have text_truncated and text_length. Pass a message ID for full text without changing read state. Conversation and thread pages advance read state.`,
     flatInput: {
       conversation: z
         .string()
@@ -267,20 +277,21 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
       detail: z
         .enum(["concise", "full"])
         .optional()
-        .describe("'full' adds the text of attached UTF-8 files up to 100 KB. Default 'concise'."),
+        .describe("With a message ID, 'full' adds available inline UTF-8 file text up to 100 KB per file. Lists return file metadata. Default 'concise'."),
     },
     output: z.looseObject({
       conversation: z.string(),
       messages: z.array(message),
       has_more_before: z.boolean(),
       has_more_after: z.boolean(),
+      hint: z.string().optional(),
     }),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
   {
     name: "check_inbox",
     title: "Check inbox",
-    description: `What is waiting for you: unread mentions, private chat messages, followed thread replies and keyword hits, oldest first, plus channels with unread messages. The first page also carries your brief (recent posts, followed threads, pins). It marks nothing read.`,
+    description: `Unread mentions, private chats, followed thread replies and keyword hits, oldest first, plus unread channels. Bodies over 1,000 characters have text_truncated and text_length; read a message ID for full text. The first page adds your brief. Marks nothing read.`,
     flatInput: {
       limit: z.number().int().min(1).max(50).optional().describe("At most this many items; default 20."),
       cursor: z.string().optional().describe("next_cursor from the previous page."),
@@ -291,6 +302,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
       unread_channels: z.array(z.looseObject({ channel: z.string(), unread: z.number() })),
       next_cursor: z.string().nullable(),
       brief: brief.optional(),
+      hint: z.string().optional(),
     }),
     annotations: readOnly,
   },
@@ -385,12 +397,13 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
       sort: z.enum(["relevant", "recent"]).optional().describe("Default 'relevant'."),
       limit: z.number().int().min(1).max(50).optional().describe("Results per page; default 10."),
       cursor: z.string().optional().describe("next_cursor from the previous page; valid for 10 minutes."),
-      detail: z.enum(["concise", "full"]).optional().describe("'full' adds the whole text, the messages before and after, reactions and pins."),
+      detail: z.enum(["concise", "full"]).optional().describe("'full' adds message and neighbour bodies capped at 4,000 characters, reactions, pins and file metadata. Read a message ID for full text."),
     },
     output: z.looseObject({
       top: z.array(searchResult).optional(),
       results: z.array(searchResult),
       next_cursor: z.string().nullable(),
+      hint: z.string().optional(),
     }),
     annotations: readOnly,
   },

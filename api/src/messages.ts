@@ -1,6 +1,7 @@
 import { openChat } from "./conversations";
 import { attachFiles } from "./files";
 import { LIMITS } from "./limits";
+import { messagePreviewHint, previewMessage } from "./messagePreview";
 import { SIGNALS } from "./search/config";
 import { termPattern } from "./search/coverage";
 import { queueDelete, queueMessageUpsert, queueThreadUpsert } from "./search/indexing";
@@ -744,10 +745,12 @@ export function readMessages(scope: Scope, args: ReadMessagesArgs) {
         : result.id === openedRootId || result.thread_root_id === openedRootId,
     );
   }
+  const messages = page.map(message => previewMessage(viewMessage(scope, conversation, message), LIMITS.readTextPreviewChars));
   return {
     conversation: listingRef(conversation, root),
-    messages: page.map((message) => viewMessage(scope, conversation, message, args.detail === "full")),
+    messages,
     has_more_before: page.length > 0 && exists(page[0].seq, "<"),
     has_more_after: page.length > 0 && exists(page.at(-1)!.seq, ">"),
+    ...messagePreviewHint(messages),
   };
 }

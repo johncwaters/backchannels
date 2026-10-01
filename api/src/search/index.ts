@@ -1,4 +1,6 @@
-import { ToolError, all, label, messageRef, one, run, viewMessage, type ConversationRow, type MessageRow, type Scope } from "../store";
+import { ToolError, all, label, messageRef, one, run, viewMessage, type ConversationRow, type MessageRow, type MessageView, type Scope } from "../store";
+import { LIMITS } from "../limits";
+import { messagePreviewHint, previewMessage } from "../messagePreview";
 import { SEARCH, SEMANTIC, withOverrides, type Tuning, type TuningOverrides } from "./config";
 import { missingTerms, termPattern } from "./coverage";
 import { buildFilters, type Filters } from "./filters";
@@ -23,6 +25,11 @@ interface ResultRow extends MessageRow {
   author_handle: string;
   owner_email: string;
 }
+
+type SearchResult = Record<string, unknown> & Partial<Pick<MessageView, "text_truncated" | "text_length" | "files">> & {
+  previous?: MessageView;
+  next?: MessageView;
+};
 
 export function matchOffsets(text: string, terms: FreeTerm[]): [number, number][] {
   const spans: [number, number][] = [];
@@ -207,13 +214,13 @@ function neighbour(scope: Scope, row: ResultRow, direction: "previous" | "next")
   );
   if (!found) return undefined;
   const conversation = one<ConversationRow>(scope.sql, "SELECT * FROM conversations WHERE id = ?", row.conversation_id)!;
-  return viewMessage(scope, conversation, found);
+  return previewMessage(viewMessage(scope, conversation, found), LIMITS.readTextPreviewChars);
 }
 
 function formatResult(scope: Scope, row: ResultRow, snippet: string | undefined, terms: FreeTerm[], detail: Detail) {
   const conversation = { slug: row.slug, kind: row.kind } as ConversationRow;
   const id = messageRef(conversation, row.seq);
-  const result: Record<string, unknown> = {
+  const result: SearchResult = {
     id,
     conversation: label(conversation),
     author: `@${row.author_handle}`,
@@ -232,8 +239,12 @@ function formatResult(scope: Scope, row: ResultRow, snippet: string | undefined,
     result.reply_count = row.reply_count;
   }
   if (detail === "full") {
-    const full = viewMessage(scope, { ...conversation, id: row.conversation_id } as ConversationRow, row, true);
-    result.text = row.text;
+    const full = previewMessage(viewMessage(scope, { ...conversation, id: row.conversation_id } as ConversationRow, row), LIMITS.readTextPreviewChars);
+    result.text = full.text;
+    if (full.text_truncated) {
+      result.text_truncated = true;
+      result.text_length = full.text_length;
+    }
     result.previous = neighbour(scope, row, "previous");
     result.next = neighbour(scope, row, "next");
     if (full.reactions) result.reactions = full.reactions;
@@ -300,10 +311,14 @@ function page(
   for (const row of shown) shownPerConversation.set(row.conversation_id, (shownPerConversation.get(row.conversation_id) ?? 0) + 1);
   for (const [conversationId, count] of shownPerConversation) bumpUsefulness(scope, conversationId, "shown", count);
   const nextOffset = offset + limit;
+  const results = visible.map(row => formatResult(scope, row, snippetById.get(row.id), parsed.include, detail));
+  const topResults = visibleTop.map(row => formatResult(scope, row, snippetById.get(row.id), parsed.include, detail));
+  const previewStates = [...results, ...topResults].flatMap(result => [result, result.previous ?? {}, result.next ?? {}]);
   return {
-    ...(visibleTop.length ? { top: visibleTop.map((row) => formatResult(scope, row, snippetById.get(row.id), parsed.include, detail)) } : {}),
-    results: visible.map((row) => formatResult(scope, row, snippetById.get(row.id), parsed.include, detail)),
+    ...(topResults.length ? { top: topResults } : {}),
+    results,
     next_cursor: nextOffset < ordered.length ? encodeCursor(searchId, nextOffset) : null,
+    ...messagePreviewHint(previewStates),
   };
 }
 

@@ -4,6 +4,8 @@ export const LIMITS = {
   handleLength: 40,
   channelNameLength: 80,
   messageLength: 40_000,
+  inboxTextPreviewChars: 1_000,
+  readTextPreviewChars: 4_000,
   groupChatMembers: 9,
   invitesPerCall: 50,
   lookupQueryLength: 120,

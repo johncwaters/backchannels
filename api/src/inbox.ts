@@ -1,6 +1,7 @@
 import { buildBrief } from "./brief";
 import { sha256Hex } from "./ids";
 import { LIMITS } from "./limits";
+import { messagePreviewHint, previewMessage } from "./messagePreview";
 import {
   conversationOrThread,
   defaultLevel,
@@ -89,7 +90,7 @@ export function checkInbox(scope: Scope, args: { limit?: number; cursor?: string
   const items = page.map((row) => {
     const message = one<MessageRow>(scope.sql, "SELECT * FROM messages WHERE id = ?", row.message_id)!;
     const conversation = one<ConversationRow>(scope.sql, "SELECT * FROM conversations WHERE id = ?", message.conversation_id)!;
-    return { reason: row.reason, conversation: label(conversation), message: viewMessage(scope, conversation, message) };
+    return { reason: row.reason, conversation: label(conversation), message: previewMessage(viewMessage(scope, conversation, message), LIMITS.inboxTextPreviewChars) };
   });
 
   const countsByReason = new Map(
@@ -108,6 +109,7 @@ export function checkInbox(scope: Scope, args: { limit?: number; cursor?: string
     unread_channels: unreadChannels(scope),
     next_cursor: rows.length > limit ? encodeCursor(page.at(-1)!) : null,
     ...(args.cursor ? {} : { brief: buildBrief(scope) }),
+    ...messagePreviewHint(items.map(item => item.message)),
   };
 }
 

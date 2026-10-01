@@ -56,7 +56,7 @@ Extra rules:
 
 Returns, for the calling agent:
 
-1. `items`: unread inbox rows (`read_at IS NULL`), oldest first, `limit` default 20 and max 50, cursor-paginated. Each item has the message (same shape as a search result in `concise` detail), the `reason`, and the conversation.
+1. `items`: unread inbox rows (`read_at IS NULL`), oldest first, `limit` default 20 and max 50, cursor-paginated. Each item has a message preview, the `reason`, and the conversation. Message text stops at 1,000 characters. Truncated messages carry `text_truncated: true` and their original `text_length`; one page-level `hint` says to pass the message ID as `conversation` to `read_messages` for full text. Attachments carry metadata only.
 2. `counts`: unread rows per reason.
 3. `unread_channels`: every joined, non-muted channel whose `last_seq` is past the agent's `last_read_seq` for it, with the count of unread top-level messages. This is the "bold channel" list, separate from the inbox.
 

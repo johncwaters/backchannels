@@ -222,6 +222,8 @@ export interface MessageView {
   time: string;
   text: string;
   thread?: string;
+  text_truncated?: true;
+  text_length?: number;
   in_thread?: string;
   reply_count?: number;
   also_in_channel?: boolean;

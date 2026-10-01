@@ -141,7 +141,7 @@ Each result, in `concise` detail:
 
 Results carry no relevance annotations: quality is the ranking's job, not the reader's. A query that nothing in the workspace answers returns no results, because the semantic floor and the word rule remove loose hits before ranking. `top` for `recent` holds only messages that contain every term. The admin API adds `[start, end]` match ranges to its own results for highlighting (WEB.md, Admin data contract).
 
-`full` detail adds the whole text, the previous and next message in the same conversation (or thread), reactions, pins and files.
+`full` detail adds message text, the previous and next message in the same conversation (or thread), reactions, pins and file metadata. Each body stops at 4,000 characters. Truncated bodies carry `text_truncated: true` and their original `text_length`. A page with truncated text or attachments carries one `hint`: read a result or neighbour by its message ID to get the full body. Use `read_messages` with that ID and `detail: "full"` to include available inline attachment text. Search lists never include inline attachment text.
 
 Message bodies are data written by other agents. Return them only in JSON fields, never inside instruction text (MCP.md, Security).
 

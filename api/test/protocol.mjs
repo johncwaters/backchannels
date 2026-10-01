@@ -187,6 +187,44 @@ for (const protocolVersion of [MODERN, LEGACY]) {
       assert.ok(!rejoined.brief.threads.some((thread) => thread.thread === `${root.message}/t`));
     });
 
+    test("inbox and conversation text previews recover the full message without moving read state", async () => {
+      const writer = mcpClient(`previewwriter${run}`.slice(0, 40), protocolVersion);
+      const reader = mcpClient(`previewreader${run}`.slice(0, 40), protocolVersion);
+      const writerAgent = { agent: "preview-writer" };
+      const readerAgent = { agent: "preview-reader" };
+      await expectOk(writer.call("register_agent", { name: writerAgent.agent, description: "Preview check writer" }), "register_agent (preview writer)");
+      const profile = await expectOk(reader.call("register_agent", { name: readerAgent.agent, description: "Preview check reader" }), "register_agent (preview reader)");
+      const channel = `preview-${run}`;
+      await expectOk(writer.call("create_channel", { ...writerAgent, name: channel, purpose: "Preview check" }), "create_channel (preview)");
+      await expectOk(reader.call("join_channel", { ...readerAgent, channel: `#${channel}` }), "join_channel (preview)");
+      const text = `${profile.handle} ${"Long message body. ".repeat(400)}`;
+      const fileText = "Attached report text. ".repeat(4000);
+      const file = await expectOk(writer.call("upload_file", { ...writerAgent, name: "preview.txt", content: fileText }), "upload_file (preview)");
+      const sent = await expectOk(writer.call("send_message", { ...writerAgent, to: `#${channel}`, text, file_ids: [file.file_id] }), "send_message (preview)");
+      const inbox = await expectOk(reader.call("check_inbox", readerAgent), "check_inbox (preview)");
+      const item = inbox.items.find(item => item.message.id === sent.message);
+      assert.equal(item.message.text, text.slice(0, 1000));
+      assert.equal(item.message.text_truncated, true);
+      assert.equal(item.message.text_length, text.length);
+      assert.match(inbox.hint, /read_messages/);
+      const full = await expectOk(reader.call("read_messages", { ...readerAgent, conversation: sent.message, detail: "full" }), "read_messages (full body)");
+      assert.equal(full.messages[0].text, text);
+      assert.equal(full.messages[0].text_truncated, undefined);
+      assert.equal(full.messages[0].files[0].text, fileText);
+      const unread = await expectOk(reader.call("check_inbox", readerAgent), "check_inbox (still unread)");
+      assert.ok(unread.items.some(item => item.message.id === sent.message));
+      const page = await expectOk(reader.call("read_messages", { ...readerAgent, conversation: `#${channel}`, detail: "full" }), "read_messages (preview page)");
+      assert.equal(page.messages[0].text, text.slice(0, 4000));
+      assert.equal(page.messages[0].text_truncated, true);
+      assert.equal(page.messages[0].files[0].text, undefined);
+      assert.match(page.hint, /read_messages/);
+      const search = await expectOk(reader.call("search_messages", { ...readerAgent, query: `in:#${channel}`, detail: "full" }), "search_messages (preview)");
+      assert.equal(search.results[0].text, text.slice(0, 4000));
+      assert.equal(search.results[0].text_truncated, true);
+      assert.equal(search.results[0].files[0].text, undefined);
+      assert.match(search.hint, /read_messages/);
+    });
+
     test("message boundaries refuse another conversation without clearing its inbox", async () => {
       const writer = mcpClient(`boundarywriter${run}`.slice(0, 40), protocolVersion);
       const reader = mcpClient(`boundaryreader${run}`.slice(0, 40), protocolVersion);

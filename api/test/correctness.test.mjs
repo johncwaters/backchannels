@@ -7,7 +7,7 @@ const { buildBrief } = await import("../src/brief.ts");
 const { leaveChannel } = await import("../src/conversations.ts");
 const { lookup } = await import("../src/agents.ts");
 const { deleteMessage, editMessage, keywordMatcher, pin, react, readMessages, sendMessage } = await import("../src/messages.ts");
-const { markRead } = await import("../src/inbox.ts");
+const { checkInbox, markRead } = await import("../src/inbox.ts");
 const { searchMessages } = await import("../src/search/index.ts");
 const { recordSearchActions } = await import("../src/search/signals.ts");
 const { SEARCH } = await import("../src/search/config.ts");
@@ -109,6 +109,114 @@ describe("brief visibility and follows", () => {
     database.prepare("INSERT INTO thread_follows (agent_id, root_id, state) VALUES ('reader', ?, 'on'), ('reader', ?, 'off'), ('writer', ?, 'auto')").run(leftRoot, keptRoot, leftRoot);
     assert.equal(leaveChannel(scopeFor("reader"), { channel: "#left" }).left, true);
     assert.deepEqual(database.prepare("SELECT agent_id, root_id FROM thread_follows ORDER BY agent_id").all().map((row) => [row.agent_id, row.root_id]), [["reader", keptRoot], ["writer", leftRoot]]);
+  });
+});
+
+describe("message text previews", () => {
+  test("list attachments stay metadata and single-message full detail recovers inline text", async (testContext) => {
+    const { database, scopeFor, createConversation, addMessage } = createWorkspace(testContext);
+    const conversationId = createConversation("attachments");
+    const messageId = addMessage(conversationId, 1, { text: "Small attached post" });
+    const fileText = "Attached report text. ".repeat(4500);
+    database.prepare("INSERT INTO files (id, uploader_id, message_id, name, mime, size, r2_key, created_at, inline_text) VALUES ('f_report', 'writer', ?, 'report.txt', 'text/plain', ?, 'report', 1, ?)").run(messageId, fileText.length, fileText);
+    database.prepare("UPDATE messages SET has_file = 1 WHERE id = ?").run(messageId);
+    const scope = scopeFor("reader");
+    const page = readMessages(scope, { conversation: "#attachments", detail: "full" });
+    assert.equal(page.messages[0].files[0].text, undefined);
+    assert.equal(page.messages[0].files[0].size, fileText.length);
+    assert.match(page.hint, /detail: 'full'/);
+    const search = await searchMessages(scope, { query: "in:#attachments", detail: "full" });
+    assert.equal(search.results[0].files[0].text, undefined);
+    assert.match(search.hint, /detail: 'full'/);
+    const full = readMessages(scope, { conversation: page.messages[0].id, detail: "full" });
+    assert.equal(full.messages[0].files[0].text, fileText);
+    assert.equal(full.hint, undefined);
+  });
+
+  test("full search previews neighbours and preserves direct-message recovery", async (testContext) => {
+    const { scopeFor, createConversation, addMessage } = createWorkspace(testContext);
+    const conversationId = createConversation("search-previews");
+    const text = "Long message text. ".repeat(1000);
+    for (let seq = 1; seq <= 3; seq++) addMessage(conversationId, seq, { text });
+    const scope = scopeFor("reader");
+    const search = await searchMessages(scope, { query: "in:#search-previews", detail: "full", limit: 1 });
+    const result = search.results[0];
+    assert.equal(result.text, text.slice(0, 4000));
+    assert.equal(result.text_truncated, true);
+    assert.equal(result.text_length, text.length);
+    assert.equal(result.previous.text, text.slice(0, 4000));
+    assert.equal(result.previous.text_truncated, true);
+    assert.equal(result.previous.text_length, text.length);
+    assert.match(search.hint, /message ID as conversation to read_messages/);
+    assert.equal(readMessages(scope, { conversation: result.id }).messages[0].text, text);
+    const nextPage = await searchMessages(scope, { cursor: search.next_cursor, detail: "full", limit: 1 });
+    assert.equal(nextPage.results[0].next.text.length, 4000);
+    assert.equal(nextPage.results[0].next.text_truncated, true);
+  });
+
+  test("inbox previews preserve full text, pagination and unread state", (testContext) => {
+    const { database, scopeFor, createConversation, addMessage } = createWorkspace(testContext);
+    const conversationId = createConversation("previews");
+    database.prepare("INSERT INTO read_markers VALUES ('reader', ?, 0)").run(conversationId);
+    const texts = ["small post", "message body ".repeat(4000).slice(0, 40_000)];
+    for (const [index, text] of texts.entries()) {
+      const messageId = addMessage(conversationId, index + 1, { text });
+      database.prepare("INSERT INTO inbox (agent_id, message_id, reason, created_at) VALUES ('reader', ?, 'mention', ?)").run(messageId, index + 1);
+    }
+    const first = checkInbox(scopeFor("reader"), { limit: 1 });
+    assert.equal(first.items[0].message.text, texts[0]);
+    assert.equal(first.hint, undefined);
+    assert.equal(first.items[0].message.text_truncated, undefined);
+    assert.equal(first.items[0].message.text_length, undefined);
+    const second = checkInbox(scopeFor("reader"), { limit: 1, cursor: first.next_cursor });
+    assert.equal(second.items[0].message.text, texts[1].slice(0, 1000));
+    assert.equal(second.items[0].message.text_truncated, true);
+    assert.equal(second.items[0].message.text_length, texts[1].length);
+    assert.match(second.hint, /message ID as conversation to read_messages/);
+    assert.equal(second.next_cursor, null);
+    assert.equal(database.prepare("SELECT count(*) AS count FROM inbox WHERE read_at IS NULL").get().count, 2);
+    const full = readMessages(scopeFor("reader"), { conversation: second.items[0].message.id });
+    assert.equal(full.messages[0].text, texts[1]);
+    assert.equal(full.messages[0].text_truncated, undefined);
+    assert.equal(database.prepare("SELECT last_read_seq FROM read_markers").get().last_read_seq, 0);
+  });
+
+  test("channel and thread reads preview long bodies with full recovery by message ID", (testContext) => {
+    const { scopeFor, createConversation, addMessage } = createWorkspace(testContext);
+    const conversationId = createConversation("previews");
+    const text = "message body ".repeat(1000);
+    const rootId = addMessage(conversationId, 1, { text });
+    addMessage(conversationId, 2, { rootId, text });
+    for (const conversation of ["#previews", "previews/1/t"]) {
+      for (const detail of ["concise", "full"]) {
+        const page = readMessages(scopeFor("reader"), { conversation, detail });
+        assert.match(page.hint, /message ID as conversation to read_messages/);
+        for (const message of page.messages) {
+          assert.equal(message.text, text.slice(0, 4000));
+          assert.equal(message.text_length, text.length);
+          assert.equal(message.text_truncated, true);
+          const full = readMessages(scopeFor("reader"), { conversation: message.id, detail });
+          assert.equal(full.messages[0].text, text);
+          assert.equal(full.messages[0].text_truncated, undefined);
+        }
+      }
+    }
+  });
+
+  test("bodies at the cap remain unchanged and carry no truncation fields", (testContext) => {
+    const { database, scopeFor, createConversation, addMessage } = createWorkspace(testContext);
+    const conversationId = createConversation("exact-cap");
+    const messageId = addMessage(conversationId, 1, { text: "a".repeat(1000) });
+    database.prepare("INSERT INTO inbox (agent_id, message_id, reason, created_at) VALUES ('reader', ?, 'mention', 1)").run(messageId);
+    const inbox = checkInbox(scopeFor("reader"), {});
+    assert.equal(inbox.items[0].message.text.length, 1000);
+    assert.equal(inbox.hint, undefined);
+    const readId = addMessage(conversationId, 2, { text: "a".repeat(4000) });
+    const page = readMessages(scopeFor("reader"), { conversation: "#exact-cap" });
+    assert.equal(page.messages[1].text.length, 4000);
+    assert.equal(page.hint, undefined);
+    assert.equal(page.messages[1].text_truncated, undefined);
+    assert.equal(database.prepare("SELECT length(text) AS length FROM messages WHERE id = ?").get(readId).length, 4000);
   });
 });
 
