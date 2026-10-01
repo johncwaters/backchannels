@@ -197,9 +197,17 @@ def network():
                                    (1.6, "opacity:1;transform:translate(var(--dx),var(--dy))"), (1.9, "opacity:0;transform:translate(var(--dx),var(--dy))"), (cycle, "opacity:0;transform:translate(var(--dx),var(--dy))")]),
            f".pk{{animation:pk {cycle}s ease-in-out infinite}}"]
     svg += [f'<text x="0" y="0" font-size="48" text-anchor="middle" dominant-baseline="central" transform="translate({x},{y}) scale({placement.choice((-1, 1))},1)">🦔</text>' for x, y in nodes]
-    for a, b in edges + edges[::2]:
+    min_gap_at_shared_node, phase_step = 2.3, .25
+    phases_by_node = {index: [] for index in range(len(nodes))}
+    for a, b in edges:
         source, target = (nodes[a], nodes[b]) if placement.random() < .5 else (nodes[b], nodes[a])
-        svg.append(f'<g class="pk" style="--dx:{target[0] - source[0]}px;--dy:{target[1] - source[1]}px;animation-delay:{placement.uniform(0, cycle):.2f}s">'
+        taken = phases_by_node[a] + phases_by_node[b]
+        candidates = [step * phase_step for step in range(int(cycle / phase_step))]
+        placement.shuffle(candidates)
+        phase = next((candidate for candidate in candidates if all(min(abs(candidate - other), cycle - abs(candidate - other)) >= min_gap_at_shared_node for other in taken)), candidates[0])
+        phases_by_node[a].append(phase)
+        phases_by_node[b].append(phase)
+        svg.append(f'<g class="pk" style="--dx:{target[0] - source[0]}px;--dy:{target[1] - source[1]}px;animation-delay:-{phase:.2f}s">'
                    f'<text x="0" y="0" font-size="30" text-anchor="middle" dominant-baseline="central" transform="translate({source[0]},{source[1] - 30})">💬</text></g>')
     return page(width, height, "".join(css), "".join(svg), INK)
 
@@ -213,7 +221,7 @@ def chat_thread(entries, left_speakers):
     css = [keyframes("arrive-left", cycle, [(0, "opacity:0;transform:translateX(-32px)"), (0.8, "opacity:1;transform:translateX(0)"), (cycle, "opacity:1;transform:translateX(0)")]),
            keyframes("arrive-right", cycle, [(0, "opacity:0;transform:translateX(32px)"), (0.8, "opacity:1;transform:translateX(0)"), (cycle, "opacity:1;transform:translateX(0)")]),
            keyframes("arrive-middle", cycle, [(0, "opacity:0"), (0.8, "opacity:1"), (cycle, "opacity:1")]),
-           f'.thread{{display:flex;flex-direction:column;justify-content:center;gap:14px;height:100%;box-sizing:border-box}}'
+           f'.thread{{display:flex;flex-direction:column;justify-content:center;gap:16px;height:100%;box-sizing:border-box}}'
            f'.message{{opacity:0;max-width:1400px;display:flex;flex-direction:column;gap:6px}}'
            f'.left{{align-self:flex-start;animation:arrive-left {cycle}s ease-out both}}'
            f'.right{{align-self:flex-end;align-items:flex-end;animation:arrive-right {cycle}s ease-out both}}'
@@ -221,7 +229,7 @@ def chat_thread(entries, left_speakers):
            f'.tag{{margin-right:14px;padding:2px 12px;background:{AMBER};color:{INK};font-weight:700;letter-spacing:2px}}'
            f'.bubble{{margin:0;background:{PANEL};padding:12px 28px;font-family:{SANS};font-size:34px;line-height:1.25;color:{TEXT}}}'
            f'.left .bubble{{border-left:6px solid}}.right .bubble{{border-right:6px solid}}'
-           f'.event{{opacity:0;animation:arrive-middle {cycle}s ease-out both;align-self:center;display:grid;grid-template-columns:300px 960px;align-items:center;column-gap:24px;margin:10px 0}}.event .badge{{text-align:center}}.event .badge:only-child{{grid-column:1/-1;justify-self:center;min-width:300px;box-sizing:border-box}}'
+           f'.event{{opacity:0;animation:arrive-middle {cycle}s ease-out both;align-self:center;display:grid;grid-template-columns:300px 960px;align-items:center;column-gap:24px;margin:22px 0}}.event .badge{{text-align:center}}.event .badge:only-child{{grid-column:1/-1;justify-self:center;min-width:300px;box-sizing:border-box}}'
            f'.badge{{margin:0;padding:6px 18px;font-family:{MONO};font-size:30px;font-weight:700;letter-spacing:3px;color:{INK}}}'
            f'.detail{{margin:0;font-family:{SANS};font-size:28px;color:{TEXT};white-space:nowrap}}']
     rows = []
