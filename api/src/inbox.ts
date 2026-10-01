@@ -37,6 +37,7 @@ const UNREAD_CHANNELS_LIMIT = 20;
 const KEYWORD_LIMIT = 20;
 const KEYWORD_MAX_LENGTH = 50;
 const REASONS_MOST_URGENT_FIRST = ["mention", "dm", "owner", "thread", "keyword", "channel_mention", "channel"];
+export const REVOKED_STREAM_GRANT_PREFIX = "revoked_stream_grant:";
 export const VISIBLE_UNREAD_INBOX = `FROM inbox
   WHERE agent_id = ?1 AND read_at IS NULL AND EXISTS (
     SELECT 1 FROM messages m JOIN conversations c ON c.id = m.conversation_id
@@ -141,6 +142,9 @@ export async function watchInbox(scope: Scope, args: { session?: string }, grant
   const sessionHash = scope.agent.session_hash ? requestedSessionHash : null;
   const ticket = newStreamTicket();
   const ticketHash = await sha256Hex(ticket);
+  if (one(scope.sql, "SELECT 1 FROM meta WHERE key = ?", `${REVOKED_STREAM_GRANT_PREFIX}${grantId}`)) {
+    throw new ToolError("this installation's inbox stream is revoked; reconnect with an active installation before calling watch_inbox");
+  }
   run(scope.sql, "DELETE FROM stream_tickets WHERE expires_at <= ?", scope.now);
   run(
     scope.sql,

@@ -92,15 +92,26 @@ async function runtime(context) {
           const grants = [{id:'grant'}];
           let installationRevoked = false;
           let streamCalls = 0;
+          let pendingWatch;
+          let staleTicketAllowed;
+          const originalTicket = this.sql.exec('SELECT * FROM stream_tickets WHERE grant_id = ? AND agent_id = ?', 'grant', input.owner).toArray()[0];
           this.sql.exec("UPDATE stream_tickets SET grant_id = 'other-grant' WHERE agent_id != ?", input.owner);
           const env = {
             ...this.env,
             PUBLIC_URL:'https://installation.test',
-            DB:{prepare:()=>({bind:()=>({first:async()=>installationRevoked ? null : 1,run:async()=>{installationRevoked=true;}})})},
+            DB:{prepare:()=>({bind:()=>({first:async()=>installationRevoked ? null : 1,run:async()=>{
+              if(input.pendingWatch) pendingWatch = await this.tool('watch_inbox',caller(input.owner),{});
+              installationRevoked=true;
+            }})})},
             WORKSPACE:{idFromName:id=>id,get:()=>({revokeGrantStreams:async grant=>{
               streamCalls++;
               if(input.failFirstStreamCall && streamCalls === 1) throw new Error('Durable Object reset because its code was updated');
               await this.revokeGrantStreams(grant);
+              if(input.pendingWatch && originalTicket) {
+                this.sql.exec('INSERT INTO stream_tickets (ticket_hash,agent_id,grant_id,expires_at,session_hash) VALUES (?,?,?,?,?)',originalTicket.ticket_hash,originalTicket.agent_id,originalTicket.grant_id,originalTicket.expires_at,originalTicket.session_hash);
+                staleTicketAllowed = !!this.streamTicketHolder(originalTicket.ticket_hash);
+                this.sql.exec('DELETE FROM stream_tickets WHERE ticket_hash = ?',originalTicket.ticket_hash);
+              }
             }})},
           };
           const authorization = oauthServers(env).authorization;
@@ -109,7 +120,7 @@ async function runtime(context) {
             revokeGrant:async()=>{grants.length=0;},
             listUserGrants:async()=>({items:grants}),
           });
-          this.ctx = {getWebSockets:()=>['grant','other-grant'].map(grantId=>({
+          this.ctx = {storage:originalContext.storage,getWebSockets:()=>['grant','other-grant'].map(grantId=>({
             deserializeAttachment:()=>({grantId}),close:(code,reason)=>closed.push({grantId,code,reason}),
           }))};
           try {
@@ -124,7 +135,7 @@ async function runtime(context) {
             const revokedAfterFailure = installationRevoked;
             const result = await revokeInstallation(env,{sub:input.owner,workspaceId,grantId:'admin-grant'},{grantId:'grant'});
             const tickets = this.sql.exec('SELECT grant_id FROM stream_tickets ORDER BY grant_id').toArray();
-            return {result,closed,tickets,installationRevoked,firstError,revokedAfterFailure};
+            return {result,closed,tickets,installationRevoked,firstError,revokedAfterFailure,pendingWatch,staleTicketAllowed};
           } finally {
             this.ctx = originalContext;
             authorization.getOAuthApi = originalOAuthApi;
@@ -148,7 +159,7 @@ async function runtime(context) {
         if(input.action === 'history') return this.ctx.storage.sql.exec(
           "WITH RECURSIVE seq(n) AS (SELECT 3 UNION ALL SELECT n+1 FROM seq WHERE n < 1200) INSERT INTO messages (conversation_id,seq,author_id,text,created_at,word_count) SELECT (SELECT id FROM conversations WHERE slug='public'),n,'alice','history',?,1 FROM seq", now,
         ).rowsWritten;
-        return this.tool(input.name, caller(input.owner), input.args);
+        return this.tool(input.name, {...caller(input.owner),grantId:input.grantId ?? 'grant'}, input.args);
       }
     }
     export default {async fetch(request, env) {
@@ -332,6 +343,24 @@ test("revoking an OAuth installation closes only its push sockets and deletes it
   assert.equal(result.installationRevoked,true);
   assert.deepEqual(result.closed,[{grantId:"grant",code:1008,reason:"credential revoked"}]);
   assert.deepEqual(result.tickets,[{grant_id:"other-grant"}]);
+});
+
+test("installation revocation blocks pending watch calls and stale tickets without affecting another grant", async (context) => {
+  const {call,tool} = await runtime(context);
+  for(const owner of ["alice","bob"]) await call({action:"register",owner});
+  await tool("alice","watch_inbox",{});
+  await tool("bob","watch_inbox",{});
+  const result = await call({action:"revokeInstallation",owner:"bob",pendingWatch:true});
+  assert.deepEqual(result.result,{ok:true,value:null});
+  assert.equal(result.installationRevoked,true);
+  assert.match(result.pendingWatch.error,/revoked/);
+  assert.equal(result.pendingWatch.output,undefined);
+  assert.equal(result.staleTicketAllowed,false);
+  assert.deepEqual(result.tickets,[{grant_id:"other-grant"}]);
+  assert.deepEqual(result.closed,[{grantId:"grant",code:1008,reason:"credential revoked"}]);
+  const other = await call({owner:"alice",grantId:"other-grant",name:"watch_inbox",args:{}});
+  assert.equal(other.error,undefined);
+  assert.equal(typeof other.output.ticket,"string");
 });
 
 test("installation stream revocation can retry after a Durable Object reset", async (context) => {

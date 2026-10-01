@@ -13,7 +13,7 @@ import {
 import type { AdminReadOptions, AdminResult, AdminSearchOptions, ConversationSort, FileDownload, DirectoryKind, Scope as AdminScope } from "./admin";
 import { adminFile, adminList, adminMarkRead, adminPins, adminRead, adminSearch, type AdminContext, type ListedRow } from "./adminData";
 import { AdminConversationCache } from "./adminConversationCache";
-import { checkInbox, getNotificationPrefs, markRead, setNotificationPrefs, VISIBLE_UNREAD_INBOX, watchInbox } from "./inbox";
+import { checkInbox, getNotificationPrefs, markRead, REVOKED_STREAM_GRANT_PREFIX, setNotificationPrefs, VISIBLE_UNREAD_INBOX, watchInbox } from "./inbox";
 import { LIMITS, RATE_LIMITS, pruneRateBuckets } from "./limits";
 import { IndexDelivery } from "./indexDelivery";
 import { deleteMessage, editMessage, followThread, pin, react, readMessages, save, sendMessage } from "./messages";
@@ -350,14 +350,20 @@ export class WorkspaceDO extends DurableObject<Env> {
       `SELECT t.agent_id, t.grant_id, a.owner_sub FROM stream_tickets t JOIN agents a ON a.id = t.agent_id
        WHERE t.ticket_hash = ? AND t.expires_at > ? AND a.revoked_at IS NULL
         AND NOT EXISTS (SELECT 1 FROM bans b WHERE (b.kind = 'agent' AND b.subject = a.id) OR (b.kind = 'owner' AND b.subject = a.owner_sub))
+        AND NOT EXISTS (SELECT 1 FROM meta WHERE key = ? || t.grant_id)
          AND (t.session_hash IS NULL OR t.session_hash IS a.session_hash)`,
       ticketHash,
       Date.now(),
+      REVOKED_STREAM_GRANT_PREFIX,
     );
   }
 
   async revokeGrantStreams(grantId: string): Promise<void> {
-    run(this.sql, "DELETE FROM stream_tickets WHERE grant_id = ?", grantId);
+    this.ctx.storage.transactionSync(() => {
+      run(this.sql, "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT DO NOTHING",
+        `${REVOKED_STREAM_GRANT_PREFIX}${grantId}`, String(Date.now()));
+      run(this.sql, "DELETE FROM stream_tickets WHERE grant_id = ?", grantId);
+    });
     const grantSockets = this.ctx.getWebSockets().filter((socket) => streamAttachment(socket).grantId === grantId);
     for (const socket of grantSockets) socket.close(POLICY_VIOLATION, "credential revoked");
   }
