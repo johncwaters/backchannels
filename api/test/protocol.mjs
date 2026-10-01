@@ -187,6 +187,42 @@ for (const protocolVersion of [MODERN, LEGACY]) {
       assert.ok(!rejoined.brief.threads.some((thread) => thread.thread === `${root.message}/t`));
     });
 
+    test("message boundaries refuse another conversation without clearing its inbox", async () => {
+      const writer = mcpClient(`boundarywriter${run}`.slice(0, 40), protocolVersion);
+      const reader = mcpClient(`boundaryreader${run}`.slice(0, 40), protocolVersion);
+      const writerAgent = { agent: "boundary-writer" };
+      const readerAgent = { agent: "boundary-reader" };
+      await expectOk(writer.call("register_agent", { name: writerAgent.agent, description: "Boundary check writer" }), "register_agent (boundary writer)");
+      const readerProfile = await expectOk(reader.call("register_agent", { name: readerAgent.agent, description: "Boundary check reader" }), "register_agent (boundary reader)");
+      const target = `target-${run}`;
+      const source = `source-${run}`;
+      for (const channel of [target, source]) {
+        await expectOk(writer.call("create_channel", { ...writerAgent, name: channel, purpose: "Message boundary check" }), "create_channel (boundary)");
+        await expectOk(reader.call("join_channel", { ...readerAgent, channel: `#${channel}` }), "join_channel (boundary)");
+      }
+      const targetPost = await expectOk(writer.call("send_message", { ...writerAgent, to: `#${target}`, text: `Boundary check ${readerProfile.handle}` }), "send_message (target)");
+      const sourcePost = await expectOk(writer.call("send_message", { ...writerAgent, to: `#${source}`, text: "Source boundary" }), "send_message (source)");
+      const before = await expectOk(reader.call("check_inbox", readerAgent), "check_inbox (before boundaries)");
+      for (const [tool, args] of [
+        ["mark_read", { up_to: sourcePost.message }],
+        ["mark_read", { up_to: sourcePost.message, unread: true }],
+        ["read_messages", { before: sourcePost.message }],
+        ["read_messages", { after: sourcePost.message }],
+        ["read_messages", { around: sourcePost.message }],
+      ]) {
+        const refused = await reader.call(tool, { ...readerAgent, conversation: `#${target}`, ...args });
+        assert.equal(refused.ok, false, `${tool} accepted a boundary from another conversation`);
+        assert.ok(refused.error.includes(`#${source}`), refused.error);
+        assert.ok(refused.error.includes(`#${target}`), refused.error);
+        assert.match(refused.error, /pass a message ID from/);
+      }
+      const after = await expectOk(reader.call("check_inbox", readerAgent), "check_inbox (after boundaries)");
+      assert.deepEqual(after.items, before.items);
+      assert.deepEqual(after.unread_channels, before.unread_channels);
+      const marked = await expectOk(reader.call("mark_read", { ...readerAgent, conversation: `#${target}`, up_to: targetPost.message }), "mark_read (same conversation)");
+      assert.equal(marked.read_up_to, targetPost.message);
+    });
+
     test("reply deletion is idempotent and archived channels reject edits, reactions and pins", async () => {
       const ownerAgent = { agent: "protocol-owner" };
       const channel = `mutations-${run}`.slice(0, 80);

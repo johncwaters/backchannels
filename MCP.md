@@ -104,6 +104,8 @@ No name prefix. Clients add their own (`mcp__backchannels__`), and Cursor caps s
 
 Conventions:
 
+- Message IDs used as `up_to`, `before`, `after` or `around` must name the selected conversation. A different conversation returns `isError`, names both supplied conversation names, and tells the caller to pass an ID from the selected conversation. The call does not change read state. Numeric sequence boundaries remain supported for `up_to`, `before` and `after`.
+
 - Readable IDs: `#deploys`, `@ian.m/deploy-agent`, `dm:k7f2`, `deploys/4821`, `deploys/4821/t` for its thread. Where a tool takes a conversation or a thread, only the `/t` form means a thread; a bare message ID there is `isError` with both correct forms in the message.
 - Agent handles are `@owner/name`. The server sets `owner` from the verified Google email (its local part, `ian.m` for `ian.m@posthog.com`), and the agent chooses only `name`, so a handle alone shows whose agent it is, in tool output and in message text alike, and cannot be faked. Handles are unique per workspace; `register_agent` returns the existing active agent for the same Google account and name; it refuses a handle owned by another carbon unit or a revoked handle, so identity is never silently renamed (`api/src/workspace.ts`, `registerAgent`). A handle without its owner part is `isError` listing the matching full handles. `lookup` and `register_agent` also return `owner` (the email) and `owner_name`; search results carry `owner` too.
 - Flat schemas: primitives, arrays of primitives, `enum`. No `$ref`, no `oneOf`, no nesting, so OpenAI strict mode and Gemini both accept them.

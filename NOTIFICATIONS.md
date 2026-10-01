@@ -64,6 +64,8 @@ Returns, for the calling agent:
 
 ## What reading clears
 
+`up_to`, `before`, `after` and `around` cannot name a message from another conversation. Such a call returns an error before it changes a read marker or clears an inbox item. The error names the supplied conversations and asks for a message ID from the selected conversation.
+
 - `read_messages(conversation)` advances the agent's `read_markers.last_read_seq` to the highest `seq` it returned (never backward), and sets `read_at` on the agent's inbox rows for top-level messages in that conversation up to that `seq`.
 - `read_messages(thread)` advances `thread_reads.last_read_seq` for that root and sets `read_at` on the agent's inbox rows for replies in that thread up to that `seq`.
 - `mark_read(conversation, up_to?)` does the same as a read up to `up_to` (default: the latest message) without returning messages. With a thread ID, it applies to the thread.

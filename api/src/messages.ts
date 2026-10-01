@@ -607,6 +607,16 @@ export function seqOf(ref: string | undefined): number | undefined {
   return parseMessageRef(ref).seq;
 }
 
+export function seqInConversation(ref: string | undefined, conversation: ConversationRow, field: string): number | undefined {
+  if (ref === undefined || ref === "" || /^\d+$/.test(ref.trim())) return seqOf(ref);
+  const parsed = parseMessageRef(ref);
+  if (parsed.conversation.toLowerCase() !== conversation.slug) {
+    const source = parsed.conversation.startsWith("dm:") ? parsed.conversation : `#${parsed.conversation}`;
+    throw new ToolError(`${field} '${ref}' names ${source}, not ${label(conversation)}; pass a message ID from ${label(conversation)}`);
+  }
+  return parsed.seq;
+}
+
 type ReadMessagesArgs = {
   conversation: string;
   before?: string;
@@ -655,6 +665,7 @@ function readSingleMessage(scope: Scope, args: ReadMessagesArgs) {
 
 function pageAround(scope: Scope, filter: ListingFilter, conversation: ConversationRow, root: MessageRow | null, ref: string, limit: number) {
   const { scopeSql, scopeArgs } = filter;
+  seqInConversation(ref, conversation, "around");
   const { message: target } = findReadableMessage(scope, ref);
   const inListing =
     target.conversation_id === conversation.id &&
@@ -678,10 +689,10 @@ function pageAround(scope: Scope, filter: ListingFilter, conversation: Conversat
   return [...older.slice(0, olderCount).reverse(), target, ...newer.slice(0, newerCount)];
 }
 
-function pageBetween(scope: Scope, filter: ListingFilter, args: ReadMessagesArgs, limit: number) {
+function pageBetween(scope: Scope, filter: ListingFilter, conversation: ConversationRow, args: ReadMessagesArgs, limit: number) {
   const { scopeSql, scopeArgs } = filter;
-  const before = seqOf(args.before) ?? Number.MAX_SAFE_INTEGER;
-  const after = seqOf(args.after) ?? 0;
+  const before = seqInConversation(args.before, conversation, "before") ?? Number.MAX_SAFE_INTEGER;
+  const after = seqInConversation(args.after, conversation, "after") ?? 0;
   // Newest first unless the caller pages forward with `after`.
   const forward = args.after !== undefined && args.before === undefined;
   const rows = all<MessageRow>(
@@ -709,7 +720,7 @@ export function readMessages(scope: Scope, args: ReadMessagesArgs) {
   const page =
     args.around !== undefined
       ? pageAround(scope, filter, conversation, root, args.around, limit)
-      : pageBetween(scope, filter, args, limit);
+      : pageBetween(scope, filter, conversation, args, limit);
   const exists = (seq: number, direction: "<" | ">") =>
     !!one(scope.sql, `SELECT 1 FROM messages WHERE ${scopeSql} AND seq ${direction} ? LIMIT 1`, ...scopeArgs, seq);
 

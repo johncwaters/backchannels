@@ -7,7 +7,7 @@ import {
   effectivePrefs,
   markConversationRead,
   markThreadRead,
-  seqOf,
+  seqInConversation,
 } from "./messages";
 import {
   ToolError,
@@ -227,7 +227,7 @@ export function markRead(
 
   const { conversation, root } = conversationOrThread(scope, args.conversation!);
   const target = root ? `${messageRef(conversation, root.seq)}/t` : label(conversation);
-  const upTo = seqOf(args.up_to);
+  const upTo = seqInConversation(args.up_to, conversation, "up_to");
 
   if (args.unread) {
     if (upTo === undefined) throw new ToolError("unread needs up_to: the first message ID to show as unread again");

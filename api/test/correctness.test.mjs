@@ -6,7 +6,8 @@ import { MIGRATIONS } from "../src/schema.ts";
 const { buildBrief } = await import("../src/brief.ts");
 const { leaveChannel } = await import("../src/conversations.ts");
 const { lookup } = await import("../src/agents.ts");
-const { deleteMessage, editMessage, keywordMatcher, pin, react, sendMessage } = await import("../src/messages.ts");
+const { deleteMessage, editMessage, keywordMatcher, pin, react, readMessages, sendMessage } = await import("../src/messages.ts");
+const { markRead } = await import("../src/inbox.ts");
 const { searchMessages } = await import("../src/search/index.ts");
 const { recordSearchActions } = await import("../src/search/signals.ts");
 const { SEARCH } = await import("../src/search/config.ts");
@@ -108,6 +109,63 @@ describe("brief visibility and follows", () => {
     database.prepare("INSERT INTO thread_follows (agent_id, root_id, state) VALUES ('reader', ?, 'on'), ('reader', ?, 'off'), ('writer', ?, 'auto')").run(leftRoot, keptRoot, leftRoot);
     assert.equal(leaveChannel(scopeFor("reader"), { channel: "#left" }).left, true);
     assert.deepEqual(database.prepare("SELECT agent_id, root_id FROM thread_follows ORDER BY agent_id").all().map((row) => [row.agent_id, row.root_id]), [["reader", keptRoot], ["writer", leftRoot]]);
+  });
+});
+
+describe("message ID boundaries", () => {
+  function fixture(testContext) {
+    const workspace = createWorkspace(testContext);
+    const targetId = workspace.createConversation("target");
+    const sourceId = workspace.createConversation("source");
+    workspace.addMessage(targetId, 1);
+    workspace.addMessage(targetId, 2);
+    workspace.addMessage(sourceId, 1);
+    workspace.database.prepare("INSERT INTO read_markers VALUES ('reader', ?, 0)").run(targetId);
+    workspace.database.prepare("INSERT INTO inbox (agent_id, message_id, reason, created_at) SELECT 'reader', id, 'mention', created_at FROM messages WHERE conversation_id = ?").run(targetId);
+    const readState = () => ({
+      marker: workspace.database.prepare("SELECT last_read_seq FROM read_markers WHERE agent_id = 'reader' AND conversation_id = ?").get(targetId).last_read_seq,
+      inbox: workspace.database.prepare("SELECT message_id, read_at FROM inbox WHERE agent_id = 'reader' ORDER BY message_id").all(),
+    });
+    return { ...workspace, targetId, readState };
+  }
+
+  for (const unread of [false, true]) {
+    test(`mark_read refuses another conversation with unread ${unread} without changing read state`, (testContext) => {
+      const { scopeFor, readState } = fixture(testContext);
+      const before = readState();
+      assert.throws(() => markRead(scopeFor("reader"), { conversation: "#target", up_to: "source/1", unread }), /up_to 'source\/1' names #source, not #target; pass a message ID from #target/);
+      assert.deepEqual(readState(), before);
+    });
+  }
+
+  for (const field of ["before", "after", "around"]) {
+    test(`read_messages refuses another conversation in ${field} without changing read state`, (testContext) => {
+      const { scopeFor, readState } = fixture(testContext);
+      const before = readState();
+      assert.throws(() => readMessages(scopeFor("reader"), { conversation: "#target", [field]: "source/1" }), new RegExp(`${field} 'source/1' names #source, not #target; pass a message ID from #target`));
+      assert.deepEqual(readState(), before);
+    });
+  }
+
+  test("same-conversation IDs and numeric sequence boundaries still work", (testContext) => {
+    const { scopeFor, readState } = fixture(testContext);
+    const scope = scopeFor("reader");
+    assert.deepEqual(readMessages(scope, { conversation: "#target", after: "#TARGET/1" }).messages.map(message => message.id), ["target/2"]);
+    assert.equal(markRead(scope, { conversation: "#target", up_to: "1", unread: true }).unread_from, "target/1");
+    assert.equal(readState().marker, 0);
+    assert.deepEqual(readMessages(scope, { conversation: "#target", before: "2" }).messages.map(message => message.id), ["target/1"]);
+    assert.equal(markRead(scope, { conversation: "#target", up_to: "target/2" }).read_up_to, "target/2");
+    assert.equal(readState().marker, 2);
+  });
+
+  test("thread read markers refuse an ID from another conversation", (testContext) => {
+    const { database, scopeFor, targetId, addMessage } = fixture(testContext);
+    const rootId = Number(database.prepare("SELECT id FROM messages WHERE conversation_id = ? AND seq = 1").get(targetId).id);
+    addMessage(targetId, 3, { rootId });
+    assert.throws(() => markRead(scopeFor("reader"), { conversation: "target/1/t", up_to: "source/1" }), /not #target/);
+    assert.equal(database.prepare("SELECT count(*) AS count FROM thread_reads").get().count, 0);
+    assert.throws(() => readMessages(scopeFor("reader"), { conversation: "target/1/t", after: "source/1" }), /not #target/);
+    assert.equal(database.prepare("SELECT count(*) AS count FROM thread_reads").get().count, 0);
   });
 });
 
