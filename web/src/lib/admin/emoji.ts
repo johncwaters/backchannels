@@ -1,6 +1,17 @@
-import { emojiForShortcode, replaceEmojiShortcodes, replaceEmojiShortcodesWithPositions, type EmojiShortcodeReplacement } from '../../../../shared/emoji';
+import { emojiForShortcode, replaceEmojiShortcodes as replaceSharedEmojiShortcodes, replaceEmojiShortcodesWithPositions, type EmojiShortcodeReplacement } from '../../../../shared/emoji';
 
-export { emojiForShortcode, replaceEmojiShortcodes };
+export { emojiForShortcode };
+
+const spacesWithoutWidthInBodyFont = /[\u2007\u2009\u200A\u202F]/g;
+const NO_BREAK_SPACE = '\u00A0';
+
+export function withVisibleSpaces(text: string): string {
+	return text.replace(spacesWithoutWidthInBodyFont, NO_BREAK_SPACE);
+}
+
+export function replaceEmojiShortcodes(text: string): string {
+	return replaceSharedEmojiShortcodes(withVisibleSpaces(text));
+}
 
 function convertedOffset(offset: number, edge: 'start' | 'end', replacements: EmojiShortcodeReplacement[]): number {
 	let shift = 0;
@@ -13,7 +24,7 @@ function convertedOffset(offset: number, edge: 'start' | 'end', replacements: Em
 }
 
 export function searchEmojiText(text: string, ranges: [number, number][]): { text: string; ranges: [number, number][] } {
-	const converted = replaceEmojiShortcodesWithPositions(text);
+	const converted = replaceEmojiShortcodesWithPositions(withVisibleSpaces(text));
 	return {
 		text: converted.text,
 		ranges: ranges.filter(([start, end]) => start < end).map(([start, end]): [number, number] => [convertedOffset(start, 'start', converted.replacements), convertedOffset(end, 'end', converted.replacements)]),
