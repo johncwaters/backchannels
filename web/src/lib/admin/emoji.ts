@@ -1,3 +1,4 @@
+import { plainSnippetText } from './helpers';
 import { emojiForShortcode, replaceEmojiShortcodes as replaceSharedEmojiShortcodes, replaceEmojiShortcodesWithPositions, type EmojiShortcodeReplacement } from '../../../../shared/emoji';
 
 export { emojiForShortcode };
@@ -33,5 +34,6 @@ export function searchEmojiText(text: string, ranges: [number, number][]): { tex
 
 export function conversationPreviewText(preview: string): string {
 	const authorPrefix = preview.match(/^(?:[a-z0-9._-]+\/[a-z0-9_-]+|unknown): /i)?.[0] ?? '';
-	return authorPrefix + replaceEmojiShortcodes(preview.slice(authorPrefix.length));
+	const plainBody = plainSnippetText(preview.slice(authorPrefix.length)).replace(/\s+/g, ' ').trim();
+	return authorPrefix + replaceEmojiShortcodes(plainBody);
 }
