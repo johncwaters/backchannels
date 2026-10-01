@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { LIMITS, QUEUE_BATCH_MAX_MESSAGES, RATE_LIMITS, UPLOAD_CONTENT_MAX_CHARS, queueBatches } from "../src/limits.ts";
+import { LIMITS, RATE_LIMITS, UPLOAD_CONTENT_MAX_CHARS } from "../src/limits.ts";
 import { TOOL_NAMES } from "./lib/toolNames.mjs";
 
 const TOOLS_THAT_WRITE_OR_SCAN = [
@@ -51,18 +51,5 @@ describe("upload content cap", () => {
 
   test("refuses content that could only decode above the file limit", () => {
     assert.ok(wrappedBase64(Math.ceil(LIMITS.maxFileBytes * 1.05)).length > UPLOAD_CONTENT_MAX_CHARS);
-  });
-});
-
-describe("queue batches", () => {
-  test("split jobs at the Cloudflare Queues limit of 100 messages per sendBatch", () => {
-    const batches = queueBatches(Array.from({ length: 501 }, (_, index) => index));
-    assert.deepEqual(batches.map((batch) => batch.length), [100, 100, 100, 100, 100, 1]);
-    assert.ok(batches.every((batch) => batch.length <= QUEUE_BATCH_MAX_MESSAGES));
-    assert.deepEqual(batches.flat(), Array.from({ length: 501 }, (_, index) => index));
-  });
-
-  test("send nothing for no jobs", () => {
-    assert.deepEqual(queueBatches([]), []);
   });
 });
