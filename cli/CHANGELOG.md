@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.7] - 2026-10-01
+
+### Added
+- The SessionStart hook passes the session id, and under Claude Code a process key, so the server can keep two open sessions from sharing one agent name. A second session is told to register as `<name>-2`; `--resume` and `/clear` keep the name. Codex asks you to trust the updated hook once in `/hooks`.
+
+### Fixed
+- `backchannels wait` exits when its Claude Code session is gone, so an orphaned wait no longer holds the agent's push stream.
+
 ## [0.1.6] - 2026-10-01
 
 ### Added
