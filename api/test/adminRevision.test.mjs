@@ -26,13 +26,25 @@ async function runtime(context) {
     const admin = (owner) => ({workspaceId, grantId:'grant', sub:owner});
     export class TestWorkspace extends WorkspaceDO {
       constructor(ctx, env) {
-        const queueState = {failures:0,sent:[]};
+        const queueState = {failures:0,deleteFailures:0,sent:[]};
         super(ctx, {...env, INDEX_QUEUE:{async sendBatch(batch){
           if(queueState.failures>0){queueState.failures--;throw new Error('queue unavailable');}
           queueState.sent.push(...batch);
         }}, PUBLIC_URL:'http://localhost', DB:{prepare:()=>({bind:()=>({all:async()=>({results:[{sub:'alice'}]})})})}});
         this.queueState = queueState;
         this.workspaceDomain = 'example.com';
+        const storage = this.indexDelivery.storage;
+        this.indexDelivery.storage = {
+          sql:{exec:(query,...bindings)=>{
+            if(query.startsWith('DELETE FROM pending_index_jobs') && queueState.deleteFailures>0) {
+              queueState.deleteFailures--;
+              throw new Error('outbox deletion interrupted');
+            }
+            return storage.sql.exec(query,...bindings);
+          }},
+          transaction:storage.transaction.bind(storage),getAlarm:storage.getAlarm.bind(storage),
+          setAlarm:storage.setAlarm.bind(storage),deleteAlarm:storage.deleteAlarm.bind(storage),
+        };
       }
       async perform(input) {
         if(input.action === 'advanceTime') { now += input.ms; return now; }
@@ -47,6 +59,7 @@ async function runtime(context) {
         }
         if(input.action === 'queue') {
           if(input.failures !== undefined) this.queueState.failures = input.failures;
+          if(input.deleteFailures !== undefined) this.queueState.deleteFailures = input.deleteFailures;
           if(input.retry) await this.alarm();
           return {sent:this.queueState.sent,pending:this.sql.exec('SELECT id,job,deliver_after FROM pending_index_jobs ORDER BY id').toArray(),alarm:await this.ctx.storage.getAlarm()};
         }
@@ -261,6 +274,26 @@ test("WorkspaceDO metadata cache invalidates writes and read markers and expires
   assert.equal((await measured()).metadataQueries,1);
   await tool("alice","update_channel",{channel:"#public",archived:true});
   assert.deepEqual((await measured()).value,{ok:false,error:"not_found"});
+});
+
+test("post-commit outbox cleanup failure preserves the write result and retries with the alarm", async (context) => {
+  const {call,tool} = await runtime(context);
+  await call({action:"register",owner:"alice"});
+  await tool("alice","create_channel",{name:"public",purpose:"test"});
+  await call({action:"queue",deleteFailures:1});
+  const sent = await tool("alice","send_message",{to:"#public",text:"one committed post"});
+  assert.equal(sent.message,"public/1");
+  const pending = await call({action:"queue"});
+  assert.equal(pending.sent.length,1);
+  assert.equal(pending.pending.length,1);
+  assert.equal(pending.alarm,1800000030000);
+  const page = await call({action:"adminRead",owner:"alice",args:{conversation:"public"}});
+  assert.deepEqual(page.value.messages.map((message)=>message.text),["one committed post"]);
+  const retried = await call({action:"queue",retry:true});
+  assert.deepEqual(retried.pending,[]);
+  assert.equal(retried.alarm,null);
+  assert.equal(retried.sent.length,2);
+  assert.deepEqual(retried.sent[1],retried.sent[0]);
 });
 
 test("a workspace message survives queue failure and its persisted job is sent by the alarm", async (context) => {

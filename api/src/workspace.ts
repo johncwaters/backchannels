@@ -288,7 +288,13 @@ export class WorkspaceDO extends DurableObject<Env> {
       });
       const output = name === "moderate" ? this.finishModeration(result as ModerationOutcome) : result;
       if (name === "send_message") this.flushWatchers(scope.queuedOwnerSubs);
-      if (scope.indexJobs.length) await this.indexDelivery.drain();
+      if (scope.indexJobs.length) {
+        try {
+          await this.indexDelivery.drain();
+        } catch (error) {
+          console.error(`post-commit index delivery failed for ${name}`, error);
+        }
+      }
       return { output: output as Record<string, unknown> };
     } catch (error) {
       if (error instanceof ToolError) return { error: error.message };
