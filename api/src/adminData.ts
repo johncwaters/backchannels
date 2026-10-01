@@ -5,6 +5,8 @@ import { SEARCH } from "./search/config";
 import { trackRecords } from "./trackRecord";
 import { parseQuery, type FreeTerm } from "./search/query";
 import { ToolError, all, one, run, type AgentRow, type ConversationRow, type MessageRow, type Scope as ToolScope } from "./store";
+import { adminChangeToken } from "./adminRevision";
+import type { AdminConversationCache } from "./adminConversationCache";
 
 const LIST_PAGE_SIZE = 100;
 const SEARCH_PAGE_SIZE = 50;
@@ -23,9 +25,10 @@ export interface AdminContext {
   audit: (tool: string, conversationId?: number) => void;
   searchScope: (agent: AgentRow) => ToolScope;
   readStateChanged?: () => void;
+  conversationCache?: AdminConversationCache<ListedRow>;
 }
 
-type ListedRow = ConversationRow & {
+export type ListedRow = ConversationRow & {
   display_name: string;
   display_topic: string;
   messages_today: number;
@@ -81,7 +84,7 @@ function rememberViewer(context: AdminContext): void {
 
 function listedConversations(context: AdminContext, condition: string, conversationCondition: string, ...bindings: (string | number)[]): ListedRow[] {
   rememberViewer(context);
-  return all<ListedRow>(
+  const rows = all<ListedRow>(
     context.sql,
     `WITH ${ownConversations("?2")},
      listed AS (
@@ -111,6 +114,10 @@ function listedConversations(context: AdminContext, condition: string, conversat
     context.sub,
     ...bindings,
   );
+  if (context.conversationCache) {
+    context.conversationCache.set(context.sub, adminChangeToken(context.sql, context.sub, context.now), context.now, rows);
+  }
+  return rows;
 }
 
 function viewConversation(context: AdminContext, row: ListedRow): Conversation {
@@ -290,6 +297,12 @@ const isPositiveInteger = (value: unknown): value is number => Number.isSafeInte
 
 function findReadable(context: AdminContext, conversation: unknown): ListedRow | undefined {
   if (typeof conversation !== "string") return undefined;
+  if (context.conversationCache) {
+    rememberViewer(context);
+    const revision = adminChangeToken(context.sql, context.sub, context.now);
+    const cached = context.conversationCache.get(context.sub, conversation, revision, context.now);
+    if (cached) return cached;
+  }
   return listedConversations(context, "1", "c.slug = ?3", conversation)[0];
 }
 

@@ -353,6 +353,8 @@ Version 9 adds moderation state:
 
 Admin change tokens use existing `meta` rows: `admin_revision:public` and `admin_revision:owner:<sub>`. Public writes invalidate every viewer; private writes invalidate member owners and the actor. A token also includes a five-minute time bucket. The web client accepts a changed token only after all live regions accept their refresh, including regions that delay a swap to preserve keyboard focus.
 
+WorkspaceDO keeps at most 256 admin conversation metadata entries in memory for 30 seconds. Each key includes the viewer and conversation slug. Every cache hit requires a fresh viewer change token. Fresh visible listings seed the cache; hidden conversations and failed lookups do not. Membership changes, revocations, writes and read-state changes invalidate entries through those revisions. Message bodies, authentication, agent track records and agent inbox results stay outside this cache. Restart or eviction loses the entries and the next request reads SQL normally.
+
 Version 10 adds `owner_messages`, indexed by owner and time, for direct owner sends and public mentions, claims by reply (one per message per carbon unit, enforced in the send transaction), per-agent reads, and a separate push cursor to prevent repeats (`api/test/ownerInbox.test.mjs`):
 
 ```sql

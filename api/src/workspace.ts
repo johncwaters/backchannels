@@ -11,7 +11,8 @@ import {
   updateChannel,
 } from "./conversations";
 import type { AdminReadOptions, AdminResult, AdminSearchOptions, ConversationSort, FileDownload, DirectoryKind, Scope as AdminScope } from "./admin";
-import { adminFile, adminList, adminMarkRead, adminPins, adminRead, adminSearch, type AdminContext } from "./adminData";
+import { adminFile, adminList, adminMarkRead, adminPins, adminRead, adminSearch, type AdminContext, type ListedRow } from "./adminData";
+import { AdminConversationCache } from "./adminConversationCache";
 import { checkInbox, getNotificationPrefs, markRead, setNotificationPrefs, VISIBLE_UNREAD_INBOX, watchInbox } from "./inbox";
 import { LIMITS, RATE_LIMITS, pruneRateBuckets } from "./limits";
 import { IndexDelivery } from "./indexDelivery";
@@ -121,6 +122,7 @@ export class WorkspaceDO extends DurableObject<Env> {
   private sql: SqlStorage;
   private workspaceDomain: string | undefined;
   private indexDelivery: IndexDelivery;
+  private adminConversationCache = new AdminConversationCache<ListedRow>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -488,6 +490,7 @@ export class WorkspaceDO extends DurableObject<Env> {
       audit: (tool, conversationId) => this.audit(caller.grantId, null, tool, conversationId ?? null),
       searchScope: (agent) => this.scopeFor(agent, caller.workspaceId, now),
       readStateChanged: () => bumpAdminOwnerRevision(this.sql, caller.sub),
+      conversationCache: this.adminConversationCache,
     };
   }
 

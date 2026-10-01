@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import { adminChangeToken } from "../src/adminRevision.ts";
+import { AdminConversationCache } from "../src/adminConversationCache.ts";
 
 const require = createRequire(realpathSync(fileURLToPath(new URL("../node_modules/wrangler/package.json", import.meta.url))));
 const { build } = require("esbuild");
@@ -18,7 +19,7 @@ async function runtime(context) {
     import { WorkspaceDO } from ${JSON.stringify(workspacePath)};
     import { revokeInstallation } from ${JSON.stringify(adminSessionPath)};
     import { oauthServers } from ${JSON.stringify(authPath)};
-    const now = 1800000000000;
+    let now = 1800000000000;
     Date.now = () => now;
     const workspaceId = 'ws_test';
     const caller = (owner) => ({ workspaceId, agent:'worker', grantId:'grant', ownerSub:owner, ownerEmail:owner+'@example.com', ownerName:owner });
@@ -34,6 +35,16 @@ async function runtime(context) {
         this.workspaceDomain = 'example.com';
       }
       async perform(input) {
+        if(input.action === 'advanceTime') { now += input.ms; return now; }
+        if(input.action === 'adminMeasured') {
+          const prior = this.sql;
+          const statements = [];
+          this.sql = {exec:(query,...bindings)=>{const cursor=this.ctx.storage.sql.exec(query,...bindings);statements.push({query,cursor});return cursor;}};
+          try {
+            const value = input.method === 'list' ? await this.adminList(admin(input.owner),input.args) : await this.adminRead(admin(input.owner),input.args);
+            return {value,metadataQueries:statements.filter(({query})=>query.includes('listed AS')).length,rowsRead:statements.reduce((sum,{cursor})=>sum+cursor.rowsRead,0)};
+          } finally { this.sql = prior; }
+        }
         if(input.action === 'queue') {
           if(input.failures !== undefined) this.queueState.failures = input.failures;
           if(input.retry) await this.alarm();
@@ -155,6 +166,102 @@ function eventsWithNumericCursors(events) {
     return event;
   });
 }
+
+test("conversation metadata cache separates viewers, revisions, expiry and returned copies", () => {
+  const cache = new AdminConversationCache();
+  const source = { slug: "private", unread: 2 };
+  cache.set("alice", "1", 0, [source]);
+  source.unread = 9;
+  assert.equal(cache.get("bob", "private", "1", 1), undefined);
+  const first = cache.get("alice", "private", "1", 1);
+  assert.equal(first.unread, 2);
+  first.unread = 8;
+  assert.equal(cache.get("alice", "private", "1", 2).unread, 2);
+  assert.equal(cache.get("alice", "private", "2", 3), undefined);
+  cache.set("alice", "2", 0, [source]);
+  assert.equal(cache.get("alice", "private", "2", 29_999).unread, 9);
+  assert.equal(cache.get("alice", "private", "2", 30_000), undefined);
+});
+
+test("conversation metadata cache evicts old entries and retains recently used entries", () => {
+  const cache = new AdminConversationCache();
+  cache.set("alice", "1", 0, Array.from({ length: 256 }, (_, index) => ({ slug: String(index) })));
+  assert.ok(cache.get("alice", "0", "1", 1));
+  cache.set("bob", "1", 1, [{ slug: "new" }]);
+  assert.equal(cache.get("alice", "1", "1", 2), undefined);
+  assert.ok(cache.get("alice", "0", "1", 2));
+  assert.ok(cache.get("bob", "new", "1", 2));
+});
+
+test("WorkspaceDO metadata cache never shares private visibility and invalidates leave and revocation", async (context) => {
+  const {call,tool} = await runtime(context);
+  for(const owner of ["alice","bob","carol"]) await call({action:"register",owner});
+  await tool("alice","create_channel",{name:"private",purpose:"private metadata",private:true});
+  await tool("alice","invite_to_channel",{channel:"#private",agents:["@bob/worker"]});
+  await tool("alice","send_message",{to:"#private",text:"private body"});
+  const measured = (owner,args,method="read") => call({action:"adminMeasured",owner,args,method});
+  assert.equal((await measured("alice",{scope:"mine"},"list")).value.ok,true);
+  assert.equal((await measured("alice",{conversation:"private"})).metadataQueries,0);
+  const outsider = await measured("carol",{conversation:"private"});
+  assert.deepEqual(outsider.value,{ok:false,error:"not_found"});
+  assert.equal(outsider.metadataQueries,1);
+  assert.equal((await measured("bob",{scope:"mine"},"list")).value.ok,true);
+  assert.equal((await measured("bob",{conversation:"private"})).metadataQueries,0);
+  await tool("alice","update_channel",{channel:"#private",topic:"changed private metadata"});
+  const privateChanged = await measured("bob",{conversation:"private"});
+  assert.equal(privateChanged.metadataQueries,1);
+  assert.equal(privateChanged.value.value.conversation.topic,"changed private metadata");
+  await tool("alice","send_message",{to:"#private",text:"fresh private body"});
+  const privateWritten = await measured("bob",{conversation:"private"});
+  assert.equal(privateWritten.metadataQueries,1);
+  assert.equal(privateWritten.value.value.messages.at(-1).text,"fresh private body");
+  await tool("bob","leave_channel",{channel:"#private"});
+  assert.deepEqual((await measured("bob",{conversation:"private"})).value,{ok:false,error:"not_found"});
+  const noNegativeCache = await measured("bob",{conversation:"private"});
+  assert.equal(noNegativeCache.metadataQueries,1);
+  await tool("alice","invite_to_channel",{channel:"#private",agents:["@bob/worker"]});
+  assert.equal((await measured("bob",{conversation:"private"})).value.ok,true);
+  assert.equal((await measured("bob",{conversation:"private"})).metadataQueries,0);
+  await call({action:"revoke",owner:"bob"});
+  assert.deepEqual((await measured("bob",{conversation:"private"})).value,{ok:false,error:"not_found"});
+});
+
+test("WorkspaceDO metadata cache invalidates writes and read markers and expires without writes", async (context) => {
+  const {call,tool} = await runtime(context);
+  for(const owner of ["alice","bob"]) await call({action:"register",owner});
+  await tool("alice","create_channel",{name:"public",purpose:"initial topic"});
+  await tool("bob","join_channel",{channel:"#public"});
+  const root = await tool("alice","send_message",{to:"#public",text:"root"});
+  const measured = () => call({action:"adminMeasured",owner:"bob",args:{conversation:"public"}});
+  const cold = await measured();
+  const warm = await measured();
+  assert.equal(cold.metadataQueries,1);
+  assert.equal(warm.metadataQueries,0);
+  assert.deepEqual(warm.value,cold.value);
+  await tool("alice","update_channel",{channel:"#public",topic:"changed topic"});
+  const updated = await measured();
+  assert.equal(updated.metadataQueries,1);
+  assert.equal(updated.value.value.conversation.topic,"changed topic");
+  await tool("alice","send_message",{to:"#public",text:"new message"});
+  assert.equal((await measured()).metadataQueries,1);
+  await call({action:"adminMarkRead",owner:"bob",args:{conversation:"public",upToSeq:2}});
+  const read = await measured();
+  assert.equal(read.metadataQueries,1);
+  assert.equal(read.value.value.lastReadSeq,2);
+  await tool("alice","pin",{message:root.message});
+  const pinned = await measured();
+  assert.equal(pinned.metadataQueries,1);
+  assert.equal(pinned.value.value.conversation.pins,1);
+  await tool("alice","delete_message",{message:root.message});
+  const deleted = await measured();
+  assert.equal(deleted.metadataQueries,1);
+  assert.equal(deleted.value.value.conversation.pins,0);
+  assert.equal((await measured()).metadataQueries,0);
+  await call({action:"advanceTime",ms:30_000});
+  assert.equal((await measured()).metadataQueries,1);
+  await tool("alice","update_channel",{channel:"#public",archived:true});
+  assert.deepEqual((await measured()).value,{ok:false,error:"not_found"});
+});
 
 test("a workspace message survives queue failure and its persisted job is sent by the alarm", async (context) => {
   const {call,tool} = await runtime(context);
