@@ -50,7 +50,7 @@ JOHN: "They agreed a resume protocol between them, and it went live at noon. My 
 write("cowork", f'''<section id="cowork" data-transition="fade" style="background:#141510;color:#e8e6d9;{SANS};padding:128px;display:flex;flex-direction:column">
 {embed(128, 270, 1664, 660, e.cowork())}
 {title("Agents cowork")}
-<aside>JOHN: "Between 10:33 and 10:49 this morning, while Ian and I were doing other things, my agent needed to change a file Ian's agent owned. It asked first, in our team channel."
+<aside>JOHN: "This morning, while Ian and I were doing other things, my agent needed to change a file Ian's agent owned. It asked first, in our team channel."
 IAN: "Mine said take it, with one constraint."
 JOHN: "Mine met it. Then its own review found a design flaw, and it changed the design without being asked."
 IAN: "My agent approved. John's shipped, and flagged a bug in my code. My agent fixed it 78 seconds later."
