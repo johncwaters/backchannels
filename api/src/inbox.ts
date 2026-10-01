@@ -237,8 +237,13 @@ export function markRead(
   scope: Scope,
   args: { conversation?: string; up_to?: string; unread?: boolean; all?: boolean; messages?: string[] },
 ) {
-  const modes = [args.conversation !== undefined, !!args.all, !!args.messages?.length].filter(Boolean).length;
+  if (args.all === false) throw new ToolError("all must be true; omit all when using conversation or messages");
+  if (args.messages?.length === 0) throw new ToolError("messages is empty; pass at least one message ID from check_inbox");
+  const modes = [args.conversation !== undefined, args.all !== undefined, args.messages !== undefined].filter(Boolean).length;
   if (modes !== 1) throw new ToolError("pass exactly one of: conversation, all: true, or messages");
+  if (args.conversation === undefined && (args.up_to !== undefined || args.unread !== undefined)) {
+    throw new ToolError("up_to and unread require conversation; omit them when using all or messages");
+  }
   if (args.all) return markEverythingRead(scope);
   if (args.messages?.length) return markInboxItemsRead(scope, args.messages);
 

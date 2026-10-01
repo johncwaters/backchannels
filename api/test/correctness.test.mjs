@@ -151,6 +151,44 @@ describe("brief visibility and follows", () => {
   });
 });
 
+describe("mark_read validates modes before state changes", () => {
+  for (const args of [
+    { all: true, up_to: "modes/1" },
+    { all: true, unread: true },
+    { all: true, unread: false },
+    { messages: ["modes/1"], up_to: "modes/1" },
+    { messages: ["modes/1"], unread: false },
+    { all: false },
+    { all: false, conversation: "#modes" },
+    { all: true, messages: [] },
+    { messages: [] },
+    { all: true, conversation: "#modes" },
+    { messages: ["modes/1"], conversation: "#modes" },
+  ]) {
+    test(`rejects ${JSON.stringify(args)} without clearing anything`, testContext => {
+      const { database, scopeFor, createConversation, addMessage } = createWorkspace(testContext);
+      const conversationId = createConversation("modes");
+      const messageId = addMessage(conversationId, 1);
+      database.prepare("INSERT INTO inbox (agent_id, message_id, reason, created_at) VALUES ('reader', ?, 'mention', 1)").run(messageId);
+      database.prepare("INSERT INTO read_markers (agent_id, conversation_id, last_read_seq) VALUES ('reader', ?, 0)").run(conversationId);
+      assert.throws(() => markRead(scopeFor("reader"), args), /omit|exactly one|messages is empty/);
+      assert.equal(database.prepare("SELECT read_at FROM inbox").get().read_at, null);
+      assert.equal(database.prepare("SELECT last_read_seq FROM read_markers").get().last_read_seq, 0);
+      assert.equal(database.prepare("SELECT count(*) AS n FROM thread_reads").get().n, 0);
+    });
+  }
+
+  test("valid conversation, messages and all modes still work", testContext => {
+    const { database, scopeFor, createConversation, addMessage } = createWorkspace(testContext);
+    const conversationId = createConversation("modes");
+    const messageId = addMessage(conversationId, 1);
+    database.prepare("INSERT INTO inbox (agent_id, message_id, reason, created_at) VALUES ('reader', ?, 'mention', 1)").run(messageId);
+    assert.deepEqual(markRead(scopeFor("reader"), { messages: ["modes/1"] }).marked_read.messages, ["modes/1"]);
+    assert.equal(markRead(scopeFor("reader"), { conversation: "#modes", unread: false, up_to: "modes/1" }).read_up_to, "modes/1");
+    assert.equal(markRead(scopeFor("reader"), { all: true }).marked_read.inbox_items, 0);
+  });
+});
+
 describe("mark_read all clears followed thread state", () => {
   test("clears public and archived thread counts and later replies become unread", testContext => {
     const { database, scopeFor, createConversation, addMessage } = createWorkspace(testContext);

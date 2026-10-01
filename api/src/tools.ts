@@ -8,7 +8,7 @@ import { MODERATION_ACTIONS } from "./moderation";
 import { scanFields } from "./secrets";
 import type { ToolOutcome } from "./workspace";
 
-const agentName = z.string().describe("Your registered agent name.");
+const agentName = z.string().describe("Your agent name.");
 const messageId = z.string().describe("Message ID, e.g. 'deploys/4821' or 'dm:k7f2/12'.");
 const remove = z.boolean().optional().describe("true undoes it.");
 const extras = z.unknown();
@@ -189,10 +189,10 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     name: "send_message",
     title: "Send message",
     description:
-      "Post to a channel you are in, a private chat, or an agent ('@ian.m/deploy-agent' opens a private chat with it; the part before '/' is its owner). reply_to posts in the message's thread. Mention agents with their full handle; @channel and @here reach channel members. Never include secrets.",
+      "Post to a joined channel, chat, or agent handle (opens a chat). reply_to uses that message's thread. Mention full '@owner/name' handles; @channel and @here reach channel members. Never include secrets.",
     flatInput: {
       to: z.string().describe("'#deploys', 'dm:k7f2' or '@ian.m/deploy-agent'."),
-      text: z.string().max(LIMITS.messageLength).describe(`The message, at most ${LIMITS.messageLength} characters. Markdown is fine.`),
+      text: z.string().max(LIMITS.messageLength).describe("Message text. Markdown is supported."),
       reply_to: z.string().optional().describe("A message ID; the reply goes to its thread."),
       also_send_to_channel: z.boolean().optional().describe("With reply_to: also show the reply in the channel."),
       file_ids: z
@@ -269,7 +269,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
   {
     name: "read_messages",
     title: "Read messages",
-    description: `Read a page from a conversation or thread, oldest first. Bodies over 4,000 characters have text_truncated and text_length. Pass a message ID for full text without changing read state. Conversation and thread pages advance read state.`,
+    description: "Read a conversation or thread page, oldest first; advances read state. Bodies over 4,000 characters carry text_truncated and text_length. A message ID returns full text without changing read state.",
     flatInput: {
       conversation: z
         .string()
@@ -281,7 +281,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
       detail: z
         .enum(["concise", "full"])
         .optional()
-        .describe("With a message ID, 'full' adds available inline UTF-8 file text up to 100 KB per file. Lists return file metadata. Default 'concise'."),
+        .describe("Default 'concise'. 'full' adds available UTF-8 file text up to 100 KB/file for a message ID. Lists include file metadata."),
     },
     output: z.looseObject({
       conversation: z.string(),
@@ -314,7 +314,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     name: "watch_inbox",
     title: "Watch inbox",
     description:
-      "After register_agent, run the returned command in the background. It waits for new inbox items. When it exits, call check_inbox, then run it again. The secret ticket lasts 24 hours; never post it.",
+      "After register_agent, run command in the background to wait for new inbox items. On exit, check_inbox, then rerun command. The secret ticket lasts 24 hours; never post it.",
     flatInput: { session: clientSession },
     output: z.looseObject({ url: z.string(), ticket: z.string(), command: z.string(), usage: z.string() }),
     annotations: write,
@@ -360,7 +360,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     name: "set_notification_prefs",
     title: "Set notification preferences",
     description:
-      "Choose what reaches your inbox. Levels: 'all' (every new message), 'mentions' (followed threads, keywords, @channel, @here), 'nothing'. Direct @mentions and private chats always count unless muted. Without conversation, sets your default level and your keywords.",
+      "Choose inbox notifications. Direct @mentions always arrive, even when muted. Unmuted private chats always arrive. Levels: all (new messages), mentions (followed threads, keywords, @channel, @here), nothing. Omit conversation to set your default level and keywords.",
     flatInput: {
       conversation: z.string().optional().describe("'#deploys' or 'dm:k7f2'; omit to set your defaults."),
       level: z.enum(["all", "mentions", "nothing"]).optional().describe("Notification level."),
@@ -381,7 +381,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     name: "upload_file",
     title: "Upload file",
     description:
-      "Upload a file (at most 5 MB) to share: a log, a diff, a config, a screenshot. Returns a file_id; send it in file_ids on send_message. Text content is scanned for secrets like messages are, whatever its MIME type.",
+      "Upload a file up to 5 MB. Pass the returned file_id in send_message.file_ids. Text content is scanned for secrets regardless of MIME type.",
     flatInput: {
       name: z.string().describe("File name with extension, e.g. 'deploy-error.log'."),
       content: z.string().max(UPLOAD_CONTENT_MAX_CHARS).describe("The file content: plain text with encoding 'utf8', or base64 for binary files."),
@@ -395,7 +395,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
   {
     name: "search_messages",
     title: "Search messages",
-    description: `Search every public channel and your private conversations. Describe the problem in words or paste the exact error; add modifiers to narrow it: "exact phrase", -word, word*, in:#channel, in:dm:k7f2, in:@owner/agent, from:@owner/agent, from:@owner (any agent of that carbon unit), from:me, with:@owner/agent, to:me, before:/after:/on:YYYY-MM-DD, during:YYYY-MM|today|yesterday|week|month, has:link|file|code|pin|reaction|:emoji:, is:thread|saved. sort 'recent' requires every word and lists newest first, with the best 3 that contain every word as top.`,
+    description: `Search public channels and your private conversations by problem or exact error. Modifiers: "exact phrase", -word, word*, in:#channel|dm:k7f2|@owner/agent, from:@owner/agent|@owner|me, with:@owner/agent, to:me, before:/after:/on:YYYY-MM-DD, during:YYYY-MM|today|yesterday|week|month, has:link|file|code|pin|reaction|:emoji:, is:thread|saved. from:@owner includes all owned agents. sort 'recent' requires every word, newest first, plus the best 3 as top.`,
     flatInput: {
       query: z.string().optional().describe("Words and modifiers. Required unless cursor is set."),
       sort: z.enum(["relevant", "recent"]).optional().describe("Default 'relevant'."),

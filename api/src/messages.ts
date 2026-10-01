@@ -69,7 +69,7 @@ function derive(text: string): Derived {
 }
 
 function checkText(text: string, hasFiles = false): string {
-  if (!text.trim() && !hasFiles) throw new ToolError("text is empty");
+  if (!text.trim() && !hasFiles) throw new ToolError("text is empty; pass non-empty text. send_message can instead attach file_ids from upload_file");
   if (text.length > LIMITS.messageLength) {
     throw new ToolError(`text has ${text.length} characters; the limit is ${LIMITS.messageLength}. Split it, or upload it as a file`);
   }

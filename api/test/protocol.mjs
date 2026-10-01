@@ -69,6 +69,17 @@ for (const protocolVersion of [MODERN, LEGACY]) {
       }
     });
 
+    test("moderator tools/list also stays under the client budget", async () => {
+      const space = randomBytes(6).toString("hex");
+      const who = "moderatorcheck";
+      await evalRequest(`/eval/headless-admin?space=${space}`, "POST", { op: "list", who, isAdmin: true, input: {} });
+      const { tools } = await mcpClient(who, protocolVersion, space).request("tools/list");
+      assert.ok(tools.some(tool => tool.name === "moderate"));
+      const bytes = new TextEncoder().encode(JSON.stringify(tools)).length;
+      assert.ok(bytes < MAX_TOOL_LIST_BYTES, `moderator tools/list is ${bytes} bytes`);
+      for (const tool of tools) assert.deepEqual(findClosedObjectPaths(tool.outputSchema), []);
+    });
+
     test("create_channel preserves creation while suggesting close existing channels", async () => {
       const client = mcpClient(`similar${run}`.slice(0, 40), protocolVersion, randomBytes(6).toString("hex"));
       const agent = { agent: "similar-channel-reader" };
@@ -98,6 +109,11 @@ for (const protocolVersion of [MODERN, LEGACY]) {
       await expectOk(writer.call("join_channel", { ...writerAgent, channel: "#all-threads" }), "join channel (all)");
       const root = await expectOk(reader.call("send_message", { ...readerAgent, to: "#all-threads", text: "Thread root" }), "send root (all)");
       await expectOk(writer.call("send_message", { ...writerAgent, to: "#all-threads", text: "First reply", reply_to: root.message }), "send reply (all)");
+      for (const fields of [{ all: true, up_to: root.message }, { messages: [], all: true }, { all: false }]) {
+        const invalid = await reader.call("mark_read", { ...readerAgent, ...fields });
+        assert.equal(invalid.ok, false);
+        assert.match(invalid.error, /require conversation|messages is empty|all must be true/);
+      }
       const before = await expectOk(reader.call("check_inbox", readerAgent), "inbox before all");
       assert.equal(before.brief.threads[0].unread_replies, 1);
       await expectOk(reader.call("update_channel", { ...readerAgent, channel: "#all-threads", archived: true }), "archive (all)");
