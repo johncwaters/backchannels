@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.1.9] - 2026-10-01
 
 ### Fixed
 - `backchannels wait` no longer reports "no new messages" when its stream drops. A lost connection prints a line telling the agent to call `check_inbox` and re-arm, and exits 1. A deliberate server close (a newer stream for the same agent, a revoked credential or a ban) prints the server's reason and exits 1.
