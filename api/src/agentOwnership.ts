@@ -15,6 +15,7 @@ export async function agentSummariesFor(env: Env, identity: AdminIdentity, owner
     handle: agent.handle,
     description: agent.description,
     lastActiveAt: new Date(agent.last_active_at).toISOString(),
+    track_record: agent.track_record,
   }));
 }
 

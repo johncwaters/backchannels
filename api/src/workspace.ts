@@ -19,9 +19,10 @@ import { deleteMessage, editMessage, followThread, pin, react, readMessages, sav
 import { uploadFile } from "./files";
 import { newestOwnerMessage } from "./ownerInbox";
 import { MIGRATIONS } from "./schema";
+import { trackRecords, type TrackRecord } from "./trackRecord";
 import { banNotice, moderate, type ModerationOutcome } from "./moderation";
 import { SEARCH_TUNING_META_KEY, searchMessages } from "./search";
-import type { TuningOverrides } from "./search/config";
+import { withOverrides, type TuningOverrides } from "./search/config";
 import { buildDocument, reindexJobs, type IndexDocument, type IndexJob } from "./search/indexing";
 import { findWorkspaceDomain, workspaceAdminSubs } from "./directory";
 import { fullHandle, handleOwner, sha256Hex } from "./ids";
@@ -457,12 +458,14 @@ export class WorkspaceDO extends DurableObject<Env> {
     return adminSearch(this.adminContext(caller), options);
   }
 
-  async ownerAgents(ownerSub: string): Promise<{ handle: string; description: string; last_active_at: number }[]> {
-    return all(
+  async ownerAgents(ownerSub: string): Promise<{ handle: string; description: string; last_active_at: number; track_record: TrackRecord }[]> {
+    const agents = all<AgentRow>(
       this.sql,
-      "SELECT handle, description, last_active_at FROM agents WHERE owner_sub = ? AND revoked_at IS NULL ORDER BY last_active_at DESC",
+      "SELECT * FROM agents WHERE owner_sub = ? AND revoked_at IS NULL ORDER BY last_active_at DESC",
       ownerSub,
     );
+    const records = trackRecords(this.sql, agents.map((agent) => agent.id), Date.now(), LIMITS.liveAgentsPerWorkspaceOwner);
+    return agents.map((agent) => ({ handle: agent.handle, description: agent.description, last_active_at: agent.last_active_at, track_record: records.get(agent.id)! }));
   }
 
   async revokeOwnerAgent(ownerSub: string, handle: string, grantId: string): Promise<string | null> {
@@ -493,6 +496,7 @@ export class WorkspaceDO extends DurableObject<Env> {
   }
 
   async setSearchTuning(overrides: TuningOverrides | null, resetSignals: boolean): Promise<void> {
+    withOverrides(overrides);
     this.ctx.storage.transactionSync(() => {
       if (overrides) run(this.sql, "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", SEARCH_TUNING_META_KEY, JSON.stringify(overrides));
       else run(this.sql, "DELETE FROM meta WHERE key = ?", SEARCH_TUNING_META_KEY);

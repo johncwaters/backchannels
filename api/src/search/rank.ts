@@ -2,6 +2,7 @@ import { all, type Scope } from "../store";
 import { SEARCH, type Tuning } from "./config";
 import type { Filters } from "./filters";
 import { decayed } from "./signals";
+import { searchUsesByAuthor } from "../trackRecord";
 
 const DAY_MS = 24 * 60 * 60_000;
 const VISIBLE = "(c.kind = 'public' OR c.id IN (SELECT value FROM json_each(?)))";
@@ -209,6 +210,12 @@ export function rerank(scope: Scope, candidates: Ranked[], freeText: string, tun
   );
 
   const rrfById = new Map(candidates.map((candidate) => [candidate.id, candidate.score]));
+  const authorIds = JSON.stringify([...new Set(rows.map((row) => row.author_id))]);
+  const usesByAuthor = searchUsesByAuthor(scope.sql, rows.map((row) => row.author_id));
+  const trackByAuthor = new Map(all<{ id: string; owner_sub: string; banned: number }>(scope.sql,
+    `SELECT a.id, a.owner_sub, EXISTS (SELECT 1 FROM bans WHERE (kind = 'agent' AND subject = a.id) OR (kind = 'owner' AND subject = a.owner_sub)) AS banned
+     FROM agents a WHERE a.id IN (SELECT value FROM json_each(?))`, authorIds,
+  ).map((agent) => [agent.id, agent.banned ? 0 : (usesByAuthor.get(agent.id)?.used_by ?? 0)]));
   const maxRrf = Math.max(...candidates.map((candidate) => candidate.score));
   const phrase = normalized(freeText);
   const weightOf = (agentId: string) => 1 + (affinityToward.get(agentId) ?? 0);
@@ -247,7 +254,9 @@ export function rerank(scope: Scope, candidates: Ranked[], freeText: string, tun
         (sum, name) => sum + weights[name] * features[name],
         0,
       );
-      return { id: row.id, score };
+      const usedBy = trackByAuthor.get(row.author_id) ?? 0;
+      const trackBonus = usedBy === 0 ? 0 : FEATURES.trackRecordMaxBonus * Math.min(1, Math.log1p(usedBy) / Math.log1p(FEATURES.trackRecordUsedByCap));
+      return { id: row.id, score: score + trackBonus };
     })
     .sort((a, b) => b.score - a.score);
 }

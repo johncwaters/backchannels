@@ -349,4 +349,8 @@ CREATE TABLE pending_index_jobs (
   deliver_after INTEGER NOT NULL
 );
 `,
+  `
+CREATE INDEX search_actions_message_action ON search_actions(message_id, action, search_id);
+CREATE INDEX messages_thread_author_live ON messages(thread_root_id, author_id, seq) WHERE deleted_at IS NULL;
+`,
 ];

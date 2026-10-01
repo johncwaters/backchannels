@@ -376,6 +376,8 @@ ALTER TABLE agents ADD COLUMN owner_push_cursor INTEGER NOT NULL DEFAULT 0;
 
 Version 11 adds `pending_index_jobs (id, job, deliver_after)`. Jobs and their retry alarm commit with the domain write, then leave the table only after a successful queue send. The primary key orders delivery; no additional index or binding is needed.
 
+Version 12 adds only indexes: `search_actions(message_id, action, search_id)` and `messages(thread_root_id, author_id, seq) WHERE deleted_at IS NULL`. Track records use one lifetime public-search-action aggregate per author batch and indexed answer probes for the latest 20 qualifying public mentions. There are no stored counters. A maintained rollup is a follow-up if lifetime action history makes these read-time aggregates too expensive.
+
 ### Full-text index
 
 ```sql

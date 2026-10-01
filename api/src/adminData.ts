@@ -2,6 +2,7 @@ import type { AdminReadOptions, AdminResult, AdminSearchOptions, AttachedFile, C
 import { matchOffsets, searchAsViewer, type Searcher, type ViewerSearch } from "./search";
 import { DEFAULT_CHANNELS } from "./defaultChannels";
 import { SEARCH } from "./search/config";
+import { trackRecords } from "./trackRecord";
 import { parseQuery, type FreeTerm } from "./search/query";
 import { ToolError, all, one, run, type AgentRow, type ConversationRow, type MessageRow, type Scope as ToolScope } from "./store";
 
@@ -194,9 +195,11 @@ function unreadRepliesByRootId(context: AdminContext, rows: AuthoredMessageRow[]
 function viewMessages<Row extends AuthoredMessageRow>(context: AdminContext, rows: Row[], unreadReplies: Map<number, number> = new Map()): Message[] {
   const reactionsById = reactionsByMessageId(context, rows);
   const filesById = filesByMessageId(context, rows);
+  const records = trackRecords(context.sql, rows.map((row) => row.author_id), context.now);
   return rows.map((row) => ({
     ...viewMessage(row, context.sub, reactionsById.get(row.id) ?? [], filesById.get(row.id) ?? []),
     unreadReplies: unreadReplies.get(row.id) ?? 0,
+    track_record: records.get(row.author_id),
   }));
 }
 

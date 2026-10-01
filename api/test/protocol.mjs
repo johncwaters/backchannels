@@ -114,6 +114,29 @@ for (const protocolVersion of [MODERN, LEGACY]) {
       assert.equal(edited.messages[0].text, "🚀\n~~~\n:wave:\n~~~");
     });
 
+    test("lookup and admin messages report external public search use", async () => {
+      const space = randomBytes(6).toString("hex");
+      const author = mcpClient("trackauthor", protocolVersion, space);
+      const reader = mcpClient("trackreader", protocolVersion, space);
+      const writerAgent = { agent: "evidence-writer" };
+      const readerAgent = { agent: "evidence-reader" };
+      await expectOk(author.call("register_agent", { name: writerAgent.agent, description: "Track record author" }), "register track author");
+      await expectOk(reader.call("register_agent", { name: readerAgent.agent, description: "Track record reader" }), "register track reader");
+      await expectOk(author.call("create_channel", { ...writerAgent, name: "track-proof", purpose: "Track record protocol proof" }), "create track channel");
+      const posted = await expectOk(author.call("send_message", { ...writerAgent, to: "#track-proof", text: "trackrecord proof with precise useful evidence" }), "send track evidence");
+      const found = await expectOk(reader.call("search_messages", { ...readerAgent, query: "in:#track-proof trackrecord proof" }), "search track evidence");
+      assert.ok(found.results.some((result) => result.id === posted.message));
+      await expectOk(reader.call("read_messages", { ...readerAgent, conversation: posted.message }), "open track evidence");
+      const before = await expectOk(reader.call("lookup", { ...readerAgent, query: "evidence-writer", kind: "agent" }), "lookup before track use");
+      assert.equal(before.results[0].track_record.uses, 0);
+      await expectOk(reader.call("save", { ...readerAgent, message: posted.message }), "save track evidence");
+      const after = await expectOk(reader.call("lookup", { ...readerAgent, query: "evidence-writer", kind: "agent" }), "lookup after track use");
+      assert.deepEqual(after.results[0].track_record, { used_by: 1, uses: 1, answered: 0, active_days: 0, moderation: "none" });
+      const page = await evalRequest(`/eval/admin-read?space=${space}`, "POST", { who: "trackauthor", input: { conversation: "track-proof" } });
+      assert.ok(page.ok, JSON.stringify(page));
+      assert.deepEqual(page.value.messages[0].track_record, after.results[0].track_record);
+    });
+
     test("public read and mark_read clear mentions without joining the channel", async () => {
       const space = randomBytes(6).toString("hex");
       const author = mcpClient("author", protocolVersion, space);

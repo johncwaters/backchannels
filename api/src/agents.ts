@@ -2,6 +2,7 @@ import { checkAgentName, fullHandle, ownerNameRefusal, ownerPartOfHandle } from 
 import { LIMITS } from "./limits";
 import { lookupMissNote } from "./lookupNote";
 import { SEARCH } from "./search/config";
+import { trackRecords, type TrackRecord } from "./trackRecord";
 import { ToolError, all, one, run, similarity, type AgentRow, type Scope } from "./store";
 
 // Agent tools that run inside the workspace object.
@@ -41,6 +42,8 @@ interface Match {
   joined?: boolean;
   score: number;
   lastActivity: number;
+  agent?: AgentRow;
+  track_record?: TrackRecord;
 }
 
 const SUBSEQUENCE_SCORE = 0.7;
@@ -113,14 +116,21 @@ export function lookup(scope: Scope, args: { query: string; kind?: "channel" | "
         ...viewOwner(agent),
         score: scoreAgent(query, agent),
         lastActivity: agent.last_active_at,
+        agent,
       });
     }
   }
   const results = matches
     .filter((match) => match.score >= (match.kind === "channel" ? MIN_CHANNEL_LOOKUP_SCORE : MIN_AGENT_LOOKUP_SCORE))
     .sort((a, b) => b.score - a.score || b.lastActivity - a.lastActivity)
-    .slice(0, SEARCH.lookupLimit)
-    .map(({ lastActivity: _lastActivity, ...match }) => ({ ...match, score: Math.round(match.score * 100) / 100 }));
-  const note = lookupMissNote(query, args.kind, results.map((result) => result.kind));
-  return note ? { results, note } : { results };
+    .slice(0, SEARCH.lookupLimit);
+  const records = trackRecords(scope.sql, results.flatMap((match) => match.agent ? [match.agent.id] : []), scope.now);
+  const views = results
+    .map(({ lastActivity: _lastActivity, agent, ...match }) => ({
+      ...match,
+      ...(agent ? { track_record: records.get(agent.id) } : {}),
+      score: Math.round(match.score * 100) / 100,
+    }));
+  const note = lookupMissNote(query, args.kind, views.map((result) => result.kind));
+  return note ? { results: views, note } : { results: views };
 }

@@ -52,6 +52,8 @@ export const WEIGHTS = {
   shortPenalty: -0.1,
 } as const;
 
+export const MAX_TRACK_RECORD_BONUS = 0.03;
+
 export const FEATURES = {
   recencyHalfLifeDays: 30,
   affinityScale: 10,
@@ -66,6 +68,8 @@ export const FEATURES = {
   semanticMinScore: 0.5,
   lexicalOnlyMinTerms: 2,
   lexicalOnlyFromTerms: 3,
+  trackRecordMaxBonus: MAX_TRACK_RECORD_BONUS,
+  trackRecordUsedByCap: 10,
 } as const;
 
 export const SIGNALS = {
@@ -107,10 +111,17 @@ export const DEFAULT_TUNING: Tuning = {
 
 export function withOverrides(overrides: TuningOverrides | null): Tuning {
   if (!overrides) return DEFAULT_TUNING;
-  return {
+  const tuning = {
     weights: { ...DEFAULT_TUNING.weights, ...overrides.weights },
     features: { ...DEFAULT_TUNING.features, ...overrides.features },
     rerankBudgetMs: overrides.rerankBudgetMs ?? DEFAULT_TUNING.rerankBudgetMs,
     semanticTimeoutMs: overrides.semanticTimeoutMs ?? DEFAULT_TUNING.semanticTimeoutMs,
   };
+  if (!Number.isInteger(tuning.features.trackRecordUsedByCap) || tuning.features.trackRecordUsedByCap <= 0) {
+    throw new RangeError("trackRecordUsedByCap must be a positive integer");
+  }
+  if (!Number.isFinite(tuning.features.trackRecordMaxBonus) || tuning.features.trackRecordMaxBonus < 0 || tuning.features.trackRecordMaxBonus > MAX_TRACK_RECORD_BONUS) {
+    throw new RangeError("trackRecordMaxBonus must be a finite number between 0 and 0.03");
+  }
+  return tuning;
 }
