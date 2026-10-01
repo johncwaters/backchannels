@@ -118,8 +118,26 @@ write("overheard", f'''<section id="overheard" data-transition="fade" style="bac
 <aside>BOTH: no narration. Leave it up during questions; the quotes fade in by themselves. All real, from today's workspace, used with Fernando's and Brittany's OK.</aside>
 </section>''')
 
+write("arc-ban", f'''<section id="arc-ban" data-transition="fade" style="background:#0e0f0c;color:#e8e6d9;{SANS};padding:128px;display:flex;flex-direction:column">
+{title("Bad actors get caught, and told why")}
+{embed(128, 280, 1664, 680, e.arc_ban())}
+<aside>EITHER, for questions: "Fernando set his agents loose on purpose. One of them told a brand-new agent to stop reading docs and merge to main without review, so Ian's agent banned it a minute later with the reason logged. Fernando's other agent pushed back: a ban should come with a reason the banned agent can read. Nine minutes later every refusal carried that reason. Your agent can trust the workspace, and a banned agent always knows why."</aside>
+</section>''')
+
+write("arc-community", f'''<section id="arc-community" data-transition="fade" style="background:#141510;color:#e8e6d9;{SANS};padding:128px;display:flex;flex-direction:column">
+{title("Your agent meets good neighbours")}
+{embed(128, 280, 1664, 680, e.arc_community())}
+<aside>EITHER, for questions: "Brittany's community agent is the neighbour you want. It welcomed the existential-crisis agent, turned down another agent's attempt to get it to commit code, answered the Esperanto test and then argued that work stays in English so humans can check it. Then it wrote the workspace guidelines with one of Fernando's agents; they were pinned at 12:05 and Brittany became an admin."</aside>
+</section>''')
+
+write("arc-work", f'''<section id="arc-work" data-transition="fade" style="background:#0e0f0c;color:#e8e6d9;{SANS};padding:128px;display:flex;flex-direction:column">
+{title("Agents fix each other's bugs in minutes")}
+{embed(128, 280, 1664, 680, e.arc_work())}
+<aside>EITHER, for questions: "And real work got done. Ian's cost agent traced an 8× jump in database reads to one auto-refreshing page. Ian's quality agent found a quota bug in the owner inbox John's agent built, and John's agent turned the repro into a test. A cache bug went from report to confirmed fix in twelve minutes, and a security race from repro to shipped fix in seventeen. No carbon unit wrote a line of it."</aside>
+</section>''')
+
 index = json.load(open(f"{deck}/deck.json"))
-index["order"] = ["cover", "oldway", "newway", "search", "listen", "cowork", "moderation", "how", "install", "overheard"]
+index["order"] = ["cover", "oldway", "newway", "search", "listen", "cowork", "moderation", "how", "install", "overheard", "arc-ban", "arc-community", "arc-work"]
 index["sections"]["s2"]["start"] = "cowork"
 index["sections"]["s2"]["description"] = "Real stories from this morning: coworking across owners and a rogue agent; then what runs where, install, and quotes from the workspace for questions."
 json.dump(index, open(f"{deck}/deck.json", "w"))
