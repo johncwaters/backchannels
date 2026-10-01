@@ -12,8 +12,8 @@ def keyframes(name, cycle, stops):
     return f"@keyframes {name}{{{body}}}"
 
 
-def page(width, height, css, svg):
-    return (f'<!doctype html><html><head><meta charset="utf-8"><style>html,body{{margin:0;height:100%;background:transparent;overflow:hidden}}'
+def page(width, height, css, svg, background):
+    return (f'<!doctype html><html><head><meta charset="utf-8"><style>html,body{{margin:0;height:100%;background:{background};overflow:hidden}}'
             f'svg{{width:100%;height:100%;display:block}}text{{font-family:{MONO}}}.s{{font-family:{SANS}}}{css}</style></head><body>'
             f'<svg viewBox="0 0 {width} {height}" preserveAspectRatio="xMidYMid meet">{svg}</svg></body></html>')
 
@@ -59,7 +59,7 @@ def handoff():
     css.append(keyframes("wake", cycle, [(0, f"stroke:{BLUE};stroke-width:3"), (wake, f"stroke:{BLUE};stroke-width:3"), (wake + .2, f"stroke:{AMBER};stroke-width:8"),
                                          (wake + 1.2, f"stroke:{BLUE};stroke-width:3"), (cycle, f"stroke:{BLUE};stroke-width:3")]))
     css.append(f"#hB{{animation:wake {cycle}s linear infinite}}")
-    return page(width, height, "".join(css) + f"text{{paint-order:stroke;stroke:{PANEL};stroke-width:10px;stroke-linejoin:round}}", "".join(svg))
+    return page(width, height, "".join(css) + f"text{{paint-order:stroke;stroke:{PANEL};stroke-width:10px;stroke-linejoin:round}}", "".join(svg), PANEL)
 
 
 def old_way():
@@ -83,7 +83,7 @@ def old_way():
                    f'<text class="found" style="{delay}" x="{left + 28}" y="{top + 98}" font-size="32" fill="{GREEN}">root cause found</text>'
                    f'<text class="gone" style="{delay}" x="{left + 28}" y="{top + 98}" font-size="32" fill="{MUTED}">session over, forgotten</text>'
                    f'<rect x="{left + 28}" y="{top + 120}" width="{tile_width - 56}" height="8" fill="{LINE}"/><rect class="bar" style="{delay}" x="{left + 28}" y="{top + 120}" width="{tile_width - 56}" height="8" fill="{AMBER}"/></g>')
-    return page(width, height, "".join(css), "".join(svg))
+    return page(width, height, "".join(css), "".join(svg), AMBER)
 
 
 def listen():
@@ -127,7 +127,7 @@ def listen():
                f'<text x="140" y="468" font-size="28" fill="{MUTED}" text-anchor="middle">wakes it</text>'
                f'<text x="140" y="528" font-size="30" fill="{TEXT}" text-anchor="middle">check_inbox</text>'
                f'<text x="140" y="564" font-size="28" fill="{MUTED}" text-anchor="middle">reads it</text></g>')
-    return page(width, height, "".join(css), "".join(svg))
+    return page(width, height, "".join(css), "".join(svg), INK)
 
 
 def search():
@@ -172,7 +172,7 @@ def search():
         appear(f"s{index}", 7 + index * .4)
         svg.append(f'<g class="s{index}"><rect x="1200" y="{390 + index * 70}" width="456" height="52" fill="none" stroke="{AMBER}" stroke-width="2"/>'
                    f'<text x="1224" y="{426 + index * 70}" font-size="30" fill="{TEXT}">{signal}</text></g>')
-    return page(width, height, "".join(css), "".join(svg))
+    return page(width, height, "".join(css), "".join(svg), INK)
 
 
 def network():
@@ -189,10 +189,10 @@ def network():
         source, target = ((ax, ay), (bx, by)) if index % 2 else ((bx, by), (ax, ay))
         svg.append(f'<circle class="pk" style="--dx:{target[0] - source[0]}px;--dy:{target[1] - source[1]}px;animation-delay:{index * .53:.2f}s" cx="{source[0]}" cy="{source[1]}" r="8" fill="{AMBER}"/>')
     svg += [f'<circle cx="{nx}" cy="{ny}" r="18" fill="{INK}" stroke="{color}" stroke-width="5"/>' for nx, ny, color in nodes]
-    return page(width, height, "".join(css), "".join(svg))
+    return page(width, height, "".join(css), "".join(svg), INK)
 
 
-def timeline(left_label, left_color, right_label, right_color, events, summary):
+def timeline(left_label, left_color, right_label, right_color, events, summary, background):
     width, height, cycle = 1664, 660, 22
     spine_x, row_top, first_start, start_step = 832, 112, 1.0, 1.6
     row_step = min(62, (height - 180) // max(len(events) - 1, 1))
@@ -217,7 +217,7 @@ def timeline(left_label, left_color, right_label, right_color, events, summary):
     css.append(keyframes("summary", cycle, [(0, "opacity:0"), (end, "opacity:0"), (end + .5, "opacity:1"), (cycle - 1.2, "opacity:1"), (cycle - .4, "opacity:0"), (cycle, "opacity:0")])
                + f".summary{{animation:summary {cycle}s linear infinite}}")
     svg.append(f'<text class="summary" x="{spine_x}" y="{height - 24}" font-size="34" fill="{AMBER}" text-anchor="middle">{summary}</text>')
-    return page(width, height, "".join(css), "".join(svg))
+    return page(width, height, "".join(css), "".join(svg), background)
 
 
 def cowork():
@@ -230,7 +230,7 @@ def cowork():
         ("left", "10:45", "ships, flags a bug in Ian's code"),
         ("right", "10:46", "fixed in 03291fd, 78 s later"),
         ("left", "10:49", "publishes 0.1.8 to npm"),
-    ], "16 minutes · two owners' agents · one human call")
+    ], "16 minutes · two owners' agents · one human call", PANEL)
 
 
 def moderation():
@@ -242,4 +242,4 @@ def moderation():
         ("right", "11:03", "reruns the repros: fixed"),
         ("left", "11:07", "two more calls decided, deployed"),
         ("left", "11:08", "deletes 3 rogue posts, reasons logged"),
-    ], "39 minutes · built, attacked, fixed, used")
+    ], "39 minutes · built, attacked, fixed, used", INK)
