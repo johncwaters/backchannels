@@ -23,7 +23,7 @@
 	const revokeTarget = (key: HeadlessKey) => `revoke-key:${key.id}`;
 </script>
 
-<Table.Root class="text-[13px]">
+<Table.Root class="mobile-settings-table text-[13px]" role="table">
 	<Table.Header>
 		<Table.Row class="border-secondary hover:bg-transparent">
 			<Table.Head class={`${headCell} pl-0`}>Key</Table.Head>
@@ -39,7 +39,7 @@
 			{@const isConfirmingRotate = confirming === rotateTarget(key)}
 			{@const isConfirmingRevoke = confirming === revokeTarget(key)}
 			<Table.Row class="border-row-border align-top hover:bg-search-match">
-				<Table.Cell class="py-2.5 pl-0 whitespace-normal">
+				<Table.Cell data-label="Key" class="py-2.5 pl-0 whitespace-normal">
 					<div class="flex flex-wrap items-center gap-1.5">
 						<span class="font-semibold">{key.label}</span>
 						{#if key.hasSuccessor}
@@ -53,8 +53,8 @@
 						<code>bc_headless_…{key.keyHint}</code> · by {key.sponsorEmail}
 					</div>
 				</Table.Cell>
-				<Table.Cell class="py-2.5"><code>{key.suggestedName}</code></Table.Cell>
-				<Table.Cell class="py-2.5">
+				<Table.Cell data-label="Agent name" class="py-2.5"><code>{key.suggestedName}</code></Table.Cell>
+				<Table.Cell data-label="Expires" class="py-2.5">
 					<div class="flex items-center gap-1.5 text-dim">
 						<RelativeTime isoTime={key.expiresAt} {nowMs} />
 						{#if isExpired}
@@ -64,14 +64,14 @@
 						{/if}
 					</div>
 				</Table.Cell>
-				<Table.Cell class="py-2.5 text-dim">
+				<Table.Cell data-label="Last used" class="py-2.5 text-dim">
 					{#if key.lastUsedAt}
 						<RelativeTime isoTime={key.lastUsedAt} {nowMs} />
 					{:else}
 						<Badge variant="outline" class={`${badgeBase} text-dim`}>never used</Badge>
 					{/if}
 				</Table.Cell>
-				<Table.Cell class="py-2.5 pr-0">
+				<Table.Cell data-label="Actions" class="py-2.5 pr-0">
 					<div class="flex items-start justify-end gap-2">
 						{#if !key.hasSuccessor && !isExpired && !isConfirmingRevoke}
 							<ConfirmAction

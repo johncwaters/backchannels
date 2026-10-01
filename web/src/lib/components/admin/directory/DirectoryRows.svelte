@@ -28,7 +28,7 @@
 	const heading = $derived(kind === 'public' ? 'All public channels' : 'Your private chats');
 	const showsMineBadge = $derived(kind === 'public');
 
-	const headClass = 'sticky top-0 z-10 h-auto bg-ground px-3 pt-2.5 pb-1.5 text-xs font-normal tracking-[0.06em] text-dim shadow-[inset_0_-1px_0_var(--color-row-border)] max-[899px]:px-0';
+	const headClass = 'sticky top-0 z-10 h-auto bg-ground px-3 pt-2.5 pb-1.5 text-xs font-normal tracking-[0.06em] text-dim shadow-[inset_0_-1px_0_var(--color-row-border)] max-[899px]:top-[57px] max-[899px]:px-0';
 	const sortLinkClass = 'inline-flex items-center gap-1 text-inherit no-underline outline-none hover:text-foreground focus-visible:text-amber focus-visible:underline';
 	const peopleColumnClass = 'w-16 text-right tabular-nums max-[1100px]:hidden';
 	const todayColumnClass = 'w-[124px] max-[1100px]:w-16 max-[899px]:hidden';
@@ -74,7 +74,7 @@
 		{#each conversations as conversation (conversation.id)}
 			{@const label = conversationLabel(conversation, viewerEmail)}
 			{@const about = aboutTextFor(conversation)}
-			<Table.Row class="group relative border-row-border hover:bg-secondary has-[:focus-visible]:bg-secondary has-[details[open]]:bg-secondary">
+			<Table.Row class="group relative border-row-border hover:bg-secondary has-[:focus-visible]:bg-secondary has-[details[open]]:bg-secondary max-[899px]:h-11">
 				<Table.Cell class="px-3 py-2 max-[899px]:px-0">
 					<span class="flex min-w-0 items-center gap-2">
 						{#if conversation.unread > 0}
@@ -85,7 +85,7 @@
 							href={conversationHref(conversation.id, scope)}
 							data-nav-title={conversation.name}
 							title={label.fullName !== label.shownName ? label.fullName : undefined}
-							class={cn("min-w-0 truncate font-semibold no-underline outline-none after:absolute after:inset-0 after:content-[''] focus-visible:after:shadow-[inset_0_0_0_1px_var(--color-amber)] group-hover:text-amber", conversation.unread > 0 ? 'text-white' : 'text-foreground')}
+							class={cn("min-w-0 truncate font-semibold no-underline outline-none after:absolute after:inset-0 after:content-[''] focus-visible:after:shadow-[inset_0_0_0_1px_var(--color-amber)] group-hover:text-amber max-[899px]:overflow-visible max-[899px]:whitespace-normal max-[899px]:wrap-anywhere", conversation.unread > 0 ? 'text-white' : 'text-foreground')}
 						>{label.shownName}</a>
 						{#if label.hiddenMemberCount > 0}
 							<span class="shrink-0 text-xs text-dim">+{label.hiddenMemberCount}</span>
@@ -96,7 +96,7 @@
 					</span>
 				</Table.Cell>
 				<Table.Cell class="px-3 py-2 font-sans max-[899px]:px-2.5">
-					<span class={cn('block truncate', about.isTopic ? 'text-subheading' : 'text-preview')}>{about.text}</span>
+					<span class={cn('block truncate max-[899px]:overflow-visible max-[899px]:whitespace-normal max-[899px]:wrap-anywhere', about.isTopic ? 'text-subheading' : 'text-preview')}>{about.text}</span>
 					{#if kind === 'private' && conversation.members.length > 0}
 						<ChatMembers members={conversation.members} />
 					{/if}

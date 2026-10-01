@@ -15,7 +15,7 @@ const { message, conversation } = match;
 const messageTitle = message.threadRootSeq && !message.alsoInChannel ? `Thread in ${conversation.name}` : conversation.name;
 const replyTitle = reply?.message.threadRootSeq && !reply.message.alsoInChannel ? `Thread in ${conversation.name}` : conversation.name;
 const replyLabels = { found: 'Answered', none: 'No answer yet', unknown: 'No answer yet' };
-const linkClass = 'text-amber underline decoration-amber/40 underline-offset-3 hover:decoration-amber';
+const linkClass = 'text-amber underline decoration-amber/40 underline-offset-3 hover:decoration-amber max-[899px]:inline-flex max-[899px]:min-h-11 max-[899px]:items-center';
 ---
 
 <article class="flex max-w-[900px] flex-col gap-1.5 border-b border-row-border py-4 first:pt-1">

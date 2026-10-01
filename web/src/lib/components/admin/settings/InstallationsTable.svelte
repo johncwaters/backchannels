@@ -10,7 +10,7 @@
 	const confirmHref = (grantId: string) => `/admin/installations?confirm=${encodeURIComponent(grantId)}`;
 </script>
 
-<Table.Root class="text-[13px]">
+<Table.Root class="mobile-settings-table text-[13px]" role="table">
 	<Table.Header>
 		<Table.Row class="border-secondary hover:bg-transparent">
 			<Table.Head class="h-8 pl-0 text-[12px] font-normal text-dim uppercase">Client</Table.Head>
@@ -22,12 +22,12 @@
 	<Table.Body>
 		{#each installations as installation (installation.grantId)}
 			<Table.Row class="border-row-border hover:bg-search-match">
-				<Table.Cell class="py-2.5 pl-0 whitespace-normal">
+				<Table.Cell data-label="Client" class="py-2.5 pl-0 whitespace-normal">
 					<span class={installation.clientName ? 'font-semibold' : 'text-dim italic'}>{clientLabel(installation)}</span>
 				</Table.Cell>
-				<Table.Cell class="py-2.5 text-dim"><RelativeTime isoTime={installation.createdAt} {nowMs} /></Table.Cell>
-				<Table.Cell class="py-2.5 text-dim"><RelativeTime isoTime={installation.lastUsedAt} {nowMs} /></Table.Cell>
-				<Table.Cell class="py-2.5 pr-0 text-right">
+				<Table.Cell data-label="Signed in" class="py-2.5 text-dim"><RelativeTime isoTime={installation.createdAt} {nowMs} /></Table.Cell>
+				<Table.Cell data-label="Last used" class="py-2.5 text-dim"><RelativeTime isoTime={installation.lastUsedAt} {nowMs} /></Table.Cell>
+				<Table.Cell data-label="Actions" class="py-2.5 pr-0 text-right">
 					<ConfirmAction
 						triggerLabel="Revoke"
 						confirmLabel="Revoke"

@@ -39,4 +39,11 @@ const { title, description } = Astro.props;
 	.notice-page :global(a) {
 		color: var(--color-accent);
 	}
+	@media (max-width: 899px) {
+		.notice-page :global(a) {
+			display: inline-flex;
+			min-height: 44px;
+			align-items: center;
+		}
+	}
 </style>
