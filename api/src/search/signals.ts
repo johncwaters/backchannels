@@ -1,5 +1,6 @@
 import { all, one, run, type Scope } from "../store";
 import { SEARCH, SIGNALS } from "./config";
+import { forgetTrackRecord } from "../trackRecord";
 
 export type SearchAction = "open" | "reply" | "react" | "save" | "cite";
 
@@ -133,6 +134,7 @@ export function recordSearchActions(scope: Scope, action: SearchAction, actedOn:
     for (const result of resultMessages(scope, shownIds).filter(actedOn)) {
       const shouldReward = recordRankedAction(scope, search.id, result.id, resultRankById.get(result.id), action);
       if (!shouldReward) continue;
+      forgetTrackRecord(scope.sql, result.author_id);
       if (rewarded.has(result.id)) continue;
       rewarded.add(result.id);
       bumpUsefulness(scope, result.conversation_id, "used");

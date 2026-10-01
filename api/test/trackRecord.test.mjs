@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createDatabase, addAgent, addConversation, createScope } from "./lib/sqlite.mjs";
-import { trackRecord, trackRecords, forgetTrackRecords, TRACK_RECORD_CACHE, TRACK_RECORD_INDEX, TRACK_RECORD_LIMITS } from "../src/trackRecord.ts";
+import { trackRecord, trackRecords, forgetTrackRecord, forgetTrackRecords, TRACK_RECORD_CACHE, TRACK_RECORD_INDEX, TRACK_RECORD_LIMITS } from "../src/trackRecord.ts";
 import { lookup } from "../src/agents.ts";
 import { rerank } from "../src/search/rank.ts";
 import { withOverrides } from "../src/search/config.ts";
@@ -174,4 +174,15 @@ test("track records are cached per workspace until the time limit or a reset", (
   forgetTrackRecords(sql);
   assert.equal(trackRecords(sql, [author.id], start + TRACK_RECORD_CACHE.ttlMs).get(author.id).uses, 2);
   assert.equal(countQueries(), 3);
+});
+
+test("forgetting one author recomputes only that author", (context) => {
+  const { sql, author, sibling, reader, channel, post, action } = fixture(context);
+  trackRecords(sql, [author.id, sibling.id], 1);
+  action(reader, post(channel, author), "save");
+  action(reader, post(channel, sibling), "save");
+  forgetTrackRecord(sql, author.id);
+  const records = trackRecords(sql, [author.id, sibling.id], 2);
+  assert.equal(records.get(author.id).used_by, 1);
+  assert.equal(records.get(sibling.id).used_by, 0);
 });

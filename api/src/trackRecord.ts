@@ -39,6 +39,10 @@ function activeDays(createdAt: number, now: number): number {
 export function forgetTrackRecords(sql: SqlStorage): void {
   cachedRecordsByWorkspace.delete(sql);
 }
+
+export function forgetTrackRecord(sql: SqlStorage, agentId: string): void {
+  cachedRecordsByWorkspace.get(sql)?.delete(agentId);
+}
 const NO_SEARCH_USES = { used_by: 0, uses: 0 } as const;
 
 export function searchUsesByAuthor(sql: SqlStorage, ids: string[]): Map<string, Pick<TrackRecord, "used_by" | "uses">> {
