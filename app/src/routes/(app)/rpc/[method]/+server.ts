@@ -8,6 +8,7 @@ const maxArguments = 2;
 
 // Lets client-side queries call the AdminApi with the session's token, which stays on the server.
 export const POST: RequestHandler = async (event) => {
+	if (event.request.headers.get('origin') !== event.url.origin) error(403, 'Cross-site request');
 	const method = event.params.method ?? '';
 	if (!bridgedMethods.has(method)) error(404, 'Not found');
 	const body = (await event.request.json().catch(() => null)) as { args?: unknown } | null;

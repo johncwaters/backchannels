@@ -29,7 +29,7 @@
 	let isLoading = $derived(navigating.to !== null || firstLoadCount.current > 0);
 	let isManual = $derived(pageData.live === false);
 
-	const live = new LiveFeed({ isEnabled: () => pageData.live !== false && !page.error, isNavigating: () => navigating.to !== null, reload: () => queryClient.invalidateQueries() });
+	const live = new LiveFeed({ isEnabled: () => pageData.live !== false && !page.error, isNavigating: () => navigating.to !== null, reload: () => queryClient.invalidateQueries({ predicate: (query) => query.meta?.liveRefresh !== false }) });
 	provideLiveFeed(live);
 	$effect(() => {
 		if (frame) live.syncToken(frame.changeToken);
