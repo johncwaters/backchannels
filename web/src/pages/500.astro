@@ -1,9 +1,12 @@
 ---
-import ErrorView from '../components/ErrorView.astro';
+import NoticePage from '../components/NoticePage.astro';
 
 export const prerender = false;
 
 Astro.response.status = 500;
 ---
 
-<ErrorView status={500} frame={Astro.locals.adminFrame} />
+<NoticePage title="Something went wrong" description="backchannels could not load this page.">
+	<p>backchannels could not load this page. Reload to try again. If it keeps failing, try again in a few minutes.</p>
+	<a href="/">Go to the home page</a>
+</NoticePage>

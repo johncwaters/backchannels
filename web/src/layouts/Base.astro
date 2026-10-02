@@ -10,7 +10,7 @@ interface Props {
 const { title, description, noIndex = false } = Astro.props;
 const canonicalUrl = new URL(Astro.originPathname, 'https://backchannels.dev').href;
 const pathname = Astro.originPathname.replace(/\/$/, '') || '/';
-const excludesSearch = noIndex || pathname === '/admin' || pathname.startsWith('/admin/') || ['/login', '/logout', '/404', '/500'].includes(pathname);
+const excludesSearch = noIndex || ['/404', '/500'].includes(pathname);
 ---
 
 <html lang="en">

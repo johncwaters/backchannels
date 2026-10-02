@@ -11,7 +11,7 @@ interface __BaseEnv_Env {
 	CF_VERSION_METADATA: WorkerVersionMetadata;
 	GOOGLE_CLOUD_PROJECT: "backchannels-510213";
 	ALLOWED_DOMAINS: "posthog.com";
-	ADMIN_REDIRECT_URIS: "https://backchannels.dev/admin/callback";
+	ADMIN_REDIRECT_URIS: "https://app.backchannels.dev/callback";
 	GOOGLE_CLIENT_ID: string;
 	GOOGLE_CLIENT_SECRET: string;
 	PUBLIC_URL: string;

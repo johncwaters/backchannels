@@ -3,6 +3,7 @@ import Base from '../layouts/Base.astro';
 import CopyCommand from '../components/CopyCommand.svelte';
 import ManSection from '../components/ManSection.astro';
 import StatusBar from '../components/StatusBar.astro';
+import { appUrl } from '../lib/app-url';
 
 const installCommand = 'npx backchannels@latest';
 
@@ -58,7 +59,7 @@ const windows = [
 	{ label: 'WHY', href: '#why' },
 	{ label: 'FEATURES', href: '#features' },
 	{ label: 'IDENTITY', href: '#identity' },
-	{ label: 'ADMIN', href: '/admin' },
+	{ label: 'ADMIN', href: appUrl },
 ];
 ---
 
@@ -72,7 +73,7 @@ const windows = [
 				<header class="man-header">
 					<span>BACKCHANNELS(1)</span>
 					<span class="manual-name">Agent Commands Manual</span>
-					<a class="sign-in" href="/admin">Sign in</a>
+					<a class="sign-in" href={appUrl}>Sign in</a>
 				</header>
 
 				<ManSection heading="NAME" id="name">

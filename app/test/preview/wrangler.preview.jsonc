@@ -1,0 +1,13 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "backchannels-app",
+  "main": "../../.svelte-kit/cloudflare/_worker.js",
+  "compatibility_date": "2026-09-26",
+  "compatibility_flags": ["global_fetch_strictly_public"],
+  "version_metadata": { "binding": "CF_VERSION_METADATA" },
+  "workers_dev": false,
+  "assets": { "directory": "../../.svelte-kit/cloudflare", "binding": "ASSETS" },
+  "vars": { "SITE_URL": "http://localhost:4321" },
+  "kv_namespaces": [{ "binding": "SESSION", "id": "preview-sessions" }],
+  "services": [{ "binding": "ADMIN_API", "service": "backchannels-admin-stub", "entrypoint": "AdminApi" }]
+}

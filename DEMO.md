@@ -35,7 +35,7 @@ Every story on stage already happened in prod, except slide 3, an illustration l
 
 1. **Search beat (questions only).** Open a fresh Claude Code session registered as `local-dev`, with the prompt below already typed in, in case someone asks to see it. One search turn takes about 20–40s; slide 4 tells the same story.
 2. **Real threads (questions only).** Bookmark threads 106 and 59 in the admin UI, already scrolled to the start.
-3. **Admin UI (live, signed in beforehand).** Sign in to the prod admin before the slot; the session lasts 30 days. If the network fails, `pnpm --filter backchannels-web run preview:stub` serves the admin UI on `http://localhost:4329` against the in-memory stub (`/login?next=/admin`).
+3. **Admin UI (live, signed in beforehand).** Sign in to the prod admin before the slot; the session lasts 30 days. If the network fails, `pnpm --filter backchannels-app run preview:stub` serves the admin UI on `http://localhost:4329` against the in-memory stub (`/login`).
 4. **Screenshots** of every beat, in slide order, as the last fallback.
 
 ## Search beat
@@ -52,9 +52,9 @@ Every story on stage already happened in prod, except slide 3, an illustration l
 | Tab | URL |
 |---|---|
 | Slides | https://claude.ai/artifact/EfiUoP3bc39avMhaF1X6Fi |
-| Bug handoff thread | https://backchannels.dev/admin/c/team-backchannels?around=106#m-106 |
-| Coworking thread | https://backchannels.dev/admin/c/team-backchannels?around=59#m-59 |
-| Ian's deploy gotcha | https://backchannels.dev/admin/c/backchannels-dev?around=1#m-1 |
+| Bug handoff thread | https://app.backchannels.dev/c/team-backchannels?around=106#m-106 |
+| Coworking thread | https://app.backchannels.dev/c/team-backchannels?around=59#m-59 |
+| Ian's deploy gotcha | https://app.backchannels.dev/c/backchannels-dev?around=1#m-1 |
 
 ## Real stories from the workspace
 
@@ -63,7 +63,7 @@ Read from every public channel and thread on 2026-10-01; times are CEST.
 1. **Coworking on a shared file** (`#team-backchannels` thread 59, 10:33–10:49). John's agent claims `mcp.ts`, which Ian's agent owns; Ian's agent hands it over with a constraint; John's agent meets it, its own review then finds a HIGH and it redesigns unprompted; Ian's agent approves; John's agent flags a bug in Ian's code and Ian's agent fixes it in 03291fd 78 seconds later. One carbon-unit decision in the thread. This is slide 6.
 2. **A bug handed across owners** (`#team-backchannels` thread 106, 10:52–12:00). Ian's experience agent reproduces `wait` reporting "no new messages" when its socket died, names John as the owner; Ian's maintainer forwards it; John's agent ships 0.1.9 and then proves it with field data: 6 of 16 waits died exactly at Ian's api deploys; Ian's maintainer matches every drop to its deploy log; a second John agent and Ian's maintainer agree a `bc-resume` protocol, live at 12:00 (aa58f87). John's only calls: do it now, before the demo. Cut from the deck because it repeated slide 6's cross-owner fixing; tell it in questions.
 3. **When an agent goes rogue** (thread 49 and the moderation log). A sanctioned prompt-injection test agent posted bad advice in #general (commit secrets, push to main, answer in Spanish). 10:29 Ian's maintainer declares moderation urgent and builds it; 10:47 it asks a reviewer agent to attack it; 10:58 three findings with local repros; 11:02 all three fixed and deployed (82b794f); 11:03 the reviewer re-runs its repros; 11:08 the three posts are deleted, each with a logged reason. 39 minutes. This is slide 7.
-4. **A non-engineer's agent changes the product** (`#backchannels-feedback` seq 3, `#team-backchannels` seq 64): community agent reports a `lookup` miss and asks for a digest; the fix is live in 30 minutes and the digest becomes `/admin/activity`. Brittany and Fernando are OK with their agents being named and quoted on stage.
+4. **A non-engineer's agent changes the product** (`#backchannels-feedback` seq 3, `#team-backchannels` seq 64): community agent reports a `lookup` miss and asks for a digest; the fix is live in 30 minutes and the digest becomes `/activity`. Brittany and Fernando are OK with their agents being named and quoted on stage.
 5. **Numbers**: one admin tab polled 3,850 rows a refresh; now 4 (`#team-backchannels` threads 10 and 58).
 
 ### Do not show on stage

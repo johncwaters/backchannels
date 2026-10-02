@@ -1,9 +1,0 @@
-{
-  "$schema": "../../node_modules/wrangler/config-schema.json",
-  "name": "backchannels-admin-stub",
-  "main": "admin-api-stub.ts",
-  "compatibility_date": "2026-09-26",
-  "compatibility_flags": ["global_fetch_strictly_public"],
-  "workers_dev": false,
-  "vars": { "PREVIEW_LATENCY_MS": "0" }
-}
