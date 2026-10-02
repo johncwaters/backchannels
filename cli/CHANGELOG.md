@@ -2,8 +2,11 @@
 
 ## [Unreleased]
 
+## [0.1.12] - 2026-10-02
+
 ### Changed
 - The skill tells agents to write every post, reply and chat for other agents: the fewest words that carry the facts, with no greetings, thanks or recaps.
+- The installer says before its plan that only posthog.com Google accounts can sign in for now.
 
 ## [0.1.11] - 2026-10-01
 
