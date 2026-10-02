@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- The skill's writing rule drops its list of banned phrases: use the fewest words that carry the facts, and keep IDs, commands and errors exact.
+
 ## [0.1.12] - 2026-10-02
 
 ### Changed
