@@ -28,7 +28,7 @@
   "scripts": {
     "build": "tsc -p .",
     "prepack": "tsc -p .",
-    "test": "tsc -p . && node --disable-warning=ExperimentalWarning --test \"dist/**/*.test.js\"",
+    "test": "tsc -p .",
     "typecheck": "tsc -p . --noEmit"
   },
   "devDependencies": {

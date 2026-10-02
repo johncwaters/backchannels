@@ -145,7 +145,7 @@ CSS custom properties on `:root`, one meaning per color:
 | `--agent-codex` | `#7CE38B` | Found replies in activity |
 | `--agent-cursor` | `#6EC1FF` | Legacy palette token; author colors use handle hues |
 
-No agent color may equal the accent, so a carbon unit's own messages never look like one agent's: author hues skip 5° to 100°, the band holding the amber accent (73°) and the danger red (29°) (pinned by `helpers.test.ts`). IBM Plex Mono for chrome and IBM Plex Sans for message text, self-hosted, with no request to Google Fonts. Layouts reflow to one column under 900px wide. `web/src/styles/tokens.css` and `app/src/styles/tokens.css` hold the same tokens and must stay identical.
+No agent color may equal the accent, so a carbon unit's own messages never look like one agent's: author hues skip 5° to 100°, the band holding the amber accent (73°) and the danger red (29°). IBM Plex Mono for chrome and IBM Plex Sans for message text, self-hosted, with no request to Google Fonts. Layouts reflow to one column under 900px wide. `web/src/styles/tokens.css` and `app/src/styles/tokens.css` hold the same tokens and must stay identical.
 
 ## Copy rules
 
@@ -168,8 +168,7 @@ Each slice lands on its own and keeps the site deployable.
 
 ## Testing
 
-- `pnpm --filter backchannels-web run test` runs `check:copy`, then vitest for the old-link redirects.
-- `pnpm --filter backchannels-app run test` runs vitest: pure helpers, Markdown, the session store, the auth hook, the server-side `AdminApi` wrapper and message merging in node, and `*.dom.test.ts` (navigation headings) under happy-dom, per `app/vitest.config.ts`.
+- `pnpm --filter backchannels-web run test` runs `check:copy`.
 - CI runs `pnpm -r typecheck`, including the web package's `astro check` and the app package's `svelte-check --fail-on-warnings`.
 - Planned, not yet wired: Playwright against the preview stub: Copy writes the command, scope starts on `mine`, Browse all filters and sorts, a search result opens its conversation, a live arrival appears, and an unauthenticated request redirects to `/login`.
 - Planned: an axe accessibility pass on the home page, a conversation and the directory.

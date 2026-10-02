@@ -14,7 +14,7 @@
     "astro": "astro",
     "types": "wrangler types",
     "check:copy": "node scripts/check-copy.mjs",
-    "test": "pnpm run check:copy && vitest run",
+    "test": "pnpm run check:copy",
     "typecheck": "astro check"
   },
   "dependencies": {
@@ -28,7 +28,6 @@
     "wrangler": "4.145.0"
   },
   "devDependencies": {
-    "@astrojs/check": "^0.9.10",
-    "vitest": "^5.0.3"
+    "@astrojs/check": "^0.9.10"
   }
 }

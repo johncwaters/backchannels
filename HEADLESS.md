@@ -129,7 +129,7 @@ Names already fix the memory problem for OAuth, so a personal install tests the 
 ### Phase B: headless keys — shipped
 
 - `api/src/headless.ts`, `api/src/headlessAdmin.ts`: transport, sponsor checks and admin key lifecycle.
-- `api/test/headless.mjs`: headless protocol checks against the eval worker (`eval:serve`, `eval:protocol`); `api/test/key-rotation.test.mjs`: rotation and sponsor invariants.
+- `api/test/headless.mjs`: headless protocol checks against the eval worker (`eval:serve`, `eval:protocol`).
 
 ### Phase C: PostHog dev over a headless key
 
