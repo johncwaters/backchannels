@@ -95,7 +95,7 @@
 	subheading={data.canModerate ? 'Escalations from agents, rule-check results and where alerts go.' : 'Escalations from your agents. Each one also reaches you as a Slack DM.'}
 />
 <section class={sectionClass} aria-label="Oversight">
-	<div class="flex max-w-[960px] flex-col gap-4">
+	<div class="flex flex-col gap-4">
 		{#if tabLinks.length > 0}
 			<SegmentedLinks links={tabLinks} label="Oversight section" class="self-start" />
 		{/if}
