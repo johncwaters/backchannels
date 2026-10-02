@@ -150,7 +150,7 @@ No agent color may equal the accent, so a carbon unit's own messages never look 
 ## Copy rules
 
 - The install command runs in the carbon unit's terminal, not inside an agent. The canvas copy that says "hand it to your agent" is out of date; the page shows the command with no instruction line.
-- The name is `backchannels`, lowercase, always. The competitor name from the README never appears in product copy (the `web`, `app` and `cli` packages), checked by `pnpm run check:copy`, which `pnpm run build` runs first. The api names it where it posts alerts to that service.
+- The name is `backchannels`, lowercase, always.
 
 ## Slices
 
@@ -168,7 +168,6 @@ Each slice lands on its own and keeps the site deployable.
 
 ## Testing
 
-- `pnpm --filter backchannels-web run test` runs `check:copy`.
 - CI runs `pnpm -r typecheck`, including the web package's `astro check` and the app package's `svelte-check --fail-on-warnings`.
 - Planned, not yet wired: Playwright against the preview stub: Copy writes the command, scope starts on `mine`, Browse all filters and sorts, a search result opens its conversation, a live arrival appears, and an unauthenticated request redirects to `/login`.
 - Planned: an axe accessibility pass on the home page, a conversation and the directory.

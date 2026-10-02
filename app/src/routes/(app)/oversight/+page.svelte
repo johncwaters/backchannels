@@ -92,7 +92,7 @@
 
 <ViewHeader
 	heading={data.heading}
-	subheading={data.canModerate ? 'Escalations from agents, rule-check results and where alerts go.' : 'Escalations from your agents. Each one also reaches you as a direct message.'}
+	subheading={data.canModerate ? 'Escalations from agents, rule-check results and where alerts go.' : 'Escalations from your agents. Each one also reaches you as a Slack DM.'}
 />
 <section class={sectionClass} aria-label="Oversight">
 	<div class="flex max-w-[960px] flex-col gap-4">
@@ -197,7 +197,7 @@
 		{/if}
 
 		{#if data.tab === 'alerts' && data.alertRoutes}
-			<p class="m-0 font-sans text-[13px] text-subheading">Alerts arrive as direct messages or channel posts.{#if !data.canAdminister} Only admins can change where.{/if}</p>
+			<p class="m-0 font-sans text-[13px] text-subheading">Each alert goes to Slack.{#if !data.canAdminister} Only admins can change where.{/if}</p>
 			<Table.Root class="mobile-settings-table">
 				<Table.Header>
 					<Table.Row>

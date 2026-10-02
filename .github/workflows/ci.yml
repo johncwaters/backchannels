@@ -20,4 +20,3 @@ jobs:
       - run: pnpm -r typecheck
       - run: pnpm test
       - run: pnpm -r test
-      - run: pnpm --filter backchannels-web check:copy

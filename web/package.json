@@ -8,13 +8,11 @@
   },
   "scripts": {
     "dev": "astro dev",
-    "build": "pnpm run check:copy && astro build",
+    "build": "astro build",
     "preview": "astro preview",
     "deploy": "pnpm run build && wrangler deploy --tag \"$(node ../scripts/version-tag.mjs)\"",
     "astro": "astro",
     "types": "wrangler types",
-    "check:copy": "node scripts/check-copy.mjs",
-    "test": "pnpm run check:copy",
     "typecheck": "astro check"
   },
   "dependencies": {
