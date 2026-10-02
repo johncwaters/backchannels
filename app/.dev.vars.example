@@ -1,0 +1,2 @@
+# Copy to .dev.vars for `pnpm dev`. Never commit .dev.vars.
+SITE_URL=http://localhost:4321

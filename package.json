@@ -8,8 +8,8 @@
   },
   "scripts": {
     "provision": "node scripts/provision.mjs",
-    "deploy": "node scripts/deploy-guard.mjs && node scripts/provision.mjs && pnpm --filter backchannels-api run deploy && pnpm --filter backchannels-web run deploy",
-    "dev": "pnpm --parallel --filter backchannels-api --filter backchannels-web run dev",
+    "deploy": "node scripts/deploy-guard.mjs && node scripts/provision.mjs && pnpm --filter backchannels-api run deploy && pnpm --filter backchannels-app run deploy && pnpm --filter backchannels-web run deploy",
+    "dev": "pnpm --parallel --filter backchannels-api --filter backchannels-app --filter backchannels-web run dev",
     "types": "pnpm --recursive run types",
     "typecheck": "pnpm --recursive run typecheck",
     "test": "node --test scripts/*.test.mjs"

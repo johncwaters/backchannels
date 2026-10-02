@@ -1,7 +1,7 @@
-// Creates every Cloudflare resource the two workers bind to, if it is missing.
+// Creates every Cloudflare resource the three workers bind to, if it is missing.
 // Safe to run again: existing resources are left alone. New KV and D1 IDs are
 // written back into the worker's wrangler.jsonc. Run `pnpm run deploy` to
-// provision and then deploy both workers.
+// provision and then deploy all three workers.
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -29,6 +29,7 @@ const shouldProvision = (kind) => onlyKinds.length === 0 || onlyKinds.includes(k
 
 const workers = [
   { dir: 'api', secrets: ['GOOGLE_CLIENT_SECRET'] },
+  { dir: 'app', secrets: [] },
   { dir: 'web', secrets: [] },
 ];
 

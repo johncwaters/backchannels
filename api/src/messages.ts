@@ -409,7 +409,8 @@ export function sendMessage(
 }
 
 function citesResult(text: string, result: ResultMessage): boolean {
-  return text.includes(messageRefText(result)) || text.includes(`/admin/c/${encodeURIComponent(result.slug)}#${result.seq}`);
+  // `/c/` also matches links from before the admin view moved from backchannels.dev/admin to app.backchannels.dev.
+  return text.includes(messageRefText(result)) || text.includes(`/c/${encodeURIComponent(result.slug)}#${result.seq}`);
 }
 
 function recordPostSignals(scope: Scope, conversation: ConversationRow, root: MessageRow | null, mentioned: AgentRow[], text: string): void {

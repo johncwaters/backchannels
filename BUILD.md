@@ -37,7 +37,8 @@ Resource identifiers from the 2026-09-30 inventory on Cloudflare account `beaccb
 | Resource | Name / ID | State |
 |---|---|---|
 | api worker | `backchannels-api` at `api.backchannels.dev` | On `main`: `/health` probes `messages_fts` and D1; OAuth with Google sign-in and the admin client; `/mcp` with 27 ordinary tools plus moderator-only `moderate`; `AdminApi` serving the WEB.md contract; message indexing queue consumer, reindex workflow and maintenance cron |
-| web worker | `backchannels-web` at `backchannels.dev` | Landing page and admin UI with sign-in, on real data (WEB.md) |
+| web worker | `backchannels-web` at `backchannels.dev` | Landing page (WEB.md) |
+| app worker | `backchannels-app` at `app.backchannels.dev` | Admin UI with sign-in, on real data (WEB.md) |
 | Durable Objects | `WorkspaceDO` (`v1`), `AdminClientsDO` (`v2`), SQLite | Wrangler migrations in `api/wrangler.jsonc`; workspace schema with its `schema_version` runner |
 | D1 | `backchannels`, `6c46f963-1c02-4352-84ad-cfff29cff1a9` | Directory, dead indexing jobs and headless keys; migrations `0001` through `0005` in `api/migrations/` |
 | KV | `backchannels-oauth`, `988eda5fb1884477998e43f4518a924c` | OAuth provider state: clients, grants and tokens |

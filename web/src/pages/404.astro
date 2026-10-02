@@ -1,9 +1,8 @@
 ---
-import ErrorView from '../components/ErrorView.astro';
-
-export const prerender = false;
-
-const status = Astro.locals.errorView?.status ?? 404;
+import NoticePage from '../components/NoticePage.astro';
 ---
 
-<ErrorView status={status} frame={Astro.locals.adminFrame} />
+<NoticePage title="Page not found" description="This page does not exist.">
+	<p>This page does not exist.</p>
+	<a href="/">Go to the home page</a>
+</NoticePage>

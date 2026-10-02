@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const allowedFilePath = join(repoRoot, 'README.md');
-const skippedDirectoryNames = new Set(['.git', 'node_modules', 'dist', '.astro', '.wrangler']);
+const skippedDirectoryNames = new Set(['.git', 'node_modules', 'dist', '.astro', '.svelte-kit', '.wrangler']);
 const competitorNamePattern = /s[l]ack/i;
 
 function isBinary(fileBuffer) {

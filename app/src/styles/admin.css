@@ -1,0 +1,288 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+@custom-variant data-horizontal (&:where([data-orientation='horizontal'], [data-horizontal]));
+@custom-variant data-vertical (&:where([data-orientation='vertical'], [data-vertical]));
+@custom-variant data-open (&:where([data-state='open'], [data-open]:not([data-open='false'])));
+@custom-variant data-closed (&:where([data-state='closed'], [data-closed]:not([data-closed='false'])));
+@custom-variant data-active (&:where([data-state='active'], [data-state='on'], [data-active]:not([data-active='false'])));
+
+:root {
+	--radius: 0px;
+	--background: var(--color-ground);
+	--foreground: var(--color-text);
+	--card: var(--color-sidebar);
+	--card-foreground: var(--color-text);
+	--popover: var(--color-sidebar);
+	--popover-foreground: var(--color-text);
+	--primary: var(--color-accent);
+	--primary-foreground: var(--color-ground);
+	--secondary: var(--color-selection);
+	--secondary-foreground: var(--color-text);
+	--muted: var(--color-selection);
+	--muted-foreground: var(--color-dim);
+	--accent: var(--color-selection);
+	--accent-foreground: var(--color-text);
+	--destructive: var(--color-danger);
+	--border: var(--color-control-border);
+	--input: var(--color-control-border);
+	--ring: var(--color-accent);
+}
+
+@theme inline {
+	--font-sans: var(--font-prose);
+	--font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+	--radius-sm: var(--radius);
+	--radius-md: var(--radius);
+	--radius-lg: var(--radius);
+	--radius-xl: var(--radius);
+	--radius-2xl: var(--radius);
+	--radius-3xl: var(--radius);
+	--radius-4xl: var(--radius);
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+	--color-amber: var(--color-accent);
+	--color-ground: var(--color-ground);
+	--color-sidebar: var(--color-sidebar);
+	--color-dim: var(--color-dim);
+	--color-message: var(--color-message);
+	--color-subheading: var(--color-subheading);
+	--color-preview: var(--color-preview);
+	--color-row-border: var(--color-row-border);
+	--color-search-match: var(--color-search-match);
+	--color-agent-claude-code: var(--agent-claude-code);
+	--color-agent-codex: var(--agent-codex);
+	--color-agent-cursor: var(--agent-cursor);
+	--ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+	--ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+	--color-sidebar-foreground: var(--color-text);
+	--color-sidebar-primary: var(--color-accent);
+	--color-sidebar-primary-foreground: var(--color-ground);
+	--color-sidebar-accent: var(--color-selection);
+	--color-sidebar-accent-foreground: var(--color-text);
+	--color-sidebar-border: var(--color-control-border);
+	--color-sidebar-ring: var(--color-accent);
+}
+
+/* One mobile width for the whole app: shadcn components use md, and so does the layout. */
+@theme {
+	--breakpoint-md: 56.25rem;
+}
+
+@layer base {
+	* {
+		@apply border-border outline-ring/50;
+	}
+	body {
+		@apply bg-background text-foreground font-mono;
+	}
+}
+
+.route-progress {
+	position: fixed;
+	inset: 0 0 auto;
+	z-index: 60;
+	height: 2px;
+	background: var(--color-accent);
+	transform-origin: left;
+	transform: scaleX(0);
+	opacity: 0;
+	pointer-events: none;
+}
+.route-progress[data-state='running'] {
+	opacity: 1;
+	transform: scaleX(0.85);
+	transition: transform 4s cubic-bezier(0.1, 0.7, 0.2, 1), opacity 120ms linear;
+}
+.route-progress[data-state='done'] {
+	opacity: 0;
+	transform: scaleX(1);
+	transition: transform 180ms var(--ease-out-quint), opacity 260ms linear 160ms;
+}
+.admin-terminal :is(a, button, summary) {
+	transition: background-color 140ms var(--ease-out-quint), border-color 140ms var(--ease-out-quint), color 140ms var(--ease-out-quint), box-shadow 140ms var(--ease-out-quint);
+}
+.live-status {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+.live-status::before {
+	content: '';
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: currentColor;
+	opacity: 0.55;
+	transition: opacity 200ms var(--ease-out-quint);
+}
+.live-status[data-refreshing]::before {
+	opacity: 1;
+	animation: live-pulse 900ms var(--ease-out-quint);
+}
+.live-status[data-paused] {
+	opacity: 0.6;
+}
+@keyframes live-pulse {
+	from {
+		box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 60%, transparent);
+	}
+	to {
+		box-shadow: 0 0 0 6px transparent;
+	}
+}
+
+@media (width < 56.25rem) {
+	/* Touch targets of at least 44px. */
+	:is(.admin-terminal main, [data-slot='sidebar'], [data-slot='alert-dialog-content']) :is([data-slot='button'], summary, th a) {
+		min-height: 44px;
+		min-width: 44px;
+	}
+	:is(.admin-terminal main, [data-slot='sidebar']) :is([data-slot='input'], [data-slot='input-group-control']) {
+		min-height: 44px;
+		font-size: 16px;
+	}
+	.mobile-settings-table {
+		display: block;
+	}
+	.mobile-settings-table thead {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+	}
+	.mobile-settings-table tbody {
+		display: block;
+	}
+	.mobile-settings-table tbody tr {
+		display: grid;
+		gap: 8px;
+		padding: 16px 0;
+	}
+	.mobile-settings-table td {
+		display: grid;
+		grid-template-columns: 90px minmax(0, 1fr);
+		align-items: start;
+		gap: 12px;
+		padding: 0;
+		text-align: left;
+		white-space: normal;
+	}
+	.mobile-settings-table td::before {
+		content: attr(data-label);
+		color: var(--color-dim);
+		font-size: 12px;
+	}
+	.mobile-settings-table td > * {
+		min-width: 0;
+		white-space: normal;
+	}
+	.mobile-settings-table td > .flex {
+		flex-wrap: wrap;
+		justify-content: flex-start;
+	}
+	.mobile-settings-table td[data-label='Key'] {
+		display: block;
+	}
+	.mobile-settings-table td[data-label='Key']::before {
+		content: none;
+	}
+}
+
+/* Conversation feed. Message bodies are rendered Markdown, so these rules reach into HTML that Svelte does not scope. */
+article:is(.target, :target) {
+	@apply -mx-3.5 bg-secondary px-3.5 py-2.5 shadow-[inset_2px_0_0_var(--color-accent)];
+	animation: target-glow 1600ms var(--ease-out-quint);
+}
+article[data-arrived] {
+	@apply animate-in fade-in slide-in-from-bottom-[6px] duration-[420ms] ease-out-expo;
+}
+@keyframes target-glow {
+	from {
+		background: color-mix(in srgb, var(--color-accent) 22%, var(--color-selection));
+	}
+}
+@keyframes sidebar-pulse-accent {
+	from {
+		color: var(--color-accent);
+	}
+}
+.message-body {
+	@apply font-sans text-[15px] leading-normal text-message wrap-anywhere;
+}
+.message-body > * {
+	@apply m-0;
+}
+.message-body > :not(:first-child) {
+	@apply mt-1.5;
+}
+.message-body :is(h1, h2, h3, h4, h5, h6) {
+	@apply text-base font-semibold text-foreground;
+}
+.message-body strong {
+	@apply font-semibold text-foreground;
+}
+.message-body a {
+	@apply text-amber underline underline-offset-3;
+}
+.message-body ul {
+	@apply list-disc pl-5.5;
+}
+.message-body ol {
+	@apply list-decimal pl-5.5;
+}
+.message-body li + li {
+	@apply mt-0.5;
+}
+.message-body code {
+	@apply bg-secondary px-[5px] py-px font-mono text-sm text-foreground;
+}
+.message-body pre {
+	@apply overflow-x-auto border border-row-border bg-sidebar px-3 py-2.5 leading-normal;
+}
+.message-body pre:focus {
+	outline: 2px solid var(--color-accent);
+	outline-offset: 2px;
+}
+.message-body pre code {
+	@apply bg-transparent p-0 wrap-normal;
+}
+.message-body blockquote {
+	@apply border-l-2 border-border pl-3 text-preview;
+}
+.message-body .mention {
+	@apply bg-secondary px-[3px] font-mono text-sm;
+}
+.message-body .mention-broadcast {
+	@apply text-amber;
+}
+.message-body hr {
+	@apply border-0 border-t border-border;
+}
+.message-body table {
+	@apply block border-collapse overflow-x-auto text-sm;
+}
+.message-body :is(th, td) {
+	@apply border border-row-border px-2.5 py-1 text-left;
+}
+.message-body th {
+	@apply font-semibold text-foreground;
+}
