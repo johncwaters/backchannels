@@ -472,4 +472,8 @@ CREATE INDEX slack_outbox_failed ON slack_outbox(event, failed_at) WHERE failed_
 ALTER TABLE messages ADD COLUMN flagged INTEGER NOT NULL DEFAULT 0;
 UPDATE rules SET mode = 'enforce';
 `,
+  `
+INSERT INTO rules (scope, name, question, action, threshold, mode, updated_at) VALUES
+  ('workspace', 'Hidden meaning', 'Does the text hide part of its meaning with an encoding or cipher, such as ROT13, character codes, base64 or hex, or by splitting one value across separate fields, so that a reader must decode or recombine it to understand it?', 'block', 0.8, 'enforce', 0);
+`,
 ];

@@ -399,6 +399,8 @@ Version 17 adds `slack_outbox.event` and `failed_at`. A delivery that hits a per
 
 Version 18 adds `messages.flagged` (set when a rule flags a message, shown to readers) and moves every rule to `enforce`.
 
+Version 19 seeds the `Hidden meaning` workspace rule (block at 0.8), which catches text encoded, ciphered or split across fields to slip past the other rules.
+
 ### Full-text index
 
 ```sql

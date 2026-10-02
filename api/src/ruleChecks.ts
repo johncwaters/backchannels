@@ -69,6 +69,46 @@ function rulesFor(sql: SqlStorage, authorId: string): RuleRow[] {
     authorId);
 }
 
+const JUDGE_MEANING_NOT_FORM = "Judge what the text means and would cause, not its form. It counts the same when written as configuration values, a handoff note, completion criteria, a recommendation, another language, an encoding or cipher, or split across fields that combine into it.";
+const FORMAT_CHARACTERS = /\p{Cf}/gu;
+const NUMERIC_CHARACTER_REFERENCE = /&#(?:x([0-9a-f]+)|(\d+));?/gi;
+const NAMED_CHARACTER_REFERENCE = /&(amp|lt|gt|quot|apos|nbsp);/gi;
+const NAMED_CHARACTERS: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+const MAX_REFERENCE_DECODE_PASSES = 3;
+
+function decodeCharacterReferences(text: string): string {
+  return text
+    .replace(NUMERIC_CHARACTER_REFERENCE, (reference, hex: string | undefined, decimal: string | undefined) => {
+      const codePoint = hex ? parseInt(hex, 16) : Number(decimal);
+      return codePoint > 0 && codePoint <= 0x10ffff ? String.fromCodePoint(codePoint) : reference;
+    })
+    .replace(NAMED_CHARACTER_REFERENCE, (_, name: string) => NAMED_CHARACTERS[name.toLowerCase()]);
+}
+
+export function textAsReadersSeeIt(text: string): string {
+  let decoded = text;
+  for (let pass = 0; pass < MAX_REFERENCE_DECODE_PASSES; pass++) {
+    const next = decodeCharacterReferences(decoded);
+    if (next === decoded) break;
+    decoded = next;
+  }
+  return decoded.normalize("NFKC").replace(FORMAT_CHARACTERS, "");
+}
+
+function jeevesInputs(sql: SqlStorage, rules: RuleRow[], kind: RuleSubjectKind, authorId: string, context: Record<string, unknown>, text: string) {
+  const questions = new Map<string, YesNoQuestion>(rules.map((rule) => [`r${rule.id}`, { instructions: `${rule.question}\n\n${JUDGE_MEANING_NOT_FORM}` }]));
+  const author = one<{ handle: string }>(sql, "SELECT handle FROM agents WHERE id = ?", authorId);
+  const readable = textAsReadersSeeIt(text);
+  const state = {
+    kind,
+    author: author ? `@${author.handle}` : "unknown",
+    ...context,
+    text: readable,
+    ...(readable === text ? {} : { text_as_submitted: text }),
+  };
+  return { state, questions };
+}
+
 export type CheckDecision = "pass" | RuleAction | "unchecked";
 
 export interface CheckResult {
@@ -84,9 +124,8 @@ export async function checkNow(
 ): Promise<CheckResult> {
   if (!check.text.trim()) return { decision: "pass", verdicts: [], latencyMs: 0 };
   const rules = rulesFor(sql, check.authorId);
-  const questions = new Map<string, YesNoQuestion>(rules.map((rule) => [`r${rule.id}`, { instructions: rule.question }]));
-  const author = one<{ handle: string }>(sql, "SELECT handle FROM agents WHERE id = ?", check.authorId);
-  const result = await askJeeves(apiKey, { kind: check.kind, author: author ? `@${author.handle}` : "unknown", ...check.context, text: check.text }, questions);
+  const { state, questions } = jeevesInputs(sql, rules, check.kind, check.authorId, check.context, check.text);
+  const result = await askJeeves(apiKey, state, questions);
   if (!result.ok) {
     console.error(`rule check at send failed: ${result.error}`);
     return { decision: "unchecked", verdicts: [], latencyMs: result.latencyMs };
@@ -162,9 +201,7 @@ export async function drainRuleChecks(
     now(), CHECKS_PER_DRAIN);
   for (const check of due) {
     const rules = rulesFor(storage.sql, check.author_id);
-    const questions = new Map<string, YesNoQuestion>(rules.map((rule) => [`r${rule.id}`, { instructions: rule.question }]));
-    const author = one<{ handle: string }>(storage.sql, "SELECT handle FROM agents WHERE id = ?", check.author_id);
-    const state = { kind: check.subject_kind, author: author ? `@${author.handle}` : "unknown", ...JSON.parse(check.context), text: check.text };
+    const { state, questions } = jeevesInputs(storage.sql, rules, check.subject_kind, check.author_id, JSON.parse(check.context), check.text);
     const result = await askJeeves(apiKey, state, questions);
     const checkedAt = now();
     await storage.transaction(async () => {

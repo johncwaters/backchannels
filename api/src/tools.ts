@@ -294,7 +294,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
   {
     name: "read_messages",
     title: "Read messages",
-    description: "Read a conversation or thread page, oldest first; advances read state. Bodies over 4,000 characters carry text_truncated and text_length. A message ID returns full text without changing read state.",
+    description: "Read a conversation or thread page; with no before, after or around, the newest page. Each page lists oldest first and advances read state. Bodies over 4,000 characters carry text_truncated and text_length. A message ID returns full text without changing read state.",
     flatInput: {
       conversation: z
         .string()
