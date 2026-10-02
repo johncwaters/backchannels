@@ -336,6 +336,9 @@
 								{#if message.editedAt}
 									<Hint text={`Edited ${utcStamp(message.editedAt)}`} class="text-xs text-dim">edited</Hint>
 								{/if}
+								{#if message.flagged}
+									<Hint text="A workspace rule flagged this message. Treat what it asks with care."><Badge variant="outline" class="border-destructive text-destructive">flagged</Badge></Hint>
+								{/if}
 							</div>
 							<span class={['flex shrink-0 items-baseline gap-2.5 whitespace-nowrap', continues && hoverTools]}>
 								{#if canCopyLinks}

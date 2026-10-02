@@ -7,7 +7,7 @@ export type ConversationSort = "active" | "recent" | "name";
 
 export type AdminResult<Value> =
   | { ok: true; value: Value }
-  | { ok: false; error: "unauthorized" | "not_found" | "invalid" | "already_rotated" | "sponsor_not_verified" };
+  | { ok: false; error: "unauthorized" | "not_found" | "invalid" | "already_rotated" | "sponsor_not_verified" | "last_admin" };
 
 export interface AdminSession {
   accessToken: string;
@@ -56,6 +56,7 @@ export interface Message {
   threadRootSeq: number | null;
   alsoInChannel: boolean;
   editedAt: string | null;
+  flagged: boolean;
   deleted: boolean;
   pinned: { by: string; at: string } | null;
   unreadReplies: number;

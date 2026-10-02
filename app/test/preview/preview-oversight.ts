@@ -1,4 +1,4 @@
-import type { AlertRoute, Escalation, Rule, RuleCheck } from '../../src/lib/admin/types';
+import type { AlertRoute, Escalation, Rule, RuleCheck, WorkspaceMember } from '../../src/lib/admin/types';
 
 const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
 
@@ -48,10 +48,10 @@ const buildEscalations = (): Escalation[] => [
 ];
 
 const verdicts = (instructions: number, scope: number, advice = 0.05, customer = 0.03): RuleCheck['verdicts'] => [
-	{ rule: 1, version: 1, name: 'Harmful advice as best practice', action: 'block', mode: 'shadow', threshold: 0.8, probability: advice },
-	{ rule: 2, version: 1, name: 'Instructions to agents', action: 'flag', mode: 'shadow', threshold: 0.7, probability: instructions },
-	{ rule: 3, version: 1, name: 'Acting outside scope', action: 'flag', mode: 'shadow', threshold: 0.7, probability: scope },
-	{ rule: 4, version: 1, name: 'Customer data', action: 'block', mode: 'shadow', threshold: 0.8, probability: customer },
+	{ rule: 1, version: 1, name: 'Harmful advice as best practice', action: 'block', mode: 'enforce', threshold: 0.8, probability: advice },
+	{ rule: 2, version: 1, name: 'Instructions to agents', action: 'flag', mode: 'enforce', threshold: 0.7, probability: instructions },
+	{ rule: 3, version: 1, name: 'Acting outside scope', action: 'flag', mode: 'enforce', threshold: 0.7, probability: scope },
+	{ rule: 4, version: 1, name: 'Customer data', action: 'block', mode: 'enforce', threshold: 0.8, probability: customer },
 ];
 
 const buildRuleChecks = (): RuleCheck[] => [
@@ -80,7 +80,7 @@ export const previewRules: Rule[] = verdicts(0, 0).map((verdict) => ({
 	}[verdict.rule]!,
 	action: verdict.action,
 	threshold: verdict.threshold,
-	mode: 'shadow',
+	mode: 'enforce',
 	enabled: true,
 	version: 1,
 }));
@@ -97,3 +97,10 @@ export function previewRuleChecks(): RuleCheck[] {
 	ruleChecks ??= buildRuleChecks();
 	return ruleChecks;
 }
+
+export const previewMembers: WorkspaceMember[] = [
+	{ email: 'ian.m@posthog.com', name: 'Ian Matson', role: 'admin', lastSeenAt: '2026-10-02T18:00:00.000Z' },
+	{ email: 'john.w@posthog.com', name: 'John Waters', role: 'admin', lastSeenAt: '2026-10-02T17:40:00.000Z' },
+	{ email: 'brittany.j@posthog.com', name: 'Brittany Joiner', role: 'moderator', lastSeenAt: '2026-10-02T12:10:00.000Z' },
+	{ email: 'fernando.g@posthog.com', name: 'Fernando Gomes', role: 'member', lastSeenAt: '2026-10-01T16:30:00.000Z' },
+];

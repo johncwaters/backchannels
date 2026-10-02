@@ -35,6 +35,11 @@ export const tokenMethods = [
 	'listAlertRoutes',
 	'updateAlertRoute',
 	'listRules',
+	'createRule',
+	'updateRule',
+	'deleteRule',
+	'listMembers',
+	'setMemberRole',
 ] as const satisfies readonly (keyof AdminApi)[];
 
 // Each call goes through an async function, so it returns a real Promise. The local platform proxy

@@ -211,3 +211,72 @@ export function listRules(sql: SqlStorage, viewer: OversightViewer): OversightRe
      WHERE scope = 'workspace' OR owner_sub = ? ORDER BY scope DESC, id`, viewer.sub);
   return { ok: true, value: rows.map((row) => ({ ...row, id: String(row.id), enabled: row.enabled === 1 })) };
 }
+
+export interface RuleInput {
+  scope: "workspace" | "user";
+  name: string;
+  question: string;
+  action: "block" | "flag";
+  threshold: number;
+  enabled: boolean;
+}
+
+export const RULE_LIMITS = { workspace: 20, user: 10, nameLength: 80, questionLength: 500 } as const;
+
+function cleanRuleInput(input: Partial<RuleInput>): RuleInput | null {
+  const name = typeof input.name === "string" ? input.name.trim() : "";
+  const question = typeof input.question === "string" ? input.question.trim() : "";
+  const threshold = Number(input.threshold);
+  if (!name || name.length > RULE_LIMITS.nameLength) return null;
+  if (!question || question.length > RULE_LIMITS.questionLength) return null;
+  if (input.scope !== "workspace" && input.scope !== "user") return null;
+  if (input.action !== "block" && input.action !== "flag") return null;
+  if (!Number.isFinite(threshold) || threshold <= 0 || threshold >= 1) return null;
+  return { scope: input.scope, name, question, action: input.action, threshold, enabled: input.enabled !== false };
+}
+
+interface StoredRule {
+  id: number;
+  scope: "workspace" | "user";
+  owner_sub: string | null;
+}
+
+function canEditRule(viewer: OversightViewer, rule: Pick<StoredRule, "scope" | "owner_sub">): boolean {
+  return rule.scope === "workspace" ? viewer.role === "admin" : rule.owner_sub === viewer.sub;
+}
+
+export function createRule(sql: SqlStorage, viewer: OversightViewer, input: Partial<RuleInput>, now: number): OversightResult<RuleView[]> {
+  const rule = cleanRuleInput(input);
+  if (!rule) return invalid;
+  const ownerSub = rule.scope === "user" ? viewer.sub : null;
+  if (!canEditRule(viewer, { scope: rule.scope, owner_sub: ownerSub })) return { ok: false, error: "not_found" };
+  const { count } = one<{ count: number }>(sql,
+    "SELECT count(*) AS count FROM rules WHERE scope = ? AND owner_sub IS ?", rule.scope, ownerSub)!;
+  if (count >= RULE_LIMITS[rule.scope]) return invalid;
+  run(sql,
+    `INSERT INTO rules (scope, owner_sub, name, question, action, threshold, enabled, updated_by, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    rule.scope, ownerSub, rule.name, rule.question, rule.action, rule.threshold, rule.enabled ? 1 : 0, viewer.sub, now);
+  return listRules(sql, viewer);
+}
+
+export function updateRule(sql: SqlStorage, viewer: OversightViewer, id: string, input: Partial<RuleInput>, now: number): OversightResult<RuleView[]> {
+  const stored = one<StoredRule>(sql, "SELECT id, scope, owner_sub FROM rules WHERE id = ?", Number(id));
+  if (!stored) return { ok: false, error: "not_found" };
+  if (!canEditRule(viewer, stored)) return { ok: false, error: "not_found" };
+  const rule = cleanRuleInput({ ...input, scope: stored.scope });
+  if (!rule) return invalid;
+  run(sql,
+    `UPDATE rules SET name = ?, question = ?, action = ?, threshold = ?, enabled = ?, version = version + 1, updated_by = ?, updated_at = ?
+     WHERE id = ?`,
+    rule.name, rule.question, rule.action, rule.threshold, rule.enabled ? 1 : 0, viewer.sub, now, stored.id);
+  return listRules(sql, viewer);
+}
+
+export function deleteRule(sql: SqlStorage, viewer: OversightViewer, id: string): OversightResult<RuleView[]> {
+  const stored = one<StoredRule>(sql, "SELECT id, scope, owner_sub FROM rules WHERE id = ?", Number(id));
+  if (!stored) return { ok: false, error: "not_found" };
+  if (!canEditRule(viewer, stored)) return { ok: false, error: "not_found" };
+  run(sql, "DELETE FROM rules WHERE id = ?", stored.id);
+  return listRules(sql, viewer);
+}

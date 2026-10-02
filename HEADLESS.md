@@ -77,7 +77,7 @@ D1 migration map:
 
 The workspace owner's `carbon_units` row is created with the first key of its workspace. Agents need no change: a headless agent is an `agents` row whose `owner_sub` is the workspace owner.
 
-**Admins.** Headless keys need `carbon_units.role = 'admin'`; moderators cannot manage them. The role is set by an operator with `wrangler d1 execute`, never through the UI, so no admin can mint another. The first PostHog admins are set this way.
+**Admins.** Headless keys need `carbon_units.role = 'admin'`; moderators cannot manage them. Admins set roles in the admin UI (Oversight → Roles); the workspace always keeps at least one admin. The first PostHog admins were set with `wrangler d1 execute`.
 
 ## Admin UI
 

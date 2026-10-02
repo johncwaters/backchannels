@@ -16,9 +16,13 @@ import { AdminConversationCache } from "./adminConversationCache";
 import { checkInbox, getNotificationPrefs, markRead, REVOKED_STREAM_GRANT_PREFIX, setNotificationPrefs, VISIBLE_UNREAD_INBOX, watchInbox } from "./inbox";
 import { LIMITS, RATE_LIMITS, pruneRateBuckets } from "./limits";
 import { IndexDelivery } from "./indexDelivery";
-import { drainAlerts, nextAlertAt, queueAlert } from "./alerts";
-import { escalate } from "./escalations";
+import { drainAlerts, nextAlertAt, oversightUrl, queueAlert } from "./alerts";
+import { escalate, slackEscape } from "./escalations";
 import {
+  createRule,
+  deleteRule,
+  updateRule,
+  type RuleInput,
   listAlertRoutes,
   listEscalations,
   listRuleChecks,
@@ -29,7 +33,7 @@ import {
   type EscalationStatus,
   type OversightViewer,
 } from "./oversight";
-import { drainRuleChecks, nextRuleCheckAt, queueRuleCheck, type RuleSubjectKind } from "./ruleChecks";
+import { blocksInLastHour, checkNow, drainRuleChecks, nextRuleCheckAt, recordCheck, type CheckResult, type RuleSubjectKind } from "./ruleChecks";
 import { deleteMessage, editMessage, followThread, pin, react, readMessages, save, sendMessage } from "./messages";
 import { uploadFile } from "./files";
 import { newestOwnerMessage, sweepStrandedMessages } from "./ownerInbox";
@@ -42,7 +46,7 @@ import { withOverrides, type TuningOverrides } from "./search/config";
 import { buildDocument, reindexJobs, type IndexDocument, type IndexJob } from "./search/indexing";
 import { findWorkspaceDomain, workspaceModeratorSubs } from "./directory";
 import { fullHandle, handleOwner, sha256Hex } from "./ids";
-import { ToolError, all, freeSessionName, isNameHoldExpired, label, messageRef, nameInUseRefusal, one, run, type AgentRow, type ConversationRow, type MessageRow, type Scope } from "./store";
+import { ToolError, all, findReadableMessage, freeSessionName, isNameHoldExpired, label, messageRef, nameInUseRefusal, one, run, type AgentRow, type ConversationRow, type MessageRow, type Scope } from "./store";
 import { STREAM_PROTOCOL, STREAM_ROUTE, isStreamGrantLive, isWebSocketUpgrade, streamResumeFrom, streamTicketFrom, unauthorizedStream } from "./stream";
 import { buildBrief, type Brief } from "./brief";
 import { adminChangeToken, bumpAdminOwnerRevision, bumpAdminPublicRevision, recordAdminToolChange } from "./adminRevision";
@@ -97,6 +101,23 @@ const TOOLS: Record<string, (scope: Scope, args: never, grantId: string) => unkn
 
 const TOOLS_NEEDING_MODERATORS = new Set(["moderate", "report"]);
 const TOOLS_WITH_OVERSIGHT_WORK = new Set(["send_message", "edit_message", "create_channel", "update_channel", "update_profile", "report", "escalate"]);
+
+const RULE_REFUSAL = "Refused: this breaks a workspace rule. Rephrase it, or call escalate if you think the rule is wrong.";
+const REPEATED_BLOCKS_ALERT_AT = 3;
+
+interface PendingCheck {
+  kind: RuleSubjectKind;
+  text: string;
+  result: CheckResult;
+}
+
+function checkSubjectFor(name: string, args: Record<string, unknown>): { kind: RuleSubjectKind; text: string } | null {
+  if (name === "send_message") return { kind: "message", text: checkableText(args.text) };
+  if (name === "edit_message") return { kind: "edit", text: checkableText(args.text) };
+  if (name === "create_channel" || name === "update_channel") return { kind: "channel", text: checkableText(args.name, args.topic, args.purpose) };
+  if (name === "update_profile") return { kind: "agent", text: checkableText(args.description) };
+  return null;
+}
 
 function checkableText(...parts: unknown[]): string {
   return parts.filter((part): part is string => typeof part === "string" && part.trim().length > 0).join("\n");
@@ -189,6 +210,11 @@ export class WorkspaceDO extends DurableObject<Env> {
     const now = Date.now();
     const domain = await this.rememberWorkspace(identity);
     const handle = fullHandle(handleOwner(agent.ownerSub, agent.ownerEmail, domain), agent.agentName);
+    const knownAgentId = one<{ id: string }>(this.sql, "SELECT id FROM agents WHERE handle = ?", handle)?.id ?? agent.id ?? "";
+    const descriptionCheck = agent.description
+      ? await checkNow(this.sql, this.env.JEEVES_API_KEY, { kind: "agent", authorId: knownAgentId, text: agent.description, context: { tool: "register_agent" } })
+      : undefined;
+    if (descriptionCheck?.decision === "block") return { status: "refused", error: RULE_REFUSAL };
     const outcome = this.ctx.storage.transactionSync((): RegisterOutcome => {
       const existing = one<AgentRow>(this.sql, "SELECT * FROM agents WHERE handle = ?", handle);
       if (existing && existing.owner_sub !== agent.ownerSub) {
@@ -226,7 +252,7 @@ export class WorkspaceDO extends DurableObject<Env> {
       const registered = one<AgentRow>(this.sql, "SELECT * FROM agents WHERE handle = ?", handle)!;
       if (!existing) joinDefaultChannels(this.scopeFor(registered, identity.workspaceId, now));
       this.audit(grantId, registered.id, "register_agent");
-      if (agent.description) queueRuleCheck(this.sql, { kind: "agent", subject: handle, authorId: registered.id, text: agent.description, context: {} }, now);
+      if (agent.description && descriptionCheck) recordCheck(this.sql, { kind: "agent", subject: handle, authorId: registered.id, text: agent.description, context: {} }, descriptionCheck, now);
       bumpAdminPublicRevision(this.sql);
       return { status: "registered", handle, created: !existing, brief: buildBrief(this.scopeFor(registered, identity.workspaceId, now)) };
     });
@@ -331,6 +357,17 @@ export class WorkspaceDO extends DurableObject<Env> {
     if (limited) return { error: limited };
     const scope = this.scopeFor(agent, caller.workspaceId, now);
     if (TOOLS_NEEDING_MODERATORS.has(name)) scope.moderatorSubs = new Set(await workspaceModeratorSubs(this.env.DB, caller.workspaceId));
+    const subject = checkSubjectFor(name, args as Record<string, unknown>);
+    let pendingCheck: PendingCheck | undefined;
+    if (subject?.text) {
+      const result = await checkNow(this.sql, this.env.JEEVES_API_KEY, { kind: subject.kind, authorId: agent.id, text: subject.text, context: { tool: name } });
+      if (result.decision === "block") {
+        this.recordBlock(scope, subject.kind, subject.text, result);
+        await this.scheduleOversightWork();
+        return { error: RULE_REFUSAL };
+      }
+      pendingCheck = { ...subject, result };
+    }
     const invoke = () => {
       if (scope.moderatorSubs) rememberModerators(this.sql, scope.moderatorSubs);
       const output = handler(scope, args as never, caller.grantId);
@@ -340,7 +377,7 @@ export class WorkspaceDO extends DurableObject<Env> {
     try {
       const result = ASYNC_TOOLS.has(name) ? await invoke() : await this.ctx.storage.transaction(async () => {
         const output = invoke();
-        this.queueRuleCheckFor(name, scope, args as Record<string, unknown>, output as Record<string, unknown>);
+        if (pendingCheck) this.recordAllowedCheck(name, scope, args as Record<string, unknown>, output as Record<string, unknown>, pendingCheck);
         await this.indexDelivery.storeJobs(caller.workspaceId, scope.indexJobs, now);
         return output;
       });
@@ -551,6 +588,18 @@ export class WorkspaceDO extends DurableObject<Env> {
     return listRules(this.sql, viewer);
   }
 
+  async adminCreateRule(viewer: OversightViewer, input: Partial<RuleInput>) {
+    return this.ctx.storage.transactionSync(() => createRule(this.sql, viewer, input, Date.now()));
+  }
+
+  async adminUpdateRule(viewer: OversightViewer, id: string, input: Partial<RuleInput>) {
+    return this.ctx.storage.transactionSync(() => updateRule(this.sql, viewer, id, input, Date.now()));
+  }
+
+  async adminDeleteRule(viewer: OversightViewer, id: string) {
+    return this.ctx.storage.transactionSync(() => deleteRule(this.sql, viewer, id));
+  }
+
   async adminPins(caller: AdminCaller, options: { conversation: string }) {
     return adminPins(this.adminContext(caller), options);
   }
@@ -635,14 +684,22 @@ export class WorkspaceDO extends DurableObject<Env> {
     queueAlert(this.sql, "checker_down", { workspaceId }, `*backchannels rule checks are failing* for ${minutes} minutes. Messages are delivered unchecked and will be checked again when the checker recovers.`, Date.now());
   }
 
-  private queueRuleCheckFor(name: string, scope: Scope, args: Record<string, unknown>, output: Record<string, unknown>): void {
-    const check = (kind: RuleSubjectKind, subject: unknown, text: string, context: Record<string, unknown>) => {
-      if (typeof subject === "string") queueRuleCheck(this.sql, { kind, subject, authorId: scope.agent.id, text, context }, scope.now);
-    };
-    if (name === "send_message") check("message", output.message, checkableText(args.text), { conversation: output.conversation });
-    if (name === "edit_message") check("edit", args.message, checkableText(args.text), {});
-    if (name === "create_channel" || name === "update_channel") check("channel", output.channel, checkableText(args.name, args.topic, args.purpose), {});
-    if (name === "update_profile") check("agent", output.handle, checkableText(args.description), {});
+  private recordBlock(scope: Scope, kind: RuleSubjectKind, text: string, result: CheckResult): void {
+    this.ctx.storage.transactionSync(() => {
+      recordCheck(this.sql, { kind, subject: "refused", authorId: scope.agent.id, text, context: {} }, result, scope.now);
+      if (blocksInLastHour(this.sql, scope.agent.id, scope.now) !== REPEATED_BLOCKS_ALERT_AT) return;
+      queueAlert(this.sql, "repeated_blocks", { workspaceId: scope.workspaceId },
+        `*@${slackEscape(scope.agent.handle)} was blocked ${REPEATED_BLOCKS_ALERT_AT} times in an hour* by workspace rules.\n<${oversightUrl(this.env, "/oversight?tab=checks&outcome=block")}|Review the blocks>`, scope.now);
+    });
+  }
+
+  private recordAllowedCheck(name: string, scope: Scope, args: Record<string, unknown>, output: Record<string, unknown>, check: PendingCheck): void {
+    const messageReference = name === "send_message" ? output.message : name === "edit_message" ? args.message : undefined;
+    const subject = typeof messageReference === "string" ? messageReference : name === "update_profile" ? output.handle : output.channel;
+    if (typeof subject !== "string") return;
+    const message = typeof messageReference === "string" ? findReadableMessage(scope, messageReference).message : undefined;
+    recordCheck(this.sql, { kind: check.kind, subject, authorId: scope.agent.id, text: check.text, context: message ? { messageId: message.id } : {} }, check.result, scope.now);
+    if (message && check.result.decision !== "unchecked") run(this.sql, "UPDATE messages SET flagged = ? WHERE id = ?", check.result.decision === "flag" ? 1 : 0, message.id);
   }
 
   async setSearchTuning(overrides: TuningOverrides | null, resetSignals: boolean): Promise<void> {

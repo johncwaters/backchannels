@@ -9,6 +9,8 @@
 	import { failureStatus } from '#lib/client/page-heading.svelte.ts';
 	import ErrorView from '#lib/components/admin/ErrorView.svelte';
 	import SegmentedLinks from '#lib/components/admin/SegmentedLinks.svelte';
+	import RolesPanel from '#lib/components/admin/oversight/RolesPanel.svelte';
+	import RulesPanel from '#lib/components/admin/oversight/RulesPanel.svelte';
 	import RelativeTime from '#lib/components/admin/settings/RelativeTime.svelte';
 	import ViewHeader from '#lib/components/admin/shell/ViewHeader.svelte';
 	import { Badge } from '#lib/components/ui/badge/index.ts';
@@ -21,7 +23,8 @@
 
 	let { data } = $props();
 
-	const tabs = ['escalations', 'checks', 'alerts', 'rules'] as const;
+	const tabs = ['escalations', 'checks', 'alerts', 'rules', 'roles'] as const;
+	type Tab = (typeof tabs)[number];
 	const escalationStatuses: EscalationStatus[] = ['open', 'acknowledged', 'resolved'];
 	const ruleCheckOutcomes: RuleCheckOutcome[] = ['block', 'flag', 'unchecked'];
 	const noteMaxLength = 1_000;
@@ -32,7 +35,8 @@
 	let role = $derived(frame.data?.viewer.role);
 	let canModerate = $derived(role === 'admin' || role === 'moderator');
 	let canAdminister = $derived(role === 'admin');
-	let tab = $derived(canModerate ? (oneOf(tabs, page.url.searchParams.get('tab')) ?? 'escalations') : 'escalations');
+	let allowedTabs = $derived<Tab[]>(canAdminister ? [...tabs] : canModerate ? ['escalations', 'checks', 'alerts', 'rules'] : ['escalations', 'rules']);
+	let tab = $derived<Tab>(oneOf(allowedTabs, page.url.searchParams.get('tab')) ?? 'escalations');
 	let cursor = $derived(page.url.searchParams.get('cursor') ?? undefined);
 	let status = $derived(oneOf(escalationStatuses, page.url.searchParams.get('status') ?? 'open'));
 	let outcome = $derived(oneOf(ruleCheckOutcomes, page.url.searchParams.get('outcome')));
@@ -40,7 +44,6 @@
 	const escalations = createQuery(() => ({ ...rpcQuery('listEscalations', { status, cursor }), enabled: tab === 'escalations' }));
 	const ruleChecks = createQuery(() => ({ ...rpcQuery('listRuleChecks', { outcome, cursor }), enabled: tab === 'checks' && canModerate }));
 	const alertRoutes = createQuery(() => ({ ...rpcQuery('listAlertRoutes'), enabled: tab === 'alerts' && canModerate }));
-	const rules = createQuery(() => ({ ...rpcQuery('listRules'), enabled: tab === 'rules' }));
 
 	const categoryLabels: Record<string, string> = {
 		unsure: 'Unsure',
@@ -54,20 +57,14 @@
 		escalation: { title: 'Escalation', detail: 'Any agent calls escalate.' },
 		escalation_for_moderators: { title: 'Escalation for moderators', detail: 'Possible manipulation, outside scope or safety.' },
 		report: { title: 'Report', detail: 'An agent reports a message.' },
-		repeated_blocks: { title: 'Repeated blocks', detail: 'An agent is blocked 3 times in an hour (after enforcement starts).' },
+		repeated_blocks: { title: 'Repeated blocks', detail: 'An agent is blocked 3 times in an hour.' },
 		checker_down: { title: 'Rule checks failing', detail: 'Jeeves has failed for 10 minutes.' },
 	};
-	const outcomeLabels = { block: 'Would block', flag: 'Would flag', unchecked: 'Unchecked' } as const;
+	const outcomeLabels = { block: 'Blocked', flag: 'Flagged', unchecked: 'Unchecked' } as const;
 
+	const tabLabels: Record<Tab, string> = { escalations: 'Escalations', checks: 'Rule checks', alerts: 'Alerts', rules: 'Rules', roles: 'Roles' };
 	let tabLinks = $derived(
-		canModerate
-			? [
-					{ label: 'Escalations', href: '/oversight', isCurrent: tab === 'escalations' },
-					{ label: 'Rule checks', href: '/oversight?tab=checks', isCurrent: tab === 'checks' },
-					{ label: 'Alerts', href: '/oversight?tab=alerts', isCurrent: tab === 'alerts' },
-					{ label: 'Rules', href: '/oversight?tab=rules', isCurrent: tab === 'rules' },
-				]
-			: [],
+		frame.data ? allowedTabs.map((linkTab) => ({ label: tabLabels[linkTab], href: linkTab === 'escalations' ? '/oversight' : `/oversight?tab=${linkTab}`, isCurrent: tab === linkTab })) : [],
 	);
 	const statusLink = (label: string, linkStatus: EscalationStatus | 'all') => ({
 		label,
@@ -164,7 +161,7 @@
 
 <ViewHeader
 	heading={data.heading}
-	subheading={!frame.data ? undefined : canModerate ? 'Escalations from agents, rule-check results and where alerts go.' : 'Escalations from your agents. Each one also reaches you as a Slack DM.'}
+	subheading={!frame.data ? undefined : canModerate ? 'Escalations, rule checks, alerts, rules and roles for this workspace.' : 'Escalations from your agents and your own rules.'}
 />
 <section class={sectionClass} aria-label="Oversight">
 	<div class="flex flex-col gap-4">
@@ -224,8 +221,8 @@
 		{/if}
 
 		{#if tab === 'checks'}
-			<p class="m-0 font-sans text-[13px] text-subheading">Shadow mode: these messages were delivered. The table shows what each rule would have done, so thresholds can be tuned before enforcement.</p>
-			<SegmentedLinks links={[outcomeLink('All', undefined), outcomeLink('Would block', 'block'), outcomeLink('Would flag', 'flag'), outcomeLink('Unchecked', 'unchecked')]} label="Rule check outcome" class="self-start" />
+			<p class="m-0 font-sans text-[13px] text-subheading">Blocked items were refused; flagged ones were delivered and marked for readers; unchecked ones were delivered while Jeeves was unavailable.</p>
+			<SegmentedLinks links={[outcomeLink('All', undefined), outcomeLink('Blocked', 'block'), outcomeLink('Flagged', 'flag'), outcomeLink('Unchecked', 'unchecked')]} label="Rule check outcome" class="self-start" />
 			{#if ruleChecks.isPending}
 				{@render cardSkeletons()}
 			{:else if ruleChecks.isError}
@@ -234,7 +231,7 @@
 				<Empty.Root class="border border-dashed">
 					<Empty.Header>
 						<Empty.Media variant="icon"><ShieldCheckIcon /></Empty.Media>
-						<Empty.Title>Nothing would have been blocked or flagged</Empty.Title>
+						<Empty.Title>Nothing was blocked or flagged</Empty.Title>
 						<Empty.Description>Messages that pass every rule are not listed.</Empty.Description>
 					</Empty.Header>
 				</Empty.Root>
@@ -246,7 +243,9 @@
 							<Badge variant={check.outcome === 'block' ? 'destructive' : 'outline'} class="rounded-none font-mono">{outcomeLabels[check.outcome]}</Badge>
 							<span class="font-semibold">{check.author}</span>
 							<span class="text-dim">{check.kind}</span>
-							{#if check.kind === 'message' || check.kind === 'edit'}
+							{#if check.subject === 'refused'}
+								<span class="text-dim">not saved</span>
+							{:else if check.kind === 'message' || check.kind === 'edit'}
 								<a class="text-amber underline decoration-amber/40 underline-offset-3 hover:decoration-amber" href={messageLink(check.subject)}>{check.subject}</a>
 							{:else}
 								<span class="font-mono">{check.subject}</span>
@@ -335,26 +334,11 @@
 		{/if}
 
 		{#if tab === 'rules'}
-			<p class="m-0 font-sans text-[13px] text-subheading">Every rule is a yes/no question Jeeves answers for each message. All rules are in shadow mode; editing comes with enforcement.</p>
-			{#if rules.isPending}
-				{@render cardSkeletons()}
-			{:else if rules.isError}
-				<ErrorView status={failureStatus(rules.error)} />
-			{:else}
-			<ol class="m-0 flex list-none flex-col gap-3 p-0">
-				{#each rules.data as rule (rule.id)}
-					<li class="flex flex-col gap-1.5 border border-border bg-sidebar px-4 py-3">
-						<div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[13px]">
-							<span class="font-semibold">{rule.name}</span>
-							<Badge variant={rule.action === 'block' ? 'destructive' : 'outline'} class="rounded-none font-mono">{rule.action} ≥ {percent(rule.threshold)}</Badge>
-							<span class="font-mono text-xs uppercase text-dim">{rule.mode}</span>
-							<span class="ml-auto text-xs text-dim">{rule.scope === 'workspace' ? 'Workspace rule' : 'Your rule'} · v{rule.version}{rule.enabled ? '' : ' · off'}</span>
-						</div>
-						<p class="m-0 font-sans text-[14px] leading-normal text-subheading">{rule.question}</p>
-					</li>
-				{/each}
-			</ol>
-			{/if}
+			<RulesPanel {canAdminister} />
+		{/if}
+
+		{#if tab === 'roles' && frame.data}
+			<RolesPanel viewerEmail={frame.data.viewer.email} />
 		{/if}
 	</div>
 </section>

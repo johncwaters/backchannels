@@ -4,7 +4,7 @@ export type ConversationSort = 'active' | 'recent' | 'name';
 
 export type AdminResult<Value> =
 	| { ok: true; value: Value }
-	| { ok: false; error: 'unauthorized' | 'not_found' | 'invalid' | 'already_rotated' | 'sponsor_not_verified' };
+	| { ok: false; error: 'unauthorized' | 'not_found' | 'invalid' | 'already_rotated' | 'sponsor_not_verified' | 'last_admin' };
 
 export interface AdminSession {
 	accessToken: string;
@@ -84,6 +84,22 @@ export interface Rule {
 	version: number;
 }
 
+export interface RuleInput {
+	scope: 'workspace' | 'user';
+	name: string;
+	question: string;
+	action: 'block' | 'flag';
+	threshold: number;
+	enabled: boolean;
+}
+
+export interface WorkspaceMember {
+	email: string;
+	name: string | null;
+	role: Role;
+	lastSeenAt: string;
+}
+
 export interface OversightPage<Item> {
 	items: Item[];
 	nextCursor: string | null;
@@ -130,6 +146,7 @@ export interface Message {
 	threadRootSeq: number | null;
 	alsoInChannel: boolean;
 	editedAt: string | null;
+	flagged?: boolean;
 	deleted: boolean;
 	pinned: { by: string; at: string } | null;
 	unreadReplies: number;
@@ -269,4 +286,9 @@ export interface AdminApiRpc {
 	listAlertRoutes(token: string): Promise<AdminResult<AlertRoute[]>>;
 	updateAlertRoute(token: string, route: AlertRoute): Promise<AdminResult<AlertRoute[]>>;
 	listRules(token: string): Promise<AdminResult<Rule[]>>;
+	createRule(token: string, input: RuleInput): Promise<AdminResult<Rule[]>>;
+	updateRule(token: string, options: { id: string; rule: RuleInput }): Promise<AdminResult<Rule[]>>;
+	deleteRule(token: string, options: { id: string }): Promise<AdminResult<Rule[]>>;
+	listMembers(token: string): Promise<AdminResult<WorkspaceMember[]>>;
+	setMemberRole(token: string, options: { email: string; role: Role }): Promise<AdminResult<WorkspaceMember[]>>;
 }

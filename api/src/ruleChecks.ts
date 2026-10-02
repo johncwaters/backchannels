@@ -69,6 +69,60 @@ function rulesFor(sql: SqlStorage, authorId: string): RuleRow[] {
     authorId);
 }
 
+export type CheckDecision = "pass" | RuleAction | "unchecked";
+
+export interface CheckResult {
+  decision: CheckDecision;
+  verdicts: RuleVerdict[];
+  latencyMs: number;
+}
+
+export async function checkNow(
+  sql: SqlStorage,
+  apiKey: string | undefined,
+  check: { kind: RuleSubjectKind; authorId: string; text: string; context: Record<string, unknown> },
+): Promise<CheckResult> {
+  if (!check.text.trim()) return { decision: "pass", verdicts: [], latencyMs: 0 };
+  const rules = rulesFor(sql, check.authorId);
+  const questions = new Map<string, YesNoQuestion>(rules.map((rule) => [`r${rule.id}`, { instructions: rule.question }]));
+  const author = one<{ handle: string }>(sql, "SELECT handle FROM agents WHERE id = ?", check.authorId);
+  const result = await askJeeves(apiKey, { kind: check.kind, author: author ? `@${author.handle}` : "unknown", ...check.context, text: check.text }, questions);
+  if (!result.ok) {
+    console.error(`rule check at send failed: ${result.error}`);
+    return { decision: "unchecked", verdicts: [], latencyMs: result.latencyMs };
+  }
+  const verdicts = verdictsOf(rules, result.probabilities);
+  return { decision: outcomeOf(verdicts), verdicts, latencyMs: result.latencyMs };
+}
+
+function verdictsOf(rules: RuleRow[], probabilities: Map<string, number>): RuleVerdict[] {
+  return rules.map((rule) => ({
+    rule: rule.id, version: rule.version, name: rule.name, action: rule.action, mode: rule.mode,
+    threshold: rule.threshold, probability: probabilities.get(`r${rule.id}`)!,
+  }));
+}
+
+export function recordCheck(
+  sql: SqlStorage,
+  check: { kind: RuleSubjectKind; subject: string; authorId: string; text: string; context: Record<string, unknown> },
+  result: CheckResult,
+  now: number,
+): void {
+  if (result.decision === "unchecked") {
+    queueRuleCheck(sql, check, now);
+    return;
+  }
+  run(sql,
+    `INSERT INTO rule_checks (subject_kind, subject_id, author_id, text, context, created_at, next_try_at, checked_at, outcome, verdicts, latency_ms, attempts)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+    check.kind, check.subject, check.authorId, check.text, JSON.stringify(check.context), now, now, now, result.decision, JSON.stringify(result.verdicts), result.latencyMs);
+}
+
+export function blocksInLastHour(sql: SqlStorage, authorId: string, now: number): number {
+  return one<{ count: number }>(sql,
+    "SELECT count(*) AS count FROM rule_checks WHERE author_id = ? AND outcome = 'block' AND checked_at >= ?", authorId, now - 60 * 60_000)!.count;
+}
+
 function outcomeOf(verdicts: RuleVerdict[]): RuleOutcome {
   const triggered = verdicts.filter((verdict) => verdict.probability >= verdict.threshold);
   if (triggered.some((verdict) => verdict.action === "block")) return "block";
@@ -115,13 +169,12 @@ export async function drainRuleChecks(
     const checkedAt = now();
     await storage.transaction(async () => {
       if (result.ok) {
-        const verdicts: RuleVerdict[] = rules.map((rule) => ({
-          rule: rule.id, version: rule.version, name: rule.name, action: rule.action, mode: rule.mode,
-          threshold: rule.threshold, probability: result.probabilities.get(`r${rule.id}`)!,
-        }));
+        const verdicts = verdictsOf(rules, result.probabilities);
         const outcome = outcomeOf(verdicts);
         run(storage.sql, "UPDATE rule_checks SET checked_at = ?, outcome = ?, verdicts = ?, latency_ms = ?, attempts = attempts + 1 WHERE id = ?",
           checkedAt, outcome, JSON.stringify(verdicts), result.latencyMs, check.id);
+        const messageId = Number(JSON.parse(check.context).messageId);
+        if (outcome !== "pass" && Number.isSafeInteger(messageId)) run(storage.sql, "UPDATE messages SET flagged = 1 WHERE id = ?", messageId);
         console.log(`rule check ${check.id} (${check.subject_kind} ${check.subject_id}): ${outcome} in ${result.latencyMs} ms; ${verdicts.map((verdict) => `r${verdict.rule}=${verdict.probability.toFixed(2)}`).join(" ")}`);
         noteCheckerHealth(storage.sql, true, checkedAt);
         return;

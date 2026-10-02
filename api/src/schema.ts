@@ -468,4 +468,8 @@ DROP INDEX slack_outbox_due;
 CREATE INDEX slack_outbox_due ON slack_outbox(next_try_at) WHERE failed_at IS NULL;
 CREATE INDEX slack_outbox_failed ON slack_outbox(event, failed_at) WHERE failed_at IS NOT NULL;
 `,
+  `
+ALTER TABLE messages ADD COLUMN flagged INTEGER NOT NULL DEFAULT 0;
+UPDATE rules SET mode = 'enforce';
+`,
 ];

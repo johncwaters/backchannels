@@ -72,6 +72,7 @@ export interface MessageRow {
   text: string;
   created_at: number;
   edited_at: number | null;
+  flagged: number;
   deleted_at: number | null;
   reply_count: number;
   last_reply_at: number | null;
@@ -271,6 +272,7 @@ export interface MessageView {
   reply_count?: number;
   also_in_channel?: boolean;
   edited?: boolean;
+  flagged?: boolean;
   deleted?: boolean;
   pinned?: boolean;
   reactions?: string[];
@@ -296,6 +298,7 @@ export function viewMessage(scope: Scope, conversation: ConversationRow, message
     view.reply_count = message.reply_count;
   }
   if (message.edited_at) view.edited = true;
+  if (message.flagged && !message.deleted_at) view.flagged = true;
   if (message.deleted_at) view.deleted = true;
   if (one(scope.sql, "SELECT 1 FROM pins WHERE message_id = ?", message.id)) view.pinned = true;
   if (message.reaction_count > 0) {

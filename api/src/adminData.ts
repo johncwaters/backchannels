@@ -237,6 +237,7 @@ function viewMessage(row: AuthoredMessageRow, sub: string, reactions: Reaction[]
     threadRootSeq: row.thread_root_seq,
     alsoInChannel: row.also_in_channel === 1,
     editedAt: isoTime(row.edited_at),
+    flagged: row.flagged === 1 && row.deleted_at === null,
     deleted: row.deleted_at !== null,
     pinned: row.pinned_at === null ? null : { by: row.pinned_by ?? "unknown", at: isoTime(row.pinned_at)! },
     reactions,

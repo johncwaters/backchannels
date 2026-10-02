@@ -3,6 +3,8 @@ import type {
 	AdminApiRpc,
 	AdminReadOptions,
 	AlertRoute,
+	Role,
+	RuleInput,
 	AdminResult,
 	AdminSearchOptions,
 	AdminSearchPage,
@@ -24,7 +26,7 @@ import type {
 } from '../../src/lib/admin/types';
 import { DEFAULT_CHANNELS } from '../../../api/src/defaultChannels';
 import { buildPreviewWorld, VIEWER_EMAIL, type PreviewWorld, type StoredConversation, type StoredMessage } from './preview-fixtures';
-import { previewAlertRoutes, previewEscalations, previewRuleChecks, previewRules } from './preview-oversight';
+import { previewAlertRoutes, previewEscalations, previewMembers, previewRuleChecks, previewRules } from './preview-oversight';
 import { previewTrackRecordFor } from './preview-track-record';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -562,6 +564,44 @@ export class AdminApi extends WorkerEntrypoint implements AdminApiRpc {
 	async listRules(token: string): ReturnType<AdminApiRpc['listRules']> {
 		if (!isPreviewToken(token)) return unauthorized;
 		return ok(previewRules);
+	}
+
+	async createRule(token: string, input: RuleInput): ReturnType<AdminApiRpc['createRule']> {
+		if (!isPreviewToken(token)) return unauthorized;
+		if (!input?.name?.trim() || !input.question?.trim()) return invalid;
+		const nextId = String(Math.max(0, ...previewRules.map((rule) => Number(rule.id))) + 1);
+		previewRules.push({ id: nextId, scope: input.scope, name: input.name, question: input.question, action: input.action, threshold: input.threshold, mode: 'enforce', enabled: input.enabled, version: 1 });
+		return ok(previewRules);
+	}
+
+	async updateRule(token: string, options: { id: string; rule: RuleInput }): ReturnType<AdminApiRpc['updateRule']> {
+		if (!isPreviewToken(token)) return unauthorized;
+		const rule = previewRules.find((candidate) => candidate.id === options?.id);
+		if (!rule) return notFound;
+		Object.assign(rule, { name: options.rule.name, question: options.rule.question, action: options.rule.action, threshold: options.rule.threshold, enabled: options.rule.enabled, version: rule.version + 1 });
+		return ok(previewRules);
+	}
+
+	async deleteRule(token: string, options: { id: string }): ReturnType<AdminApiRpc['deleteRule']> {
+		if (!isPreviewToken(token)) return unauthorized;
+		const index = previewRules.findIndex((candidate) => candidate.id === options?.id);
+		if (index === -1) return notFound;
+		previewRules.splice(index, 1);
+		return ok(previewRules);
+	}
+
+	async listMembers(token: string): ReturnType<AdminApiRpc['listMembers']> {
+		if (!isPreviewToken(token)) return unauthorized;
+		return ok(previewMembers);
+	}
+
+	async setMemberRole(token: string, options: { email: string; role: Role }): ReturnType<AdminApiRpc['setMemberRole']> {
+		if (!isPreviewToken(token)) return unauthorized;
+		const member = previewMembers.find((candidate) => candidate.email === options?.email);
+		if (!member) return notFound;
+		if (member.role === 'admin' && options.role !== 'admin' && previewMembers.filter((candidate) => candidate.role === 'admin').length <= 1) return { ok: false, error: 'last_admin' };
+		member.role = options.role;
+		return ok(previewMembers);
 	}
 
 	async revokeOwnAgent(token: string, options: { handle: string }): Promise<AdminResult<null>> {

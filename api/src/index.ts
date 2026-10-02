@@ -27,9 +27,9 @@ import {
   type AdminIdentity,
 } from "./adminSession";
 import { authorize, googleCallback, oauthServers } from "./auth";
-import type { AlertRouteView, EscalationStatus, OversightViewer } from "./oversight";
+import type { AlertRouteView, EscalationStatus, OversightViewer, RuleInput } from "./oversight";
 import { seedPinnedClientDocuments } from "./pinnedClients";
-import { findViewer } from "./directory";
+import { findViewer, listWorkspaceMembers, setWorkspaceRole, type Role, type WorkspaceMember } from "./directory";
 import { headlessBearer, serveHeadless } from "./headless";
 import { createHeadlessKeyFor, listHeadlessKeysFor, revokeHeadlessAgentFor, revokeHeadlessKeyFor, rotateHeadlessKeyFor } from "./headlessAdmin";
 import { listOwnAgentsFor, revokeOwnAgentFor, workspaceFor } from "./agentOwnership";
@@ -160,6 +160,40 @@ export class AdminApi extends WorkerEntrypoint<Env> implements AdminApiRpc {
     const found = await oversightViewer(this.env, this.ctx, token);
     if (!found) return unauthorized;
     return workspaceFor(this.env, found.identity).adminRules(found.viewer);
+  }
+
+  async createRule(token: string, input: Partial<RuleInput>) {
+    const found = await oversightViewer(this.env, this.ctx, token);
+    if (!found) return unauthorized;
+    return workspaceFor(this.env, found.identity).adminCreateRule(found.viewer, input);
+  }
+
+  async updateRule(token: string, options: { id: string; rule: Partial<RuleInput> }) {
+    const found = await oversightViewer(this.env, this.ctx, token);
+    if (!found) return unauthorized;
+    return workspaceFor(this.env, found.identity).adminUpdateRule(found.viewer, options.id, options.rule);
+  }
+
+  async deleteRule(token: string, options: { id: string }) {
+    const found = await oversightViewer(this.env, this.ctx, token);
+    if (!found) return unauthorized;
+    return workspaceFor(this.env, found.identity).adminDeleteRule(found.viewer, options.id);
+  }
+
+  async listMembers(token: string): Promise<AdminResult<WorkspaceMember[]>> {
+    const found = await oversightViewer(this.env, this.ctx, token);
+    if (!found) return unauthorized;
+    if (found.viewer.role !== "admin") return { ok: false, error: "not_found" };
+    return { ok: true, value: await listWorkspaceMembers(this.env.DB, found.identity.workspaceId) };
+  }
+
+  async setMemberRole(token: string, options: { email: string; role: Role }): Promise<AdminResult<WorkspaceMember[]>> {
+    const found = await oversightViewer(this.env, this.ctx, token);
+    if (!found) return unauthorized;
+    if (found.viewer.role !== "admin") return { ok: false, error: "not_found" };
+    const changed = await setWorkspaceRole(this.env.DB, found.identity.workspaceId, options?.email, options?.role);
+    if (!changed.ok) return { ok: false, error: changed.error };
+    return { ok: true, value: await listWorkspaceMembers(this.env.DB, found.identity.workspaceId) };
   }
 
   async listPins(token: string, options: { conversation: string }) {

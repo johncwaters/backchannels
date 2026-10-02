@@ -397,6 +397,8 @@ Version 16 adds the oversight tables (MCP.md, Oversight): `rules (id, scope, own
 
 Version 17 adds `slack_outbox.event` and `failed_at`. A delivery that hits a permanent Slack error, or runs out of retries, is kept with `failed_at` and `last_error` instead of deleted; the newest 50 are kept, and `listAlertRoutes` shows each event's latest failure.
 
+Version 18 adds `messages.flagged` (set when a rule flags a message, shown to readers) and moves every rule to `enforce`.
+
 ### Full-text index
 
 ```sql

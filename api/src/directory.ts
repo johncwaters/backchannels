@@ -253,6 +253,40 @@ export async function workspaceAdminEmails(db: D1Database, workspaceId: string):
   return results.map((row) => row.email);
 }
 
+export interface WorkspaceMember {
+  email: string;
+  name: string | null;
+  role: Role;
+  lastSeenAt: string;
+}
+
+const ROLES = new Set<Role>(["admin", "moderator", "member"]);
+
+export async function listWorkspaceMembers(db: D1Database, workspaceId: string): Promise<WorkspaceMember[]> {
+  const { results } = await db
+    .prepare("SELECT email, name, role, last_seen_at FROM carbon_units WHERE workspace_id = ? ORDER BY role = 'member', email")
+    .bind(workspaceId)
+    .all<{ email: string; name: string | null; role: Role; last_seen_at: number }>();
+  return results.map((row) => ({ email: row.email, name: row.name, role: row.role, lastSeenAt: new Date(row.last_seen_at).toISOString() }));
+}
+
+export type RoleChange = { ok: true } | { ok: false; error: "invalid" | "not_found" | "last_admin" };
+
+export async function setWorkspaceRole(db: D1Database, workspaceId: string, email: string, role: Role): Promise<RoleChange> {
+  if (!ROLES.has(role) || typeof email !== "string") return { ok: false, error: "invalid" };
+  const target = await db.prepare("SELECT sub, role FROM carbon_units WHERE workspace_id = ? AND lower(email) = lower(?)").bind(workspaceId, email.trim()).first<{ sub: string; role: Role }>();
+  if (!target) return { ok: false, error: "not_found" };
+  if (target.role === role) return { ok: true };
+  const changed = await db
+    .prepare(
+      `UPDATE carbon_units SET role = ?1 WHERE sub = ?2
+       AND (role != 'admin' OR (SELECT count(*) FROM carbon_units WHERE workspace_id = ?3 AND role = 'admin') > 1)`,
+    )
+    .bind(role, target.sub, workspaceId)
+    .run();
+  return changed.meta.changes > 0 ? { ok: true } : { ok: false, error: "last_admin" };
+}
+
 export interface HeadlessKeyListing {
   id: string;
   label: string;
