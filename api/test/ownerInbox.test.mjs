@@ -15,7 +15,7 @@ registerHooks({
 
 const { checkInbox, markRead } = await import("../src/inbox.ts");
 const { openChat } = await import("../src/conversations.ts");
-const { deleteMessage, sendMessage } = await import("../src/messages.ts");
+const { deleteMessage, readMessages, sendMessage } = await import("../src/messages.ts");
 const { countUnreadOwnerMessages, newestOwnerMessage, ownerInboxMessages, sweepStrandedMessages } = await import("../src/ownerInbox.ts");
 const { WorkspaceDO } = await import("../src/workspace.ts");
 const { ToolError } = await import("../src/store.ts");
@@ -280,6 +280,53 @@ describe("per-agent owner reads", () => {
     assert.throws(() => markRead(workspace.scopeFor("stranger"), { messages: [second.message] }), /not found/);
     assert.equal(workspace.database.prepare("SELECT count(*) AS count FROM owner_reads WHERE agent_id = 'stranger'").get().count, 0);
   });
+});
+
+describe("reading an owner item", () => {
+  test("a sibling reads the full text of an owner item from a chat it is not in, without its neighbours", (context) => {
+    const workspace = createWorkspace(context);
+    workspace.sendToOwner("Earlier private context");
+    const longText = "x".repeat(LIMITS.inboxTextPreviewChars + 500);
+    const sent = workspace.sendToOwner(longText);
+    const read = readMessages(workspace.scopeFor("caller"), { conversation: sent.message });
+    assert.deepEqual(read.messages.map((message) => message.text), [longText]);
+    assert.equal(read.has_more_before, false);
+    assert.equal(read.has_more_after, false);
+  });
+
+  const deniedReads = {
+    "an agent of another owner": (workspace, sent) => ({ reader: "stranger", ref: sent.message }),
+    "a revoked sibling": (workspace, sent) => ({ reader: "revoked", ref: sent.message }),
+    "an expired item": (workspace, sent) => {
+      workspace.database.prepare("UPDATE owner_messages SET created_at = ? WHERE message_id = ?").run(workspace.now - LIMITS.ownerQueueMaxAgeMs, workspace.messageIdOf(sent.message));
+      return { reader: "caller", ref: sent.message };
+    },
+    "a deleted item": (workspace, sent) => {
+      deleteMessage(workspace.scopeFor("author"), { message: sent.message });
+      return { reader: "caller", ref: sent.message };
+    },
+    "an item whose author is banned": (workspace, sent) => {
+      workspace.database.prepare("INSERT INTO bans (kind, subject, owner_sub, label, banned_at, banned_by, reason) VALUES ('agent', ?, ?, 'author', ?, 'stranger', 'spam')")
+        .run(workspace.agents.author.id, workspace.agents.author.owner_sub, workspace.now);
+      return { reader: "caller", ref: sent.message };
+    },
+    "a message in the owner chat that never queued": (workspace, sent) => {
+      workspace.database.prepare("DELETE FROM owner_messages WHERE message_id = ?").run(workspace.messageIdOf(sent.message));
+      return { reader: "caller", ref: sent.message };
+    },
+    "a private chat with a sibling that never queued": (workspace) => ({
+      reader: "caller",
+      ref: sendMessage(workspace.scopeFor("author"), { to: "@team/sleeper", text: "Private question" }).message,
+    }),
+  };
+
+  for (const [denial, setUp] of Object.entries(deniedReads)) {
+    test(`read_messages hides ${denial}`, (context) => {
+      const workspace = createWorkspace(context);
+      const { reader, ref } = setUp(workspace, workspace.sendToOwner());
+      assert.throws(() => readMessages(workspace.scopeFor(reader), { conversation: ref }), /not found/);
+    });
+  }
 });
 
 describe("claim by reply", () => {
@@ -985,6 +1032,16 @@ describe("stranded messages", () => {
     assert.equal(answeredItem.answered_by_recipient, true);
     assert.equal(answeredItem.claimed_by, undefined);
     assert.throws(() => sendMessage(workspace.scopeFor("caller"), { to: "@author/author", reply_to: sent.message, text: "Duplicate pickup" }), /already answered by its recipient @team\/sleeper/);
+  });
+
+  test("a sibling reads a stranded item's full text but never the private chat's earlier messages", (context) => {
+    const workspace = createWorkspace(context);
+    const earlier = sendMessage(workspace.scopeFor("author"), { to: "@team/sleeper", text: "Earlier private message" });
+    endSession(workspace);
+    const stranded = sendMessage(scopeWithLiveness(workspace), { to: "@team/sleeper", text: "Stranded question" });
+    assert.equal(readMessages(workspace.scopeFor("caller"), { conversation: stranded.message }).messages[0].text, "Stranded question");
+    assert.throws(() => readMessages(workspace.scopeFor("caller"), { conversation: earlier.message }), /not found/);
+    assert.throws(() => readMessages(workspace.scopeFor("caller"), { conversation: stranded.conversation }), /not found/);
   });
 
   test("a stranded recipient answering after a sibling claim keeps the sibling's claim", (context) => {

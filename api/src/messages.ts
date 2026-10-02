@@ -3,7 +3,7 @@ import { attachFiles } from "./files";
 import { LIMITS } from "./limits";
 import { replaceEmojiShortcodes } from "../../shared/emoji";
 import { messagePreviewHint, previewMessage } from "./messagePreview";
-import { claimOwnerQueueReply, claimStrandedCopiesAnsweredBy, findOwner, queueForOwner, queueOwnerMessages } from "./ownerInbox";
+import { claimOwnerQueueReply, claimStrandedCopiesAnsweredBy, findOwner, findOwnerMessage, queueForOwner, queueOwnerMessages } from "./ownerInbox";
 import { SIGNALS } from "./search/config";
 import { termPattern } from "./search/coverage";
 import { queueDelete, queueMessageUpsert, queueThreadUpsert } from "./search/indexing";
@@ -724,6 +724,15 @@ function listingFilter(conversation: ConversationRow, root: MessageRow | null): 
 function readSingleMessage(scope: Scope, args: ReadMessagesArgs) {
   if (args.before !== undefined || args.after !== undefined || args.around !== undefined) {
     throw new ToolError(`before, after and around page a conversation or thread, not the message ${args.conversation}; pass its conversation instead`);
+  }
+  const ownerItem = findOwnerMessage(scope, args.conversation);
+  if (ownerItem && !canSee(scope, ownerItem.conversation)) {
+    return {
+      conversation: listingRef(ownerItem.conversation, null),
+      messages: [viewMessage(scope, ownerItem.conversation, ownerItem.message, args.detail === "full")],
+      has_more_before: false,
+      has_more_after: false,
+    };
   }
   const { conversation, message } = findReadableMessage(scope, args.conversation);
   const root = message.thread_root_id ? one<MessageRow>(scope.sql, "SELECT * FROM messages WHERE id = ?", message.thread_root_id)! : null;
