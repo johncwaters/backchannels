@@ -4,7 +4,11 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { afterNavigate } from '$app/navigation';
 	import { navigating } from '$app/state';
+	import ArrowDownIcon from '@lucide/svelte/icons/arrow-down';
+	import ArrowUpIcon from '@lucide/svelte/icons/arrow-up';
 	import LinkIcon from '@lucide/svelte/icons/link';
+	import PaperclipIcon from '@lucide/svelte/icons/paperclip';
+	import { toast } from 'svelte-sonner';
 	import { agentColorAmong, dayLabel, distinctAgentColors, formatClockTime, formatFileSize, formatRelative, groupMessagesByDay, isInlineImage, messageAnchor, replyCountLabel } from '#lib/admin/helpers.ts';
 	import { mergeMessages, messagesHref, newestWindowBefore, prependOlder } from '#lib/admin/conversation-page.ts';
 	import { emojiForShortcode } from '#lib/admin/emoji.ts';
@@ -16,8 +20,11 @@
 	import { confirmedUnread } from '#lib/client/read-state.svelte.ts';
 	import { Badge } from '#lib/components/ui/badge/index.ts';
 	import { Button } from '#lib/components/ui/button/index.ts';
+	import * as Popover from '#lib/components/ui/popover/index.ts';
+	import { Separator } from '#lib/components/ui/separator/index.ts';
 	import { Skeleton } from '#lib/components/ui/skeleton/index.ts';
-	import PageLink from '../PageLink.svelte';
+	import { Spinner } from '#lib/components/ui/spinner/index.ts';
+	import Hint from '../Hint.svelte';
 	import MessageIdentity from './MessageIdentity.svelte';
 	import { continuesPreviousMessage } from './message-grouping';
 
@@ -28,11 +35,9 @@
 		nowMs: number;
 		messageLink: (message: Message) => string;
 		fileLink: (fileId: string) => string;
-		olderMessagesHref: (before: number) => string;
 		nextBefore?: number;
 		newerMessagesHref?: string;
 		latestMessagesHref?: string;
-		backLink?: { href: string; label: string; navTitle?: string };
 		threadHref?: (rootSeq: number) => string;
 		threadRootSeq?: number;
 		targetSeq?: number;
@@ -47,11 +52,9 @@
 		nowMs,
 		messageLink,
 		fileLink,
-		olderMessagesHref,
 		nextBefore,
 		newerMessagesHref,
 		latestMessagesHref,
-		backLink,
 		threadHref,
 		threadRootSeq,
 		targetSeq,
@@ -62,8 +65,7 @@
 	const pageTimeoutMs = 8_000;
 	const markReadDelayMs = 700;
 	const visibleShareToCountAsRead = 0.6;
-	const copyStatusVisibleMs = 1_600;
-	const edgeBleed = '-mx-7 px-7 max-[899px]:-mx-4 max-[899px]:px-4';
+	const edgeBleed = '-mx-7 px-7 max-md:-mx-4 max-md:px-4';
 	const hoverTools =
 		'[@media(hover:hover)]:pointer-events-none [@media(hover:hover)]:absolute [@media(hover:hover)]:-top-3 [@media(hover:hover)]:right-0 [@media(hover:hover)]:z-10 [@media(hover:hover)]:border [@media(hover:hover)]:border-border [@media(hover:hover)]:bg-sidebar [@media(hover:hover)]:px-2 [@media(hover:hover)]:py-0.5 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:shadow-lg [@media(hover:hover)]:group-hover/message:pointer-events-auto [@media(hover:hover)]:group-hover/message:opacity-100 [@media(hover:hover)]:group-focus-within/message:pointer-events-auto [@media(hover:hover)]:group-focus-within/message:opacity-100';
 
@@ -77,8 +79,6 @@
 	let unreadArrivals = $state(0);
 	let awayFromLatest = $state(false);
 	let canCopyLinks = $state(false);
-	let copyStatus = $state('');
-	let clearCopyStatusTimer: number | undefined;
 	let feed = $state<HTMLElement>();
 	let olderControl = $state<HTMLElement>();
 	let isMounted = true;
@@ -141,12 +141,6 @@
 			failedBefore = before;
 			olderState = 'failed';
 		}
-	}
-
-	function loadOlderFromLink(event: MouseEvent): void {
-		if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-		event.preventDefault();
-		void loadOlderMessages();
 	}
 
 	// Fetches the newest window explicitly, so a page that opened at the first unread message never jumps to an older one.
@@ -252,9 +246,8 @@
 			() => true,
 			() => false,
 		);
-		copyStatus = copied ? 'Link to message copied' : 'Could not copy the link';
-		window.clearTimeout(clearCopyStatusTimer);
-		clearCopyStatusTimer = window.setTimeout(() => (copyStatus = ''), copyStatusVisibleMs);
+		if (copied) toast.success('Link to message copied');
+		else toast.error('Could not copy the link');
 	}
 
 	onMount(() => {
@@ -274,27 +267,29 @@
 </script>
 
 <div class="relative flex min-h-0 grow flex-col">
-	<section class="flex min-h-0 grow flex-col gap-3 overflow-auto px-7 pt-3.5 pb-5 max-[899px]:overflow-visible max-[899px]:px-4" aria-label="Messages" bind:this={feed}>
-		{#if backLink}<PageLink href={backLink.href} navTitle={backLink.navTitle}>← {backLink.label}</PageLink>{/if}
+	<section class="flex min-h-0 grow flex-col gap-3 overflow-auto px-7 pt-3.5 pb-5 max-md:overflow-visible max-md:px-4" aria-label="Messages" bind:this={feed}>
 		{#if olderBefore !== undefined || keepsExhaustedControl}
 			<div class="flex min-h-7 flex-wrap items-center gap-x-3 gap-y-1" bind:this={olderControl}>
 				{#if olderBefore !== undefined}
-					<PageLink href={olderMessagesHref(olderBefore)} navTitle={heading} onclick={loadOlderFromLink} busy={olderState === 'loading'}>↑ Older messages</PageLink>
+					<Button variant="outline" size="sm" disabled={olderState === 'loading'} onclick={loadOlderMessages}>
+						{#if olderState === 'loading'}<Spinner />{:else}<ArrowUpIcon aria-hidden="true" />{/if}
+						{olderState === 'failed' ? 'Retry older messages' : 'Older messages'}
+					</Button>
 				{:else}
-					<PageLink tabindex={0} navTitle={heading} disabled>No older messages</PageLink>
+					<Button variant="outline" size="sm" aria-disabled="true">No older messages</Button>
 				{/if}
 				<span class="text-[13px] text-dim" role="status" aria-live="polite">
-					{olderState === 'loading' ? 'Loading older messages…' : olderState === 'failed' ? 'Could not load older messages. Try again.' : ''}
+					{olderState === 'loading' ? 'Loading older messages…' : olderState === 'failed' ? 'Could not load older messages.' : ''}
 				</span>
 			</div>
 		{/if}
 		{#each days as day (day.label || 'all')}
 			<div class="flex flex-col gap-3">
 				{#if day.label}
-					<h2 class={['sticky -top-3.5 z-10 m-0 flex items-center gap-3 bg-ground py-1 text-[13px] font-normal text-dim max-[899px]:top-0', edgeBleed]}>
-						<span aria-hidden="true" class="h-px w-4 shrink-0 bg-border"></span>
+					<h2 class={['sticky -top-3.5 z-10 m-0 flex items-center gap-3 bg-ground py-1 text-[13px] font-normal text-dim max-md:top-14', edgeBleed]}>
+						<Separator class="w-4! shrink-0" />
 						<time datetime={day.messages[0].time.slice(0, 10)}>{day.label}</time>
-						<span aria-hidden="true" class="h-px flex-1 bg-border"></span>
+						<Separator class="flex-1" />
 					</h2>
 				{/if}
 				{#each day.messages as message, index (message.seq)}
@@ -303,8 +298,8 @@
 					{@const isThreadRoot = threadRootSeq !== undefined && message.seq === threadRootSeq}
 					{@const isThreadReply = threadRootSeq !== undefined && !isThreadRoot}
 					{#if startsUnread}
-						<div data-first-unread class="flex scroll-mt-10 items-center gap-3 text-[12px] font-semibold tracking-[0.08em] text-amber uppercase max-[899px]:scroll-mt-18" role="separator" aria-label="New messages">
-							<span aria-hidden="true" class="h-px flex-1 bg-amber/60"></span>
+						<div data-first-unread class="flex scroll-mt-10 items-center gap-3 text-[12px] font-semibold tracking-[0.08em] text-amber uppercase max-md:scroll-mt-18" role="separator" aria-label="New messages">
+							<Separator class="flex-1 bg-amber/60" />
 							<span>New</span>
 						</div>
 					{/if}
@@ -313,7 +308,7 @@
 						data-arrived={arrived.has(message.seq) ? '' : undefined}
 						{@attach tracksReading}
 						class={[
-							'group/message relative flex scroll-mt-10 scroll-mb-6 flex-col gap-0.5 max-[899px]:scroll-mt-18',
+							'group/message relative flex scroll-mt-10 scroll-mb-6 flex-col gap-0.5 max-md:scroll-mt-18',
 							{
 								'-mt-2': continues,
 								'max-w-[820px]': !isThreadReply,
@@ -333,28 +328,29 @@
 							<div class="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
 								<MessageIdentity {message} color={agentColorAmong(colorByAuthor, message.handle)} class={continues ? 'sr-only' : 'min-w-0 [overflow-wrap:anywhere]'} />
 								{#if message.pinned && !showsPins}
-									<Badge variant="outline" class="h-auto rounded-none border-amber px-1.5 py-0 font-mono text-xs font-normal text-amber" title={`Pinned by ${message.pinned.by} on ${utcStamp(message.pinned.at)}`}>pinned</Badge>
+									<Hint text={`Pinned by ${message.pinned.by} on ${utcStamp(message.pinned.at)}`}><Badge variant="outline" class="border-amber text-amber">pinned</Badge></Hint>
 								{/if}
 								{#if message.alsoInChannel && message.threadRootSeq && threadHref}
-									<a class="text-xs text-dim underline underline-offset-3 hover:text-amber" href={threadHref(message.threadRootSeq)} data-nav-title={`Thread in ${conversationName}`}>replied in a thread</a>
+									<Button href={threadHref(message.threadRootSeq)} variant="link" size="xs" class="h-auto p-0 text-dim">replied in a thread</Button>
 								{/if}
 								{#if message.editedAt}
-									<Badge variant="ghost" class="h-auto rounded-none p-0 font-mono text-xs font-normal text-dim hover:bg-transparent hover:text-dim" title={`Edited ${utcStamp(message.editedAt)}`}>edited</Badge>
+									<Hint text={`Edited ${utcStamp(message.editedAt)}`} class="text-xs text-dim">edited</Hint>
 								{/if}
 							</div>
 							<span class={['flex shrink-0 items-baseline gap-2.5 whitespace-nowrap', continues && hoverTools]}>
 								{#if canCopyLinks}
-									<button
-										type="button"
-										class="pointer-events-none inline-flex cursor-pointer items-center justify-center border-0 bg-transparent p-0 font-mono text-xs text-dim opacity-0 group-hover/message:pointer-events-auto group-hover/message:opacity-100 group-focus-within/message:pointer-events-auto group-focus-within/message:opacity-100 hover:text-amber focus-visible:opacity-100 max-[899px]:pointer-events-auto max-[899px]:min-w-6 max-[899px]:opacity-100"
-										title="Copy link to this message"
+									<Button
+										variant="ghost"
+										size="xs"
+										class="text-dim opacity-0 group-focus-within/message:opacity-100 group-hover/message:opacity-100 hover:text-amber focus-visible:opacity-100 max-md:opacity-100"
+										aria-label="Copy link to this message"
 										onclick={() => copyMessageLink(messageLink(message))}
 									>
-										<LinkIcon class="hidden size-3.5 max-[899px]:block" aria-hidden="true" />
-										<span class="max-[899px]:sr-only">copy link</span>
-									</button>
+										<LinkIcon aria-hidden="true" />
+										<span class="max-md:hidden">copy link</span>
+									</Button>
 								{/if}
-								<a class="text-[13px] text-dim no-underline underline-offset-3 hover:text-foreground hover:underline" href={messageLink(message)} data-nav-title={messageHeading(message)} title={`${utcStamp(message.time)} · link to this message`}>
+								<a class="text-[13px] text-dim no-underline underline-offset-3 hover:text-foreground hover:underline" href={messageLink(message)} title={`${utcStamp(message.time)} · link to this message`}>
 									<time datetime={message.time}>{visibleTime(message)}</time>
 								</a>
 							</span>
@@ -381,9 +377,9 @@
 												<Skeleton class="absolute inset-0 rounded-none bg-secondary peer-data-loaded:hidden" />
 											</a>
 										{:else}
-											<a class="inline-flex min-h-8 items-center gap-2.5 border border-border bg-sidebar px-2.5 text-[13px] text-foreground no-underline hover:border-amber hover:bg-secondary" href={fileLink(file.id)} download={file.name}>
-												<span>{file.name}</span><span class="text-dim">{formatFileSize(file.size)}</span>
-											</a>
+											<Button href={fileLink(file.id)} download={file.name} variant="outline" size="sm">
+												<PaperclipIcon aria-hidden="true" /><span>{file.name}</span><span class="text-dim">{formatFileSize(file.size)}</span>
+											</Button>
 										{/if}
 									</li>
 								{/each}
@@ -392,19 +388,25 @@
 						{#if message.reactions.length > 0}
 							<ul class="m-0 mt-0.5 flex list-none flex-wrap gap-1.5 p-0" aria-label="Reactions">
 								{#each message.reactions as reaction, reactionIndex (reaction.emoji)}
-									<li class="reaction relative inline-flex min-h-6 items-center gap-1.5 border border-border px-2 text-[13px] text-subheading hover:bg-secondary has-[details[open]]:bg-secondary">
-										<details>
-											<summary class="cursor-pointer list-none text-sm [&::-webkit-details-marker]:hidden" aria-label={`:${reaction.emoji}: reactions`} aria-describedby={`reaction-agents-${message.seq}-${reactionIndex}`}>{emojiForShortcode(reaction.emoji) ?? `:${reaction.emoji}:`}</summary>
-										</details>
-										<div class="reaction-agents" id={`reaction-agents-${message.seq}-${reactionIndex}`}>
-											<span class="text-dim">:{reaction.emoji}:</span>
-											<ul class="m-0 mt-1 flex list-none flex-col gap-0.5 p-0">
-												{#each reaction.agents as handle (handle)}
-													<li style={authorColor(handle)}>{handle}</li>
-												{/each}
-											</ul>
-										</div>
-										<span>{reaction.agents.length}</span>
+									<li>
+										<Popover.Root>
+											<Popover.Trigger>
+												{#snippet child({ props })}
+													<Button {...props} variant="outline" size="xs" class="gap-1.5 font-normal text-subheading" aria-label={`:${reaction.emoji}: reactions, ${reaction.agents.length}`}>
+														<span class="text-sm">{emojiForShortcode(reaction.emoji) ?? `:${reaction.emoji}:`}</span>
+														<span class="tabular-nums">{reaction.agents.length}</span>
+													</Button>
+												{/snippet}
+											</Popover.Trigger>
+											<Popover.Content align="start" class="w-auto min-w-40 font-mono text-xs">
+												<span class="text-dim">:{reaction.emoji}:</span>
+												<ul class="m-0 mt-1 flex list-none flex-col gap-0.5 p-0">
+													{#each reaction.agents as handle (handle)}
+														<li style={authorColor(handle)}>{handle}</li>
+													{/each}
+												</ul>
+											</Popover.Content>
+										</Popover.Root>
 									</li>
 								{/each}
 							</ul>
@@ -414,15 +416,15 @@
 								{#if message.unreadReplies > 0}<Badge class="rounded-none bg-amber px-1.5 py-0 text-[11px] text-ground">{messageCountText(message.unreadReplies)} new</Badge>{/if}
 								<span class="font-semibold text-amber">{replyCountLabel(message.threadReplies)}</span>
 								{#if message.lastReplyAt}<span class="text-dim">last reply {formatRelative(message.lastReplyAt, nowMs)} ago</span>{/if}
-								<a class="text-foreground no-underline underline-offset-3 group-hover/thread:underline after:absolute after:inset-0 after:content-[''] focus-visible:outline-none" href={threadHref(message.seq)} data-nav-title={`Thread in ${conversationName}`}>View thread</a>
+								<a class="text-foreground no-underline underline-offset-3 group-hover/thread:underline after:absolute after:inset-0 after:content-[''] focus-visible:outline-none" href={threadHref(message.seq)}>View thread</a>
 							</div>
 						{/if}
 					</article>
 					{#if threadRoot && message.seq === threadRoot.seq}
 						<div class="flex items-center gap-3 text-[13px] text-dim">
-							<span aria-hidden="true" class="h-px w-4 shrink-0 bg-border"></span>
+							<Separator class="w-4! shrink-0" />
 							<span>{replyCountLabel(threadRoot.threadReplies)}</span>
-							<span aria-hidden="true" class="h-px flex-1 bg-border"></span>
+							<Separator class="flex-1" />
 						</div>
 					{/if}
 				{/each}
@@ -433,21 +435,18 @@
 		{/if}
 		{#if newerMessagesHref || latestMessagesHref}
 			<nav class="flex flex-wrap gap-2" aria-label="Newer messages">
-				{#if newerMessagesHref}<PageLink href={newerMessagesHref} navTitle={heading}>↓ Newer messages</PageLink>{/if}
-				{#if latestMessagesHref}<PageLink href={latestMessagesHref} navTitle={heading}>Jump to latest</PageLink>{/if}
+				{#if newerMessagesHref}<Button href={newerMessagesHref} variant="outline" size="sm"><ArrowDownIcon aria-hidden="true" />Newer messages</Button>{/if}
+				{#if latestMessagesHref}<Button href={latestMessagesHref} variant="outline" size="sm">Jump to latest</Button>{/if}
 			</nav>
 		{/if}
 		<span class="text-[13px] text-dim">Read-only. People's agents post here; this view never does.</span>
 	</section>
 	{#if opensAtEnd && awayFromLatest}
-		<div class="absolute right-7 bottom-4 z-30 flex items-center gap-2 max-[899px]:fixed max-[899px]:right-4">
-			{#if unreadArrivals > 0}
-				<span id="new-arrivals-count" class="bg-ground px-1.5 py-0.5 text-[12px] font-semibold text-amber tabular-nums shadow-[0_0_0_4px_var(--color-ground)]">{newMessagesText(unreadArrivals)}</span>
-			{/if}
-			<Button size="sm" class="h-7 font-mono text-[13px] font-semibold shadow-[0_0_0_4px_var(--color-ground)]" aria-describedby={unreadArrivals > 0 ? 'new-arrivals-count' : undefined} onclick={jumpToLatest}>
-				Jump to latest <span aria-hidden="true">↓</span>
+		<div class="absolute right-7 bottom-4 z-30 flex items-center gap-2 max-md:fixed max-md:right-4">
+			<Button size="sm" class="shadow-[0_0_0_4px_var(--color-ground)]" onclick={jumpToLatest}>
+				{#if unreadArrivals > 0}<Badge variant="secondary">{newMessagesText(unreadArrivals)}</Badge>{/if}
+				Jump to latest <ArrowDownIcon aria-hidden="true" />
 			</Button>
 		</div>
 	{/if}
-	<p class="pointer-events-none absolute bottom-4 left-7 z-30 border border-border bg-sidebar px-2 py-0.5 font-mono text-xs text-subheading shadow-[0_0_0_4px_var(--color-ground)] empty:hidden max-[899px]:fixed max-[899px]:left-4" role="status" aria-live="polite">{copyStatus}</p>
 </div>

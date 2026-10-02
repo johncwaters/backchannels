@@ -1,42 +1,40 @@
 <script lang="ts">
-	import * as Table from '#lib/components/ui/table/index.ts';
 	import type { Installation } from '#lib/admin/types.ts';
+	import * as Table from '#lib/components/ui/table/index.ts';
 	import ConfirmAction from './ConfirmAction.svelte';
 	import RelativeTime from './RelativeTime.svelte';
 
-	let { installations, nowMs, confirmingGrantId = '' }: { installations: Installation[]; nowMs: number; confirmingGrantId?: string } = $props();
+	let { installations, nowMs }: { installations: Installation[]; nowMs: number } = $props();
 
+	const headCell = 'text-dim uppercase';
 	const clientLabel = (installation: Installation) => installation.clientName ?? 'Unnamed client';
-	const confirmHref = (grantId: string) => `/installations?confirm=${encodeURIComponent(grantId)}`;
 </script>
 
-<Table.Root class="mobile-settings-table text-[13px]" role="table">
+<Table.Root class="mobile-settings-table">
 	<Table.Header>
-		<Table.Row class="border-secondary hover:bg-transparent">
-			<Table.Head class="h-8 pl-0 text-[12px] font-normal text-dim uppercase">Client</Table.Head>
-			<Table.Head class="h-8 text-[12px] font-normal text-dim uppercase">Signed in</Table.Head>
-			<Table.Head class="h-8 text-[12px] font-normal text-dim uppercase">Last used</Table.Head>
-			<Table.Head class="h-8 pr-0 text-right text-[12px] font-normal text-dim uppercase"><span class="sr-only">Actions</span></Table.Head>
+		<Table.Row>
+			<Table.Head class={`${headCell} pl-0`}>Client</Table.Head>
+			<Table.Head class={headCell}>Signed in</Table.Head>
+			<Table.Head class={headCell}>Last used</Table.Head>
+			<Table.Head class="pr-0"><span class="sr-only">Actions</span></Table.Head>
 		</Table.Row>
 	</Table.Header>
 	<Table.Body>
 		{#each installations as installation (installation.grantId)}
-			<Table.Row class="border-row-border hover:bg-search-match">
-				<Table.Cell data-label="Client" class="py-2.5 pl-0 whitespace-normal">
+			<Table.Row>
+				<Table.Cell data-label="Client" class="pl-0 whitespace-normal">
 					<span class={installation.clientName ? 'font-semibold' : 'text-dim italic'}>{clientLabel(installation)}</span>
 				</Table.Cell>
-				<Table.Cell data-label="Signed in" class="py-2.5 text-dim"><RelativeTime isoTime={installation.createdAt} {nowMs} /></Table.Cell>
-				<Table.Cell data-label="Last used" class="py-2.5 text-dim"><RelativeTime isoTime={installation.lastUsedAt} {nowMs} /></Table.Cell>
-				<Table.Cell data-label="Actions" class="py-2.5 pr-0 text-right">
+				<Table.Cell data-label="Signed in" class="text-dim"><RelativeTime isoTime={installation.createdAt} {nowMs} /></Table.Cell>
+				<Table.Cell data-label="Last used" class="text-dim"><RelativeTime isoTime={installation.lastUsedAt} {nowMs} /></Table.Cell>
+				<Table.Cell data-label="Actions" class="pr-0 text-right">
 					<ConfirmAction
+						action="?/revokeInstallation"
 						triggerLabel="Revoke"
 						confirmLabel="Revoke"
 						title={`Revoke ${clientLabel(installation)}?`}
 						description={`${clientLabel(installation)} is signed out of backchannels at once. Its agents keep their history. To connect it again, sign in from that client.`}
 						fields={{ grantId: installation.grantId }}
-						confirmHref={confirmHref(installation.grantId)}
-						cancelHref="/installations"
-						isConfirming={confirmingGrantId === installation.grantId}
 					/>
 				</Table.Cell>
 			</Table.Row>

@@ -4,7 +4,8 @@
 	import MessageFeed from '#lib/components/admin/conversation/MessageFeed.svelte';
 	import SegmentedLinks from '#lib/components/admin/SegmentedLinks.svelte';
 	import ViewHeader from '#lib/components/admin/shell/ViewHeader.svelte';
-	import { Input } from '#lib/components/ui/input/index.ts';
+	import SearchIcon from '@lucide/svelte/icons/search';
+	import * as InputGroup from '#lib/components/ui/input-group/index.ts';
 
 	let { data } = $props();
 
@@ -20,23 +21,25 @@
 	let views = $derived(
 		shown && conversation && !shown.thread
 			? [
-					{ label: 'Messages', href: conversationHref(conversation.id, data.scope), isCurrent: !shown.showsPins, navTitle: conversation.name },
-					{ label: 'Pinned', count: conversation.pins, href: conversationHref(conversation.id, data.scope, { view: 'pins' }), isCurrent: shown.showsPins, navTitle: conversation.name },
+					{ label: 'Messages', href: conversationHref(conversation.id, data.scope), isCurrent: !shown.showsPins},
+					{ label: 'Pinned', count: conversation.pins, href: conversationHref(conversation.id, data.scope, { view: 'pins' }), isCurrent: shown.showsPins},
 				]
 			: [],
 	);
 </script>
 
 {#if shown && conversation}
-	<ViewHeader heading={data.heading} subheading={data.subheading}>
+	<ViewHeader heading={data.heading} subheading={data.subheading} trail={shown.thread ? [{ label: conversation.name, href: messageHref(conversation.id, data.scope, { seq: shown.thread, threadRootSeq: null, alsoInChannel: false }) }] : []}>
 		{#snippet actions()}
 			<div class="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-2">
 				{#if views.length > 0}<SegmentedLinks links={views} label="Conversation views" />{/if}
-				<form action="/search" method="get" role="search" class="relative w-60 max-w-full">
+				<form action="/search" method="get" role="search" class="w-60 max-w-full">
 					<input type="hidden" name="scope" value={data.scope} />
 					<input type="hidden" name="in" value={conversationQueryPrefix(conversation.id, isChannel)} />
-					<span aria-hidden="true" class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-[13px] text-dim">/</span>
-					<Input type="search" name="q" aria-label={`Search in ${conversation.name}`} placeholder={`Search in ${conversation.name}`} class="h-7 bg-ground pl-6 font-mono text-[13px]" />
+					<InputGroup.Root class="bg-ground">
+						<InputGroup.Addon><SearchIcon aria-hidden="true" /></InputGroup.Addon>
+						<InputGroup.Input type="search" name="q" aria-label={`Search in ${conversation.name}`} placeholder={`Search in ${conversation.name}`} />
+					</InputGroup.Root>
 				</form>
 			</div>
 		{/snippet}
@@ -49,11 +52,9 @@
 			nowMs={data.nowMs}
 			messageLink={(message: Message) => messageHref(conversation.id, data.scope, message)}
 			fileLink={(fileId: string) => fileHref(conversation.id, fileId)}
-			olderMessagesHref={(before: number) => hrefHere(conversation.id, { before: String(before) })}
 			nextBefore={shown.nextBefore}
 			newerMessagesHref={shown.nextAfter ? hrefHere(conversation.id, { after: String(shown.nextAfter) }) : undefined}
 			latestMessagesHref={shown.nextAfter ? hrefHere(conversation.id) : undefined}
-			backLink={shown.thread ? { href: messageHref(conversation.id, data.scope, { seq: shown.thread, threadRootSeq: null, alsoInChannel: false }), label: `Back to ${conversation.name}`, navTitle: conversation.name } : undefined}
 			threadHref={shown.thread ? undefined : (rootSeq: number) => conversationHref(conversation.id, data.scope, { thread: String(rootSeq) })}
 			threadRootSeq={shown.thread}
 			targetSeq={shown.around}

@@ -1,19 +1,35 @@
 <script lang="ts">
-	import { buttonVariants } from '#lib/components/ui/button/index.ts';
-	import { Input } from '#lib/components/ui/input/index.ts';
-	import { cn } from '#lib/utils.ts';
+	import { tick } from 'svelte';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import type { Scope, SearchSort } from '#lib/admin/types.ts';
+	import * as InputGroup from '#lib/components/ui/input-group/index.ts';
+	import SearchSyntaxHelp from './SearchSyntaxHelp.svelte';
 
-	let { query, scope, sort, inputId }: { query: string; scope: Scope; sort: SearchSort; inputId: string } = $props();
+	let { query, scope, sort }: { query: string; scope: Scope; sort: SearchSort } = $props();
+
+	let value = $derived(query);
+	let input = $state<HTMLInputElement | null>(null);
+
+	// Adds a syntax example to the query and selects its editable part.
+	async function insertExample(fixed: string, editable: string, closing: string): Promise<void> {
+		const separator = value && !value.endsWith(' ') ? ' ' : '';
+		const editableStart = value.length + separator.length + fixed.length;
+		value = `${value}${separator}${fixed}${editable}${closing}`;
+		await tick();
+		input?.focus();
+		input?.setSelectionRange(editableStart, editableStart + editable.length);
+	}
 </script>
 
-<form action="/search" method="get" role="search" aria-label="Refine this search" class="flex w-full max-w-[800px] gap-2">
-	<input type="hidden" name="scope" value={scope} />
-	<input type="hidden" name="sort" value={sort} />
-	<label for={inputId} class="sr-only">Search query</label>
-	<div class="relative min-w-0 grow">
-		<span aria-hidden="true" class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-amber">&gt;</span>
-		<Input id={inputId} type="search" name="q" value={query} autocomplete="off" spellcheck={false} class="h-8 bg-ground pl-6 font-mono text-[13px] md:text-[13px]" />
-	</div>
-	<button type="submit" class={cn(buttonVariants({ variant: 'outline', size: 'default' }), 'bg-transparent font-mono text-[13px] font-normal')}>Search</button>
-</form>
+<div class="flex w-full max-w-[800px] flex-wrap items-center gap-2">
+	<form action="/search" method="get" role="search" aria-label="Refine this search" class="min-w-0 grow">
+		<input type="hidden" name="scope" value={scope} />
+		<input type="hidden" name="sort" value={sort} />
+		<InputGroup.Root class="bg-ground">
+			<InputGroup.Addon><ChevronRightIcon class="text-amber" aria-hidden="true" /></InputGroup.Addon>
+			<InputGroup.Input bind:ref={input} bind:value type="search" name="q" aria-label="Search query" autocomplete="off" spellcheck={false} />
+			<InputGroup.Addon align="inline-end"><InputGroup.Button type="submit" variant="secondary">Search</InputGroup.Button></InputGroup.Addon>
+		</InputGroup.Root>
+	</form>
+	<SearchSyntaxHelp onInsert={insertExample} />
+</div>

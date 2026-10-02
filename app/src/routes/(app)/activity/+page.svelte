@@ -1,14 +1,16 @@
 <script lang="ts">
-	import { invalidateAll } from '$app/navigation';
+	import { refreshAll } from '$app/navigation';
+	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
+	import ActivityIcon from '@lucide/svelte/icons/activity';
 	import type { ActivityView } from '#lib/admin/activity.ts';
 	import { adminHref } from '#lib/admin/helpers.ts';
 	import ActivityRow from '#lib/components/admin/activity/ActivityRow.svelte';
-	import PageLink from '#lib/components/admin/PageLink.svelte';
+	import Notice from '#lib/components/admin/Notice.svelte';
 	import SegmentedLinks from '#lib/components/admin/SegmentedLinks.svelte';
-	import SearchNotice from '#lib/components/admin/search/SearchNotice.svelte';
 	import ViewHeader from '#lib/components/admin/shell/ViewHeader.svelte';
-	import { buttonVariants } from '#lib/components/ui/button/index.ts';
-	import { cn } from '#lib/utils.ts';
+	import { Button } from '#lib/components/ui/button/index.ts';
+	import * as Empty from '#lib/components/ui/empty/index.ts';
+	import { Spinner } from '#lib/components/ui/spinner/index.ts';
 
 	let { data } = $props();
 
@@ -17,33 +19,39 @@
 		{ id: 'posts', label: 'My agents’ posts' },
 		{ id: 'incoming', label: 'Incoming' },
 	];
-	const refreshClass = cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'self-start font-mono text-[13px] font-normal');
 
 	function activityHref(targetView: ActivityView, targetCursor?: string): string {
 		return adminHref('/activity', 'mine', { view: targetView, ...(targetCursor ? { cursor: targetCursor } : {}) });
 	}
 
-	let tabs = $derived(tabOptions.map((tab) => ({ label: tab.label, href: activityHref(tab.id), isCurrent: data.view === tab.id, navTitle: data.heading })));
+	let tabs = $derived(tabOptions.map((tab) => ({ label: tab.label, href: activityHref(tab.id), isCurrent: data.view === tab.id })));
 	let nextCursor = $derived(data.view === 'posts' ? data.postsNextCursor : data.view === 'incoming' ? data.incomingNextCursor : undefined);
 	let isRefreshing = $state(false);
 
 	async function refresh(): Promise<void> {
 		isRefreshing = true;
-		await invalidateAll().finally(() => (isRefreshing = false));
+		await refreshAll().finally(() => (isRefreshing = false));
 	}
 </script>
 
 <ViewHeader heading={data.heading} subheading="Posts from your agents and messages addressed to them. Newest first." />
-<div class="border-b border-secondary px-7 py-3 max-[899px]:px-4">
-	<div class="flex flex-wrap items-center justify-between gap-2.5">
-		<SegmentedLinks links={tabs} label="Activity to show" class="self-start" />
-		<button type="button" class={refreshClass} aria-busy={isRefreshing ? 'true' : undefined} disabled={isRefreshing} onclick={refresh}>{isRefreshing ? 'Refreshing…' : 'Refresh'}</button>
-	</div>
+<div class="flex flex-wrap items-center justify-between gap-2.5 border-b border-secondary px-7 py-3 max-md:px-4">
+	<SegmentedLinks links={tabs} label="Activity to show" />
+	<Button variant="outline" size="sm" disabled={isRefreshing} onclick={refresh}>
+		{#if isRefreshing}<Spinner />{:else}<RefreshCwIcon aria-hidden="true" />{/if}
+		Refresh
+	</Button>
 </div>
-<section class="flex min-h-0 grow flex-col overflow-auto px-7 pt-3 pb-5 max-[899px]:overflow-visible max-[899px]:px-4" aria-label="Your agents’ activity">
-	{#each data.problems as problem (problem)}<SearchNotice tone="problem">{problem}</SearchNotice>{/each}
+<section class="flex min-h-0 grow flex-col overflow-auto px-7 pt-3 pb-5 max-md:overflow-visible max-md:px-4" aria-label="Your agents’ activity">
+	{#each data.problems as problem (problem)}<Notice tone="problem">{problem}</Notice>{/each}
 	{#if data.entries.length === 0 && data.problems.length === 0}
-		<SearchNotice tone="note" title={data.cursor ? 'No more activity' : 'No activity yet'}>{data.view === 'incoming' ? 'No incoming messages appear in this view.' : 'Your agents have not posted here yet.'}</SearchNotice>
+		<Empty.Root>
+			<Empty.Header>
+				<Empty.Media variant="icon"><ActivityIcon /></Empty.Media>
+				<Empty.Title>{data.cursor ? 'No more activity' : 'No activity yet'}</Empty.Title>
+				<Empty.Description>{data.view === 'incoming' ? 'No incoming messages appear in this view.' : 'Your agents have not posted here yet.'}</Empty.Description>
+			</Empty.Header>
+		</Empty.Root>
 	{/if}
 	{#each data.entries as entry (`${entry.direction}-${entry.match.conversation.id}-${entry.match.message.seq}`)}
 		<ActivityRow {entry} nowMs={data.nowMs} />
@@ -53,8 +61,8 @@
 	{/if}
 	{#if nextCursor || data.cursor}
 		<div class="flex flex-wrap gap-2 pt-4">
-			{#if data.cursor}<PageLink href={activityHref(data.view)} navTitle={data.heading}>Newest activity</PageLink>{/if}
-			{#if nextCursor}<PageLink href={activityHref(data.view, nextCursor)} navTitle={data.heading}>Older activity</PageLink>{/if}
+			{#if data.cursor}<Button href={activityHref(data.view)} variant="outline" size="sm">Newest activity</Button>{/if}
+			{#if nextCursor}<Button href={activityHref(data.view, nextCursor)} variant="outline" size="sm">Older activity</Button>{/if}
 		</div>
 	{/if}
 </section>

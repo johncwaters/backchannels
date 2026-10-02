@@ -4,9 +4,9 @@
 @custom-variant dark (&:is(.dark *));
 @custom-variant data-horizontal (&:where([data-orientation='horizontal'], [data-horizontal]));
 @custom-variant data-vertical (&:where([data-orientation='vertical'], [data-vertical]));
-@custom-variant data-open (&:where([data-state='open'], [data-open]));
-@custom-variant data-closed (&:where([data-state='closed'], [data-closed]));
-@custom-variant data-active (&:where([data-state='active'], [data-state='on'], [data-active]));
+@custom-variant data-open (&:where([data-state='open'], [data-open]:not([data-open='false'])));
+@custom-variant data-closed (&:where([data-state='closed'], [data-closed]:not([data-closed='false'])));
+@custom-variant data-active (&:where([data-state='active'], [data-state='on'], [data-active]:not([data-active='false'])));
 
 :root {
 	--radius: 0px;
@@ -72,6 +72,18 @@
 	--color-agent-cursor: var(--agent-cursor);
 	--ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
 	--ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+	--color-sidebar-foreground: var(--color-text);
+	--color-sidebar-primary: var(--color-accent);
+	--color-sidebar-primary-foreground: var(--color-ground);
+	--color-sidebar-accent: var(--color-selection);
+	--color-sidebar-accent-foreground: var(--color-text);
+	--color-sidebar-border: var(--color-control-border);
+	--color-sidebar-ring: var(--color-accent);
+}
+
+/* One mobile width for the whole app: shadcn components use md, and so does the layout. */
+@theme {
+	--breakpoint-md: 56.25rem;
 }
 
 @layer base {
@@ -107,16 +119,6 @@
 .admin-terminal :is(a, button, summary) {
 	transition: background-color 140ms var(--ease-out-quint), border-color 140ms var(--ease-out-quint), color 140ms var(--ease-out-quint), box-shadow 140ms var(--ease-out-quint);
 }
-.admin-terminal a[aria-busy='true'], .admin-terminal form[aria-busy='true'] input[type='search'], [data-mobile-sidebar-host] a[aria-busy='true'] {
-	border-color: var(--color-accent);
-	background-image: linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--color-accent) 14%, transparent) 50%, transparent 100%);
-	background-size: 200% 100%;
-	animation: shimmer 1s linear infinite;
-	cursor: progress;
-}
-.admin-terminal form[aria-busy='true'] {
-	cursor: progress;
-}
 .live-status {
 	display: inline-flex;
 	align-items: center;
@@ -127,7 +129,7 @@
 	width: 6px;
 	height: 6px;
 	border-radius: 50%;
-	background: var(--color-ground);
+	background: currentColor;
 	opacity: 0.55;
 	transition: opacity 200ms var(--ease-out-quint);
 }
@@ -138,54 +140,24 @@
 .live-status[data-paused] {
 	opacity: 0.6;
 }
-@keyframes shimmer {
-	from {
-		background-position: 100% 0;
-	}
-	to {
-		background-position: -100% 0;
-	}
-}
-@keyframes fade-in {
-	from {
-		opacity: 0;
-	}
-}
 @keyframes live-pulse {
 	from {
-		box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-ground) 60%, transparent);
+		box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 60%, transparent);
 	}
 	to {
 		box-shadow: 0 0 0 6px transparent;
 	}
 }
 
-.mobile-navigation {
-	display: none;
-}
-
-@media (max-width: 899px) {
-	:is(.admin-terminal main, [data-mobile-sidebar-host], [data-slot='alert-dialog-content']) :is(button, a.group\/button, [data-segmented-links] a, summary) {
+@media (width < 56.25rem) {
+	/* Touch targets of at least 44px. */
+	:is(.admin-terminal main, [data-slot='sidebar'], [data-slot='alert-dialog-content']) :is([data-slot='button'], summary, th a) {
 		min-height: 44px;
 		min-width: 44px;
 	}
-	:is(.admin-terminal main, [data-mobile-sidebar-host]) [data-slot='input'] {
+	:is(.admin-terminal main, [data-slot='sidebar']) :is([data-slot='input'], [data-slot='input-group-control']) {
 		min-height: 44px;
 		font-size: 16px;
-	}
-	:is(.admin-terminal main, [data-mobile-sidebar-host]) [data-segmented-links] {
-		flex-wrap: wrap;
-	}
-	:is(.admin-terminal main, [data-mobile-sidebar-host]) [data-segmented-links] a {
-		flex: 1 1 auto;
-		min-width: max-content;
-	}
-	.admin-terminal th a {
-		min-height: 44px;
-	}
-	.admin-terminal main :is(a[download], .group\/thread) {
-		min-height: 44px;
-		align-items: center;
 	}
 	.mobile-settings-table {
 		display: block;
@@ -227,38 +199,11 @@
 		flex-wrap: wrap;
 		justify-content: flex-start;
 	}
-	.mobile-settings-table td > a {
-		justify-self: start;
-	}
 	.mobile-settings-table td[data-label='Key'] {
 		display: block;
 	}
 	.mobile-settings-table td[data-label='Key']::before {
 		content: none;
-	}
-	.mobile-navigation {
-		position: sticky;
-		top: 0;
-		z-index: 30;
-		display: flex;
-		min-height: 56px;
-		align-items: center;
-		justify-content: space-between;
-		gap: 12px;
-		border-bottom: 1px solid var(--color-accent);
-		background: var(--color-sidebar);
-		padding: 6px 16px;
-	}
-	[data-mobile-sidebar-host] > [data-workspace-sidebar] {
-		min-height: 0;
-		flex: 1;
-	}
-	[data-mobile-sidebar-host] input[type='search'] {
-		font-size: 16px;
-	}
-	[data-mobile-sidebar-host] [data-conversation-list] {
-		min-height: 0;
-		overflow-y: auto;
 	}
 }
 
@@ -279,12 +224,6 @@ article[data-arrived] {
 	from {
 		color: var(--color-accent);
 	}
-}
-.reaction-agents {
-	@apply pointer-events-none invisible absolute top-full mt-1 -left-px z-20 min-w-max -translate-y-[3px] border border-border bg-sidebar px-2.5 py-2 font-mono text-xs opacity-0 transition-[opacity,translate,visibility] duration-150 ease-out-quint;
-}
-.reaction:is(:hover, :focus-within, :has(details[open])) .reaction-agents {
-	@apply visible translate-y-0 opacity-100;
 }
 .message-body {
 	@apply font-sans text-[15px] leading-normal text-message wrap-anywhere;

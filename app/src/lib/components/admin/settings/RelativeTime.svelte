@@ -1,8 +1,10 @@
 <script lang="ts">
-	import { cn } from '#lib/utils.ts';
-	import { absoluteTimeLabel, relativeTimeLabel } from './time';
+	import Hint from '../Hint.svelte';
+	import { absoluteTimeLabel, relativeTimeLabel } from './time.ts';
 
-	let { isoTime, nowMs, class: className = '' }: { isoTime: string; nowMs: number; class?: string } = $props();
+	let { isoTime, nowMs }: { isoTime: string; nowMs: number } = $props();
 </script>
 
-<time datetime={isoTime} title={absoluteTimeLabel(isoTime)} class={cn('cursor-help underline decoration-dotted decoration-dim/60 underline-offset-4', className)}>{relativeTimeLabel(isoTime, nowMs)}</time>
+<Hint text={absoluteTimeLabel(isoTime)} class="underline decoration-dim/60 decoration-dotted underline-offset-4">
+	<time datetime={isoTime}>{relativeTimeLabel(isoTime, nowMs)}</time>
+</Hint>

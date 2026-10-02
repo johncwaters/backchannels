@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { buttonVariants } from '#lib/components/ui/button/index.ts';
-	import { cn } from '#lib/utils.ts';
+	import { Button } from '#lib/components/ui/button/index.ts';
+	import * as Popover from '#lib/components/ui/popover/index.ts';
 
 	interface SyntaxExample {
 		fixed: string;
@@ -9,9 +9,11 @@
 		meaning: string;
 	}
 
-	let { targetInputId }: { targetInputId: string } = $props();
+	// The query box the examples go into, and a way to put text in it.
+	let { onInsert }: { onInsert: (fixed: string, editable: string, closing: string) => void } = $props();
 
-	const popoverId = 'search-syntax';
+	let open = $state(false);
+
 	const examples: SyntaxExample[] = [
 		{ fixed: '"', editable: 'exact phrase', closing: '"', meaning: 'the words in this order' },
 		{ fixed: '-', editable: 'word', meaning: 'leave out messages with this word' },
@@ -27,60 +29,31 @@
 		{ fixed: 'is:', editable: 'thread', meaning: 'thread roots and replies; is:saved for saved messages' },
 	];
 
-	let popover = $state<HTMLDivElement>();
+	const exampleText = (example: SyntaxExample) => `${example.fixed}${example.editable}${example.closing ?? ''}`;
 
-	// Adds the example to the target search box and selects its editable part.
-	function insertExample(example: SyntaxExample): void {
-		const input = document.getElementById(targetInputId);
-		if (!(input instanceof HTMLInputElement)) return;
-		const separator = input.value && !input.value.endsWith(' ') ? ' ' : '';
-		const editableStart = input.value.length + separator.length + example.fixed.length;
-		input.value = `${input.value}${separator}${exampleText(example)}`;
-		popover?.hidePopover();
-		input.focus();
-		input.setSelectionRange(editableStart, editableStart + example.editable.length);
-	}
-
-	function exampleText(example: SyntaxExample): string {
-		return `${example.fixed}${example.editable}${example.closing ?? ''}`;
+	function insert(example: SyntaxExample): void {
+		open = false;
+		onInsert(example.fixed, example.editable, example.closing ?? '');
 	}
 </script>
 
-<button
-	type="button"
-	popovertarget={popoverId}
-	aria-haspopup="dialog"
-	class={cn(
-		buttonVariants({ variant: 'outline', size: 'sm' }),
-		'bg-transparent font-mono text-[13px] font-normal [anchor-name:--search-syntax] has-[+[popover]:popover-open]:border-amber has-[+[popover]:popover-open]:bg-secondary',
-	)}
->
-	Search syntax
-</button>
-<div
-	id={popoverId}
-	popover
-	role="dialog"
-	aria-label="Search syntax"
-	bind:this={popover}
-	class="fixed inset-auto top-[120px] right-[360px] m-0 w-[min(560px,calc(100vw-32px))] -translate-y-1 border border-border bg-popover px-3.5 py-3 text-[13px] text-foreground opacity-0 shadow-[0_16px_40px_rgb(0_0_0/0.45)] transition-[opacity,translate,display,overlay] transition-discrete duration-150 ease-out-quint open:translate-y-0 open:opacity-100 starting:open:-translate-y-1 starting:open:opacity-0 supports-[position-anchor:--search-syntax]:top-[calc(anchor(bottom)+6px)] supports-[position-anchor:--search-syntax]:right-auto supports-[position-anchor:--search-syntax]:left-[anchor(left)] supports-[position-anchor:--search-syntax]:[position-anchor:--search-syntax] supports-[position-anchor:--search-syntax]:[position-try-fallbacks:flip-inline]"
->
-	<dl class="m-0 grid grid-cols-[max-content_minmax(0,1fr)] items-baseline gap-x-4 gap-y-0.5">
-		{#each examples as example (exampleText(example) + example.meaning)}
-			<dt>
-				<button
-					type="button"
-					onclick={() => insertExample(example)}
-					title="Add to the search box"
-					class="-mx-1.5 cursor-pointer border-0 bg-transparent px-1.5 py-0.5 font-mono text-[13px] text-amber hover:bg-secondary focus-visible:bg-secondary focus-visible:outline-1 focus-visible:outline-amber"
-				>
-					{exampleText(example)}
-				</button>
-			</dt>
-			<dd class="m-0 font-sans text-muted-foreground">{example.meaning}</dd>
-		{/each}
-	</dl>
-	<p class="mt-2.5 mb-0 border-t border-row-border pt-2 font-sans text-muted-foreground">
-		Combine them freely: <code class="font-mono text-amber">in:#deploys from:me has:link rollback</code>. Pick one to add it to the search box.
-	</p>
-</div>
+<Popover.Root bind:open>
+	<Popover.Trigger>
+		{#snippet child({ props })}
+			<Button {...props} variant="outline" size="sm">Search syntax</Button>
+		{/snippet}
+	</Popover.Trigger>
+	<Popover.Content align="start" class="w-[min(560px,calc(100vw-32px))]" aria-label="Search syntax">
+		<dl class="m-0 grid grid-cols-[max-content_minmax(0,1fr)] items-baseline gap-x-4 gap-y-0.5">
+			{#each examples as example (exampleText(example) + example.meaning)}
+				<dt>
+					<Button variant="ghost" size="xs" class="-mx-1.5 font-mono text-amber" title="Add to the search box" onclick={() => insert(example)}>{exampleText(example)}</Button>
+				</dt>
+				<dd class="m-0 font-sans text-muted-foreground">{example.meaning}</dd>
+			{/each}
+		</dl>
+		<p class="mt-2.5 mb-0 border-t border-row-border pt-2 font-sans text-muted-foreground">
+			Combine them freely: <code class="font-mono text-amber">in:#deploys from:me has:link rollback</code>. Pick one to add it to the search box.
+		</p>
+	</Popover.Content>
+</Popover.Root>

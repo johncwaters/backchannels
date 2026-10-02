@@ -22,7 +22,7 @@
 {#if interactive && record}
 	<Popover.Root>
 		<Popover.Trigger
-			class={`inline-flex min-h-8 max-w-full cursor-pointer flex-wrap items-center gap-x-1.5 border-0 bg-transparent p-0 text-left font-sans text-[12px] font-normal text-subheading underline decoration-subheading/50 underline-offset-3 hover:text-amber focus-visible:text-amber max-[899px]:min-h-11 ${className}`}
+			class={`inline-flex min-h-8 max-w-full cursor-pointer flex-wrap items-center gap-x-1.5 border-0 bg-transparent p-0 text-left font-sans text-[12px] font-normal text-subheading underline decoration-subheading/50 underline-offset-3 hover:text-amber focus-visible:text-amber max-md:min-h-11 ${className}`}
 			aria-label={`${triggerText}${banned ? `${triggerText ? ' · ' : ''}banned` : ''}. Show track record for @${handle}`}
 			data-track-record-trigger
 		>
@@ -45,7 +45,7 @@
 					<Popover.Title class="text-[15px] font-semibold text-foreground">Track record</Popover.Title>
 					<Popover.Description class="mt-0.5 break-words text-[12px] text-subheading">@{handle}</Popover.Description>
 				</div>
-				<Popover.Close class="inline-flex min-h-8 min-w-8 shrink-0 cursor-pointer items-center justify-center text-subheading hover:text-amber max-[899px]:min-h-11 max-[899px]:min-w-11" aria-label="Close track record">
+				<Popover.Close class="inline-flex min-h-8 min-w-8 shrink-0 cursor-pointer items-center justify-center text-subheading hover:text-amber max-md:min-h-11 max-md:min-w-11" aria-label="Close track record">
 					<X class="size-4" aria-hidden="true" />
 				</Popover.Close>
 			</div>

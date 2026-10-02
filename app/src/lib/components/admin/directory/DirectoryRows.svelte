@@ -28,11 +28,11 @@
 	const heading = $derived(kind === 'public' ? 'All public channels' : 'Your private chats');
 	const showsMineBadge = $derived(kind === 'public');
 
-	const headClass = 'sticky top-0 z-10 h-auto bg-ground px-3 pt-2.5 pb-1.5 text-xs font-normal tracking-[0.06em] text-dim shadow-[inset_0_-1px_0_var(--color-row-border)] max-[899px]:top-[57px] max-[899px]:px-0';
+	const headClass = 'sticky top-0 z-10 h-auto bg-ground px-3 pt-2.5 pb-1.5 text-xs font-normal tracking-[0.06em] text-dim shadow-[inset_0_-1px_0_var(--color-row-border)] max-md:top-14 max-md:px-0';
 	const sortLinkClass = 'inline-flex items-center gap-1 text-inherit no-underline outline-none hover:text-foreground focus-visible:text-amber focus-visible:underline';
 	const peopleColumnClass = 'w-16 text-right tabular-nums max-[1100px]:hidden';
-	const todayColumnClass = 'w-[124px] max-[1100px]:w-16 max-[899px]:hidden';
-	const lastColumnClass = 'w-14 text-right max-[899px]:w-10';
+	const todayColumnClass = 'w-[124px] max-[1100px]:w-16 max-md:hidden';
+	const lastColumnClass = 'w-14 text-right max-md:w-10';
 
 	function sortHref(target: ConversationSort): string {
 		return adminHref(path, scope, filter ? { sort: target, filter } : { sort: target });
@@ -54,7 +54,7 @@
 
 {#snippet sortableHead(column: ConversationSort, label: string, className: string)}
 	<Table.Head class={cn(headClass, className)} aria-sort={ariaSortFor(column)}>
-		<a href={sortHref(column)} data-nav-title={heading} class={cn(sortLinkClass, sort === column && 'text-amber')}>
+		<a href={sortHref(column)} class={cn(sortLinkClass, sort === column && 'text-amber')}>
 			{label}<span aria-hidden="true" class="inline-block w-2">{sortArrowFor(column)}</span>
 		</a>
 	</Table.Head>
@@ -63,8 +63,8 @@
 <table class="w-full table-fixed border-collapse text-left text-sm" data-slot="table">
 	<Table.Header class="[&_tr]:border-b-0">
 		<Table.Row class="border-b-0 hover:bg-transparent">
-			{@render sortableHead('name', 'NAME', 'w-[26%] max-[1100px]:w-[34%] max-[899px]:w-[45%]')}
-			<Table.Head class={cn(headClass, 'max-[899px]:px-2.5')}>{kind === 'public' ? 'TOPIC' : 'ABOUT'}</Table.Head>
+			{@render sortableHead('name', 'NAME', 'w-[26%] max-[1100px]:w-[34%] max-md:w-[45%]')}
+			<Table.Head class={cn(headClass, 'max-md:px-2.5')}>{kind === 'public' ? 'TOPIC' : 'ABOUT'}</Table.Head>
 			<Table.Head class={cn(headClass, peopleColumnClass)}>PEOPLE</Table.Head>
 			{@render sortableHead('active', 'TODAY', todayColumnClass)}
 			{@render sortableHead('recent', 'LAST', lastColumnClass)}
@@ -74,8 +74,8 @@
 		{#each conversations as conversation (conversation.id)}
 			{@const label = conversationLabel(conversation, viewerEmail)}
 			{@const about = aboutTextFor(conversation)}
-			<Table.Row class="group relative border-row-border hover:bg-secondary has-[:focus-visible]:bg-secondary has-[details[open]]:bg-secondary max-[899px]:h-11">
-				<Table.Cell class="px-3 py-2 max-[899px]:px-0">
+			<Table.Row class="group relative border-row-border hover:bg-secondary has-[:focus-visible]:bg-secondary has-data-[state=open]:bg-secondary max-md:h-11">
+				<Table.Cell class="px-3 py-2 max-md:px-0">
 					<span class="flex min-w-0 items-center gap-2">
 						{#if conversation.unread > 0}
 							<UnreadBadge count={conversation.unread} />
@@ -83,9 +83,8 @@
 						<PrivacyMarker marker={privacyMarkerFor(conversation)} />
 						<a
 							href={conversationHref(conversation.id, scope)}
-							data-nav-title={conversation.name}
 							title={label.fullName !== label.shownName ? label.fullName : undefined}
-							class={cn("min-w-0 truncate font-semibold no-underline outline-none after:absolute after:inset-0 after:content-[''] focus-visible:after:shadow-[inset_0_0_0_1px_var(--color-amber)] group-hover:text-amber max-[899px]:overflow-visible max-[899px]:whitespace-normal max-[899px]:wrap-anywhere", conversation.unread > 0 ? 'text-white' : 'text-foreground')}
+							class={cn("min-w-0 truncate font-semibold no-underline outline-none after:absolute after:inset-0 after:content-[''] focus-visible:after:shadow-[inset_0_0_0_1px_var(--color-amber)] group-hover:text-amber max-md:overflow-visible max-md:whitespace-normal max-md:wrap-anywhere", conversation.unread > 0 ? 'text-white' : 'text-foreground')}
 						>{label.shownName}</a>
 						{#if label.hiddenMemberCount > 0}
 							<span class="shrink-0 text-xs text-dim">+{label.hiddenMemberCount}</span>
@@ -95,8 +94,8 @@
 						{/if}
 					</span>
 				</Table.Cell>
-				<Table.Cell class="px-3 py-2 font-sans max-[899px]:px-2.5">
-					<span class={cn('block truncate max-[899px]:overflow-visible max-[899px]:whitespace-normal max-[899px]:wrap-anywhere', about.isTopic ? 'text-subheading' : 'text-preview')}>{about.text}</span>
+				<Table.Cell class="px-3 py-2 font-sans max-md:px-2.5">
+					<span class={cn('block truncate max-md:overflow-visible max-md:whitespace-normal max-md:wrap-anywhere', about.isTopic ? 'text-subheading' : 'text-preview')}>{about.text}</span>
 					{#if kind === 'private' && conversation.members.length > 0}
 						<ChatMembers members={conversation.members} />
 					{/if}
@@ -110,7 +109,7 @@
 						<span class={cn('tabular-nums', conversation.messagesToday === 0 && 'text-dim')}>{messageCountText(conversation.messagesToday)}</span>
 					</span>
 				</Table.Cell>
-				<Table.Cell class={cn('px-3 py-2 whitespace-nowrap text-dim tabular-nums max-[899px]:px-0', lastColumnClass)}>{formatRelative(conversation.lastActivity, nowMs)}</Table.Cell>
+				<Table.Cell class={cn('px-3 py-2 whitespace-nowrap text-dim tabular-nums max-md:px-0', lastColumnClass)}>{formatRelative(conversation.lastActivity, nowMs)}</Table.Cell>
 			</Table.Row>
 		{/each}
 	</Table.Body>

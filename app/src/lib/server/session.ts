@@ -1,12 +1,11 @@
 import type { Cookies } from '@sveltejs/kit';
 import { env } from 'cloudflare:workers';
-import type { AdminSession, NewHeadlessKey } from '#lib/admin/types.ts';
+import type { AdminSession } from '#lib/admin/types.ts';
 import { randomBase64Url } from '#lib/admin/pkce.ts';
 
 export interface SessionData {
 	adminSession?: AdminSession;
 	pendingSignIn?: { state: string; codeVerifier: string; nextPath: string };
-	newHeadlessKey?: NewHeadlessKey & { wasRotated: boolean };
 }
 
 export const sessionCookieName = 'backchannels-session';

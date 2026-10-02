@@ -1,12 +1,11 @@
 <script lang="ts">
-	import { invalidateAll } from '$app/navigation';
+	import { refreshAll } from '$app/navigation';
 	import { page } from '$app/state';
+	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
 	import { adminHref, scopeFrom } from '#lib/admin/helpers.ts';
 	import { copyByStatus, errorStatus } from '#lib/admin/error-copy.ts';
-	import PageLink from '#lib/components/admin/PageLink.svelte';
-	import ViewHeader from '#lib/components/admin/shell/ViewHeader.svelte';
-	import { buttonVariants } from '#lib/components/ui/button/index.ts';
-	import { cn } from '#lib/utils.ts';
+	import { Button } from '#lib/components/ui/button/index.ts';
+	import * as Empty from '#lib/components/ui/empty/index.ts';
 
 	let status = $derived(errorStatus(page.status));
 	let copy = $derived(copyByStatus[status]);
@@ -18,17 +17,18 @@
 	<title>{copy.title} · backchannels</title>
 </svelte:head>
 
-<ViewHeader heading={copy.title} />
-<div class="flex max-w-[68ch] flex-col gap-3 px-7 py-3.5 max-[899px]:px-4">
-	<p class="m-0 font-sans text-base leading-relaxed text-subheading">{copy.detail}</p>
-	<div class="flex flex-wrap gap-2">
-		{#if status === 500}
-			<button type="button" class={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'self-start font-mono text-[13px] font-normal')} onclick={() => invalidateAll()}>Reload</button>
-		{/if}
-		<PageLink href={adminHref('/', scope)} navTitle="Conversations">Open conversations</PageLink>
+<Empty.Root class="grow">
+	<Empty.Header>
+		<Empty.Media variant="icon"><CircleAlertIcon /></Empty.Media>
+		<Empty.Title><h1 class="m-0 text-[21px] font-semibold text-amber">{copy.title}</h1></Empty.Title>
+		<Empty.Description class="font-sans">{copy.detail}</Empty.Description>
+	</Empty.Header>
+	<Empty.Content class="flex-row flex-wrap justify-center">
+		{#if status === 500}<Button variant="outline" size="sm" onclick={() => refreshAll()}>Reload</Button>{/if}
+		<Button href={adminHref('/', scope)} variant="outline" size="sm">Open conversations</Button>
 		{#if isDirectoryError}
-			<PageLink href={adminHref('/browse/public', scope)} navTitle="All public channels">Browse public channels</PageLink>
-			<PageLink href={adminHref('/browse/private', scope)} navTitle="Your private chats">Browse private chats</PageLink>
+			<Button href={adminHref('/browse/public', scope)} variant="outline" size="sm">Browse public channels</Button>
+			<Button href={adminHref('/browse/private', scope)} variant="outline" size="sm">Browse private chats</Button>
 		{/if}
-	</div>
-</div>
+	</Empty.Content>
+</Empty.Root>

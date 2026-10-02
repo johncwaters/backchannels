@@ -199,8 +199,8 @@ The palette combines warm amber, near-black surfaces, and pale text.
 - **Body:** message text and activity excerpts.
 - **Landing body:** public explanations, with a maximum measure of 68ch.
 - **Metadata:** timestamps and row context. Admin supporting prose also uses 13px sans-serif text.
-- **Compact metadata:** existing 11px counts and badges, including unread replies in MessageList. Message timestamps retain their 13px treatment.
-- **Mobile input:** the Sheet search field uses 16px text to avoid automatic input zoom on iOS.
+- **Compact metadata:** existing 11px counts and badges, including unread replies in MessageFeed. Message timestamps retain their 13px treatment.
+- **Mobile input:** text fields use 16px text below the md breakpoint, to avoid automatic input zoom on iOS.
 
 **The Two Voices Rule.** Use mono for controls and identities. Use sans-serif for message text and explanations.
 
@@ -210,9 +210,9 @@ The desktop frame fills the viewport. The public page has a flexible main pane a
 
 Admin content uses 28px horizontal padding. Activity rows stop at 900px wide. The spacing scale follows the implemented quarter-rem utility rhythm.
 
-At widths of 899px or less, admin panes form one column. Content uses 16px horizontal padding and document scrolling. The public page changes at 900px or less, with 24px vertical and 16px horizontal padding.
+Below the md breakpoint (900px), admin panes form one column. Content uses 16px horizontal padding and document scrolling. The public page changes at 900px or less, with 24px vertical and 16px horizontal padding.
 
-With JavaScript, mobile admin navigation uses a sticky bar and a left Sheet. The original sidebar remains in the document without JavaScript. At 900px and above, the admin sidebar retains its 320px desktop layout.
+Below the md breakpoint, a sticky top bar replaces the fixed sidebar, which opens as a sheet. At 900px and above, the admin sidebar is fixed on the right at 320px.
 
 Activity metadata and actions wrap on narrow screens. Keep timestamps legible and allow long identities and conversation names to wrap.
 
@@ -240,31 +240,23 @@ Hover changes the fill or text color. Focus remains visible. Disabled controls u
 
 ### Inputs / Fields
 
-The sidebar search field uses a dark fill, a thin control border, and a slash prefix. Focus adds an amber border and translucent ring. Keep the accessible field label.
+Fields are shadcn `Input` or `InputGroup` controls with a dark fill and a thin control border. Search fields lead with a search icon; the sidebar search ends with a `/` key hint on desktop. Focus adds an amber border and translucent ring. Keep the accessible field label.
 
-The mobile Sheet search field uses the mobile-input type step. Its conversation list scrolls below the search and scope controls, including on short viewports.
+The conversation list scrolls below the search and scope controls, including on short viewports.
 
 ### Navigation
 
-Tabs use one square bordered group. The current tab has an amber fill and dark text. Other tabs use dim text and a quiet hover fill.
+Tabs, sorts and the scope switch are one `ButtonGroup` of link buttons. The current one has an amber fill and dark text. The others use the outline button style. On a narrow screen the group scrolls sideways instead of wrapping.
 
 Sidebar rows show unread counts before the label. Selected rows gain an amber edge. The amber footer is one row: the workspace name (desktop only) and live or manual marker on the left, and icon-only route links with labels and tooltips on the right. Keep other details out of it.
 
-Navigation responds immediately. The main pane shows a skeleton, the heading changes, and a thin progress bar appears. State transitions stay short. Reduced-motion preferences disable decorative animation and shorten transitions.
+Navigation responds immediately. A thin progress bar appears, the target row or tab shows as selected, and the current page dims until the next one loads. Results of actions show as toasts at the bottom left. State transitions stay short. Reduced-motion preferences disable decorative animation and shorten transitions.
 
 ### Mobile Conversations Sheet
 
-At widths of 899px or less, the ready navigation bar stays at the top. It has a minimum height of 56px, a sidebar fill, and a 1px amber lower border. The Conversations trigger has a minimum height of 44px.
+Below the md breakpoint, the top bar stays at the top. It has a minimum height of 56px, a sidebar fill, and a 1px amber lower border. It holds the workspace name, the live marker and a 44px sidebar trigger.
 
-The Sheet opens from the left. Its width is the smaller of 340px and the viewport width minus 24px. It fills the dynamic viewport height, with square corners, a sidebar fill, and a 1px amber right edge. The overlay uses ground at 80% opacity.
-
-The header has a minimum height of 60px. Its Close control is 44px square. The conversation list uses a zero minimum height and vertical overflow scrolling.
-
-The Sheet renders the workspace sidebar component, and the in-flow sidebar is hidden at this width, so only one conversation list shows at a time. The Sheet closes on navigation and at the desktop breakpoint.
-
-The source focuses workspace search after the Sheet opens. The slash shortcut opens hidden mobile navigation or focuses visible search. It ignores modified keys and text-entry controls. The Sheet uses Bits UI Dialog primitives for modal focus behavior; native keyboard focus containment still needs a foreground browser check.
-
-The Sheet enters in 150ms and exits in 100ms with the existing expo easing. The global reduced-motion rules apply.
+The trigger opens the shadcn `Sidebar` in its mobile mode: a sheet from the right, 18rem wide, holding the same search, scope switch, conversation list and footer as the desktop sidebar. The sheet closes on navigation. The slash shortcut opens the sheet and focuses its search, or focuses the visible search on desktop. It ignores modified keys and text-entry controls.
 
 ### Code blocks
 

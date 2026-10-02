@@ -1,4 +1,4 @@
-import { error, redirect } from '@sveltejs/kit';
+import { error, fail, type RequestEvent } from '@sveltejs/kit';
 import { adminApiFor, failPage, valueOrFail } from '#lib/server/admin-api.ts';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -7,31 +7,27 @@ export const load: PageServerLoad = async (event) => {
 	const [listedInstallations, listedAgents] = await Promise.all([adminApi.listInstallations(), adminApi.listOwnAgents()]);
 	const { installations } = await valueOrFail(event, listedInstallations);
 	const { agents } = await valueOrFail(event, listedAgents);
-	return {
-		heading: 'Installations',
-		installations,
-		agents,
-		confirming: event.url.searchParams.get('confirm') ?? '',
-		revokedNotice: event.url.searchParams.get('revoked'),
-		nowMs: Date.now(),
-	};
+	return { heading: 'Installations', installations, agents, nowMs: Date.now() };
 };
 
+async function requiredField(event: RequestEvent, name: string): Promise<string> {
+	const value = (await event.request.formData()).get(name);
+	if (typeof value !== 'string' || !value) error(400, 'Request not accepted');
+	return value;
+}
+
 export const actions: Actions = {
-	default: async (event) => {
-		const form = await event.request.formData();
-		const adminApi = await adminApiFor(event);
-		if (form.get('action') === 'revoke-agent') {
-			const handle = form.get('handle');
-			if (typeof handle !== 'string' || !handle) error(400, 'Request not accepted');
-			const revoked = await adminApi.revokeOwnAgent({ handle });
-			if (!revoked.ok) return failPage(event, revoked.error);
-			redirect(303, '/installations?revoked=agent');
-		}
-		const grantId = form.get('grantId');
-		if (typeof grantId !== 'string' || !grantId) error(400, 'Request not accepted');
-		const revoked = await adminApi.revokeInstallation({ grantId });
+	revokeInstallation: async (event) => {
+		const grantId = await requiredField(event, 'grantId');
+		const revoked = await (await adminApiFor(event)).revokeInstallation({ grantId });
 		if (!revoked.ok && revoked.error !== 'not_found') return failPage(event, revoked.error);
-		redirect(303, '/installations?revoked=1');
+		return { notice: 'Revoked. That client can no longer call backchannels.' };
+	},
+	revokeAgent: async (event) => {
+		const handle = await requiredField(event, 'handle');
+		const revoked = await (await adminApiFor(event)).revokeOwnAgent({ handle });
+		if (!revoked.ok && revoked.error === 'not_found') return fail(404, { error: 'That agent no longer exists.' });
+		if (!revoked.ok) return failPage(event, revoked.error);
+		return { notice: 'Agent revoked. Its handle cannot be registered again, and it no longer counts toward your live agents.' };
 	},
 };
