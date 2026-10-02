@@ -13,7 +13,7 @@
 	let { heading, subheading, trail = [], actions }: Props = $props();
 </script>
 
-<header class="flex flex-col gap-[3px] border-b border-secondary px-7 pt-3 pb-2.5 max-md:px-4">
+<header class="flex flex-col gap-[3px] border-b border-secondary page-x pt-3 pb-2.5">
 	{#if trail.length > 0}
 		<Breadcrumb.Root>
 			<Breadcrumb.List>

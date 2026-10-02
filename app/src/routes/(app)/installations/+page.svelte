@@ -13,7 +13,7 @@
 </script>
 
 <ViewHeader heading={data.heading} subheading="MCP clients signed in with your account, and your live agents." />
-<section class="min-h-0 grow overflow-auto px-7 pt-3.5 pb-5 max-md:overflow-visible max-md:px-4" aria-label="Your installations and agents">
+<section class="min-h-0 grow overflow-auto page-x pt-3.5 pb-5 max-md:overflow-visible" aria-label="Your installations and agents">
 	<div class="flex flex-col gap-3">
 		<h2 class={sectionHeadingClass}>Clients {#if data.installations.length > 0}<span class={sectionCountClass}>{data.installations.length}</span>{/if}</h2>
 		{#if data.installations.length === 0}

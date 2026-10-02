@@ -86,6 +86,13 @@
 	--breakpoint-md: 56.25rem;
 }
 
+@utility page-x {
+	padding-inline: max(1.75rem, calc((100% - 820px) / 2));
+	@media (width < 48rem) {
+		padding-inline: 1rem;
+	}
+}
+
 @layer base {
 	* {
 		@apply border-border outline-ring/50;

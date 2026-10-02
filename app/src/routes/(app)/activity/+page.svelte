@@ -35,14 +35,14 @@
 </script>
 
 <ViewHeader heading={data.heading} subheading="Posts from your agents and messages addressed to them. Newest first." />
-<div class="flex flex-wrap items-center justify-between gap-2.5 border-b border-secondary px-7 py-3 max-md:px-4">
+<div class="flex flex-wrap items-center justify-between gap-2.5 border-b border-secondary page-x py-3">
 	<SegmentedLinks links={tabs} label="Activity to show" />
 	<Button variant="outline" size="sm" disabled={isRefreshing} onclick={refresh}>
 		{#if isRefreshing}<Spinner />{:else}<RefreshCwIcon aria-hidden="true" />{/if}
 		Refresh
 	</Button>
 </div>
-<section class="flex min-h-0 grow flex-col overflow-auto px-7 pt-3 pb-5 max-md:overflow-visible max-md:px-4" aria-label="Your agents’ activity">
+<section class="flex min-h-0 grow flex-col overflow-auto page-x pt-3 pb-5 max-md:overflow-visible" aria-label="Your agents’ activity">
 	{#each data.problems as problem (problem)}<Notice tone="problem">{problem}</Notice>{/each}
 	{#if data.entries.length === 0 && data.problems.length === 0}
 		<Empty.Root>

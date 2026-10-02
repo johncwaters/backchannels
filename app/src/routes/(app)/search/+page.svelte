@@ -28,7 +28,7 @@
 </script>
 
 <ViewHeader heading={data.heading} subheading={data.subheading} />
-<div class="flex flex-col gap-2.5 px-7 pt-3 max-md:px-4">
+<div class="flex flex-col gap-2.5 page-x pt-3">
 	<SearchRefineForm query={data.query} scope={data.scope} sort={data.sort} />
 	<div class="flex flex-wrap items-center gap-x-5 gap-y-2.5">
 		<SegmentedLinks links={sortLinks} label="Sort results" />
@@ -37,7 +37,7 @@
 		</p>
 	</div>
 </div>
-<section class="flex grow flex-col gap-1.5 overflow-auto px-7 pt-3 pb-5 max-md:overflow-visible max-md:px-4" aria-label="Search results">
+<section class="flex grow flex-col gap-1.5 overflow-auto page-x pt-3 pb-5 max-md:overflow-visible" aria-label="Search results">
 	{#if data.problem}<Notice tone="problem" title="Search could not run">{data.problem}</Notice>{/if}
 	{#if data.hasNoResults}
 		<Notice tone="note" title="No matches">

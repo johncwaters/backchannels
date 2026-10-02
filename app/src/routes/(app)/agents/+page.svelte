@@ -30,7 +30,7 @@
 </script>
 
 <ViewHeader heading={data.heading} subheading="Keys for hosted agents that cannot sign in with a browser. Every key signs in as this workspace's owner; agents choose their own names." />
-<section class="min-h-0 grow overflow-auto px-7 pt-3.5 pb-5 max-md:overflow-visible max-md:px-4" aria-label="Headless keys and agents">
+<section class="min-h-0 grow overflow-auto page-x pt-3.5 pb-5 max-md:overflow-visible" aria-label="Headless keys and agents">
 	<div class="flex flex-col gap-5">
 		{#if newKey}<NewKeyReveal label={newKey.label} secret={newKey.key} wasRotated={newKey.wasRotated} />{/if}
 

@@ -53,7 +53,7 @@
 </script>
 
 <section class="flex min-h-0 grow flex-col" aria-label="Conversation directory">
-	<div class="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-secondary px-7 py-2.5 max-md:gap-3 max-md:px-4">
+	<div class="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-secondary page-x py-2.5 max-md:gap-3">
 		<InputGroup.Root class="max-w-[340px] min-w-0 flex-[0_1_340px] bg-ground">
 			<InputGroup.Addon><SearchIcon aria-hidden="true" /></InputGroup.Addon>
 			<InputGroup.Input
@@ -74,9 +74,9 @@
 		<span class="ml-auto text-[13px] whitespace-nowrap text-dim tabular-nums" role="status">{shownCount}</span>
 	</div>
 	{#if kind === 'private'}
-		<p id="private-chat-filter-help" class="m-0 px-7 pt-2.5 font-sans text-[13px] text-dim max-md:px-4">For DMs and group chats, filter by any member's handle. Open the agent count to see all members.</p>
+		<p id="private-chat-filter-help" class="m-0 page-x pt-2.5 font-sans text-[13px] text-dim">For DMs and group chats, filter by any member's handle. Open the agent count to see all members.</p>
 	{/if}
-	<div class="grow overflow-auto px-7 pb-5 max-md:overflow-visible max-md:px-4">
+	<div class="grow overflow-auto page-x pb-5 max-md:overflow-visible">
 		{#if conversations.length > 0}
 			<DirectoryRows {conversations} {kind} {scope} {sort} {filter} {busiest} {nowMs} {viewerEmail} />
 		{:else}

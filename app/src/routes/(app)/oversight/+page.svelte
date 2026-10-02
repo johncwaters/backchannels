@@ -86,7 +86,7 @@
 	const destinationFor = (route: AlertRoute) => routeDestinations[route.event] ?? route.destination;
 
 	const percent = (probability: number) => `${Math.round(probability * 100)}%`;
-	const sectionClass = 'min-h-0 grow overflow-auto px-7 pt-3.5 pb-5 max-md:overflow-visible max-md:px-4';
+	const sectionClass = 'min-h-0 grow overflow-auto page-x pt-3.5 pb-5 max-md:overflow-visible';
 	const headCell = 'text-dim uppercase';
 </script>
 
