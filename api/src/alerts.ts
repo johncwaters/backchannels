@@ -74,6 +74,7 @@ export async function drainAlerts(storage: DurableObjectStorage, env: Env, now: 
       continue;
     }
     const attempts = row.attempts + 1;
+    console.error(`Slack alert ${row.id} to ${row.target} failed (attempt ${attempts}): ${result.error}`);
     if (result.permanent || attempts > RETRY_DELAYS_MS.length) {
       console.error(`dropping Slack alert ${row.id} to ${row.target}: ${result.error}`);
       run(storage.sql, "DELETE FROM slack_outbox WHERE id = ?", row.id);
