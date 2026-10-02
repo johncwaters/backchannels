@@ -101,7 +101,7 @@ export class AdminApi extends WorkerEntrypoint<Env> implements AdminApiRpc {
     if (!identity) return unauthorized;
     const row = await findViewer(this.env.DB, identity.sub, identity.workspaceId);
     if (!row) return unauthorized;
-    return { ok: true, value: { email: row.email, name: row.name, workspaceName: row.workspace_name, isAdmin: row.is_admin === 1 } };
+    return { ok: true, value: { email: row.email, name: row.name, workspaceName: row.workspace_name, role: row.role, isAdmin: row.role === "admin" } };
   }
 
   async listConversations(

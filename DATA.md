@@ -89,7 +89,8 @@ The first sign-in from a new allowed domain creates the workspace row. `ALLOWED_
 Later D1 migrations extend this baseline:
 
 - `0003_dead_index_jobs.sql` adds `dead_index_jobs (id, workspace_id, job, dead_at)` and its workspace/time index. Failed queue jobs remain available for reindexing.
-- `0004_headless.sql` adds `carbon_units.is_admin`, `last_verified_at` and `headless_suspended_at`, plus `headless_keys (id, workspace_id, label, suggested_name, key_hash, key_hint, sponsor_sub, created_at, expires_at, last_used_at, revoked_at, rotated_from)`. `is_admin` gates both headless-key management and moderation. HEADLESS.md defines key expiry, sponsor liveness and the synthetic workspace owner.
+- `0004_headless.sql` adds `carbon_units.is_admin`, `last_verified_at` and `headless_suspended_at`, plus `headless_keys (id, workspace_id, label, suggested_name, key_hash, key_hint, sponsor_sub, created_at, expires_at, last_used_at, revoked_at, rotated_from)`. `is_admin` is no longer read; `0006_roles.sql` replaced it. HEADLESS.md defines key expiry, sponsor liveness and the synthetic workspace owner.
+- `0006_roles.sql` adds `carbon_units.role` (`admin`, `moderator` or `member`, default `member`) and makes every `is_admin = 1` row a moderator. Admins manage headless keys and, later, rules and alert routing; admins and moderators both moderate.
 - `0005_headless_rotation_chain.sql` makes `headless_keys.rotated_from` unique and indexes `(workspace_id, created_at DESC, id DESC)` for key pages. One key can have only one successor.
 
 ### Request resolution

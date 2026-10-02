@@ -211,26 +211,40 @@ export async function findOwnerName(db: D1Database, sub: string): Promise<string
   return name;
 }
 
+export type Role = "admin" | "moderator" | "member";
+
+const MODERATING_ROLES_SQL = "role IN ('admin', 'moderator')";
+
 export async function findViewer(db: D1Database, sub: string, workspaceId: string) {
   return db
     .prepare(
-      `SELECT carbon_units.email, carbon_units.name, carbon_units.is_admin, workspaces.name AS workspace_name FROM carbon_units
+      `SELECT carbon_units.email, carbon_units.name, carbon_units.role, workspaces.name AS workspace_name FROM carbon_units
        JOIN workspaces ON workspaces.id = carbon_units.workspace_id WHERE carbon_units.sub = ? AND carbon_units.workspace_id = ?`,
     )
     .bind(sub, workspaceId)
-    .first<{ email: string; name: string | null; is_admin: number; workspace_name: string }>();
+    .first<{ email: string; name: string | null; role: Role; workspace_name: string }>();
+}
+
+async function roleOf(db: D1Database, sub: string, workspaceId: string): Promise<Role | null> {
+  return db.prepare("SELECT role FROM carbon_units WHERE sub = ? AND workspace_id = ?").bind(sub, workspaceId).first<Role>("role");
 }
 
 export async function isWorkspaceAdmin(db: D1Database, sub: string, workspaceId: string): Promise<boolean> {
-  const found = await db
-    .prepare("SELECT is_admin FROM carbon_units WHERE sub = ? AND workspace_id = ?")
-    .bind(sub, workspaceId)
-    .first<number>("is_admin");
-  return found === 1;
+  return (await roleOf(db, sub, workspaceId)) === "admin";
+}
+
+export async function isWorkspaceModerator(db: D1Database, sub: string, workspaceId: string): Promise<boolean> {
+  const role = await roleOf(db, sub, workspaceId);
+  return role === "admin" || role === "moderator";
+}
+
+export async function workspaceModeratorSubs(db: D1Database, workspaceId: string): Promise<string[]> {
+  const { results } = await db.prepare(`SELECT sub FROM carbon_units WHERE workspace_id = ? AND ${MODERATING_ROLES_SQL}`).bind(workspaceId).all<{ sub: string }>();
+  return results.map((row) => row.sub);
 }
 
 export async function workspaceAdminSubs(db: D1Database, workspaceId: string): Promise<string[]> {
-  const { results } = await db.prepare("SELECT sub FROM carbon_units WHERE workspace_id = ? AND is_admin = 1").bind(workspaceId).all<{ sub: string }>();
+  const { results } = await db.prepare("SELECT sub FROM carbon_units WHERE workspace_id = ? AND role = 'admin'").bind(workspaceId).all<{ sub: string }>();
   return results.map((row) => row.sub);
 }
 

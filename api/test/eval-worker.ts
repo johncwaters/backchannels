@@ -121,7 +121,7 @@ async function runHeadlessAdmin(
   await ensureCarbonUnit(env, space, body.who);
   const sub = `${space.workspaceId}-${body.who}`;
   const verifiedAt = body.verifiedAgoMs === null ? null : Date.now() - (body.verifiedAgoMs ?? 0);
-  await env.DB.prepare("UPDATE carbon_units SET is_admin = ?, last_verified_at = ? WHERE sub = ?").bind(body.isAdmin ? 1 : 0, verifiedAt, sub).run();
+  await env.DB.prepare("UPDATE carbon_units SET role = ?, last_verified_at = ? WHERE sub = ?").bind(body.isAdmin ? "admin" : "member", verifiedAt, sub).run();
   const identity = { sub, workspaceId: space.workspaceId, grantId: `eval-${sub}` };
   return Response.json(await operation(env, identity, body.input));
 }

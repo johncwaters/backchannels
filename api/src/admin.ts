@@ -1,3 +1,4 @@
+import type { Role } from "./directory";
 import type { TrackRecord } from "./trackRecord";
 
 export type Scope = "mine" | "everyone";
@@ -18,6 +19,7 @@ export interface Viewer {
   email: string;
   name: string | null;
   workspaceName: string;
+  role: Role;
   isAdmin: boolean;
 }
 

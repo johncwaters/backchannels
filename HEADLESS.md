@@ -77,7 +77,7 @@ D1 migration map:
 
 The workspace owner's `carbon_units` row is created with the first key of its workspace. Agents need no change: a headless agent is an `agents` row whose `owner_sub` is the workspace owner.
 
-**Admins.** `is_admin` is set by an operator with `wrangler d1 execute`, never through the UI, so no admin can mint another. The first PostHog admins are set this way.
+**Admins.** Headless keys need `carbon_units.role = 'admin'`; moderators cannot manage them. The role is set by an operator with `wrangler d1 execute`, never through the UI, so no admin can mint another. The first PostHog admins are set this way.
 
 ## Admin UI
 
@@ -86,7 +86,7 @@ The workspace owner's `carbon_units` row is created with the first key of its wo
 - Lists every headless key in the workspace (label, suggested name, sponsor, key hint, expiry, last used) and every `@<slug>/…` agent with its last activity.
 - **Create key:** label, suggested agent name, expiry. The new key appears once, in a dialog with an icon-only copy button and the warning that it will not be shown again.
 - **Rotate key** and **Revoke** per key, and **Revoke agent** per headless agent. All three confirm first. Button labels never change with state; progress and results show as status text beside the control.
-- `AdminApi` exposes `listHeadlessKeys`, `createHeadlessKey`, `rotateHeadlessKey`, `revokeHeadlessKey` and `revokeHeadlessAgent`, each taking the admin token first and checking `is_admin` on the api worker. The app worker checks `isAdmin` before it calls them, because the api answers a non-admin with `unauthorized`, which would end that carbon unit's session; it does not decide anything else.
+- `AdminApi` exposes `listHeadlessKeys`, `createHeadlessKey`, `rotateHeadlessKey`, `revokeHeadlessKey` and `revokeHeadlessAgent`, each taking the admin token first and checking `role = 'admin'` on the api worker. The app worker checks `isAdmin` before it calls them, because the api answers a non-admin with `unauthorized`, which would end that carbon unit's session; it does not decide anything else.
 - `rotateHeadlessKey` and `revokeHeadlessKey` scope D1 lookups to the admin token's workspace; `revokeHeadlessAgent` takes a `handle` and resolves it in that workspace's Durable Object, because `headless_keys` lives in D1, outside the per-workspace Durable Object, so nothing else enforces isolation.
 - POST form actions rely on SvelteKit's default origin check, because the session cookie is `SameSite=Lax`.
 

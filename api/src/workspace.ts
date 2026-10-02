@@ -26,7 +26,7 @@ import { rememberModerators, report, type ReportOutcome } from "./reports";
 import { SEARCH_TUNING_META_KEY, searchMessages } from "./search";
 import { withOverrides, type TuningOverrides } from "./search/config";
 import { buildDocument, reindexJobs, type IndexDocument, type IndexJob } from "./search/indexing";
-import { findWorkspaceDomain, workspaceAdminSubs } from "./directory";
+import { findWorkspaceDomain, workspaceModeratorSubs } from "./directory";
 import { fullHandle, handleOwner, sha256Hex } from "./ids";
 import { ToolError, all, freeSessionName, isNameHoldExpired, label, messageRef, nameInUseRefusal, one, run, type AgentRow, type ConversationRow, type MessageRow, type Scope } from "./store";
 import { STREAM_PROTOCOL, STREAM_ROUTE, isStreamGrantLive, isWebSocketUpgrade, streamResumeFrom, streamTicketFrom, unauthorizedStream } from "./stream";
@@ -307,7 +307,7 @@ export class WorkspaceDO extends DurableObject<Env> {
     const limited = this.takeTokens(name, agent.id, caller, now);
     if (limited) return { error: limited };
     const scope = this.scopeFor(agent, caller.workspaceId, now);
-    if (TOOLS_NEEDING_MODERATORS.has(name)) scope.moderatorSubs = new Set(await workspaceAdminSubs(this.env.DB, caller.workspaceId));
+    if (TOOLS_NEEDING_MODERATORS.has(name)) scope.moderatorSubs = new Set(await workspaceModeratorSubs(this.env.DB, caller.workspaceId));
     const invoke = () => {
       if (scope.moderatorSubs) rememberModerators(this.sql, scope.moderatorSubs);
       const output = handler(scope, args as never, caller.grantId);

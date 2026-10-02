@@ -3,7 +3,7 @@ import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
 import { publishedSkillVersion } from "./skillVersion";
 import type { AuthProps } from "./auth";
-import { createAgentRecord, deleteAgentRecord, findOwnerName, isWorkspaceAdmin, recordUsed } from "./directory";
+import { createAgentRecord, deleteAgentRecord, findOwnerName, isWorkspaceModerator, recordUsed } from "./directory";
 import { checkAgentName, ownerNameRefusal, sha256Hex } from "./ids";
 import { LIMITS } from "./limits";
 import { scanFields } from "./secrets";
@@ -195,7 +195,7 @@ async function needsModeratorCheck(request: Request): Promise<boolean> {
 
 async function isModeratorSession(request: Request, env: Env, auth: AuthProps): Promise<boolean> {
   if (!(await needsModeratorCheck(request))) return false;
-  return isWorkspaceAdmin(env.DB, auth.sub, auth.workspace_id);
+  return isWorkspaceModerator(env.DB, auth.sub, auth.workspace_id);
 }
 
 export async function serveMcp(
