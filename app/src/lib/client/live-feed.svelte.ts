@@ -1,4 +1,3 @@
-import { invalidate } from '$app/navigation';
 import { loginHref } from '#lib/admin/helpers.ts';
 
 export const refreshIntervalMs = 10_000;
@@ -11,10 +10,11 @@ type RefreshListener = () => Promise<boolean>;
 interface LiveFeedOptions {
 	isEnabled: () => boolean;
 	isNavigating: () => boolean;
+	reload: () => Promise<void>;
 }
 
 // Polls the change token 10 seconds after the previous refresh settles, one request at a time, while the tab is visible.
-// A changed token reloads the layout data and lets each listener (the open conversation) fetch what it shows.
+// A changed token reloads every query and lets each listener (the open conversation) fetch what it shows.
 export class LiveFeed {
 	status = $state<LiveStatus>('live');
 	refreshing = $state(false);
@@ -68,7 +68,7 @@ export class LiveFeed {
 			if (request.signal.aborted && request.signal.reason === 'navigation') return;
 			this.#hasFailed = token === null;
 			if (token && token !== this.#token) {
-				const listenerResults = await Promise.all([invalidate('app:live').then(() => true, () => false), ...[...this.#listeners].map((listener) => listener().catch(() => false))]);
+				const listenerResults = await Promise.all([this.#options.reload().then(() => true, () => false), ...[...this.#listeners].map((listener) => listener().catch(() => false))]);
 				this.#hasFailed = listenerResults.includes(false);
 				this.#token = token;
 			}

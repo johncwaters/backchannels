@@ -8,6 +8,7 @@
 	import * as InputGroup from '#lib/components/ui/input-group/index.ts';
 	import { Kbd } from '#lib/components/ui/kbd/index.ts';
 	import * as Sidebar from '#lib/components/ui/sidebar/index.ts';
+	import { Skeleton } from '#lib/components/ui/skeleton/index.ts';
 	import FooterLinks from '../FooterLinks.svelte';
 	import Hint from '../Hint.svelte';
 	import SegmentedLinks, { type SegmentedLink } from '../SegmentedLinks.svelte';
@@ -15,7 +16,7 @@
 	import LiveStatus from './LiveStatus.svelte';
 
 	interface Props {
-		frame: AdminFrame;
+		frame: AdminFrame | undefined;
 		scope: Scope;
 		scopeLinks: SegmentedLink[];
 		showsScopeSwitch: boolean;
@@ -28,6 +29,7 @@
 
 	let { frame, scope, scopeLinks, showsScopeSwitch, query, live, isManual, selectedConversation, directoryKind }: Props = $props();
 
+	const skeletonRows = [62, 48, 70, 55, 40, 66];
 	const sidebar = Sidebar.useSidebar();
 	let search = $state<HTMLInputElement | null>(null);
 
@@ -62,11 +64,26 @@
 		{#if showsScopeSwitch}<SegmentedLinks links={scopeLinks} label="Whose agents to show" class="w-full" />{/if}
 	</Sidebar.Header>
 	<Sidebar.Content data-conversation-list>
-		<ConversationList groups={frame.sidebarGroups} nowMs={frame.nowMs} {scope} viewerEmail={frame.viewer.email} {selectedConversation} {directoryKind} />
+		{#if frame}
+			<ConversationList groups={frame.sidebarGroups} nowMs={frame.nowMs} {scope} viewerEmail={frame.viewer.email} {selectedConversation} {directoryKind} />
+		{:else}
+			<div class="flex flex-col gap-4 px-3 py-3" aria-hidden="true">
+				{#each skeletonRows as width, index (index)}
+					<div class="flex flex-col gap-1.5">
+						<Skeleton class="h-3.5 rounded-none bg-secondary" style={`width: ${width}%`} />
+						<Skeleton class="h-3 w-[85%] rounded-none bg-secondary/60" />
+					</div>
+				{/each}
+			</div>
+		{/if}
 	</Sidebar.Content>
 	<Sidebar.Footer class="flex-row items-center gap-x-3 bg-amber px-3 py-0 text-[13px] text-ground">
-		<Hint text={`web ${frame.versions.web} · mcp ${frame.versions.mcp}`} class="min-w-0 cursor-default max-md:hidden"><strong class="truncate font-semibold">[{frame.viewer.workspaceName}]</strong></Hint>
-		<span class="shrink-0"><LiveStatus {live} {isManual} /></span>
-		<FooterLinks isAdmin={frame.viewer.isAdmin} email={frame.viewer.email} />
+		{#if frame}
+			<Hint text={`web ${frame.versions.web} · mcp ${frame.versions.mcp}`} class="min-w-0 cursor-default max-md:hidden"><strong class="truncate font-semibold">[{frame.viewer.workspaceName}]</strong></Hint>
+			<span class="shrink-0"><LiveStatus {live} {isManual} /></span>
+			<FooterLinks isAdmin={frame.viewer.isAdmin} email={frame.viewer.email} />
+		{:else}
+			<Skeleton class="h-3.5 w-24 rounded-none bg-ground/20" />
+		{/if}
 	</Sidebar.Footer>
 </Sidebar.Root>

@@ -10,7 +10,7 @@ type DropToken<Method> = Method extends (token: string, ...rest: infer Rest) => 
 export type AdminApi = { [Name in Exclude<keyof AdminApiRpc, TokenlessMethods>]: DropToken<AdminApiRpc[Name]> };
 
 const refreshWindowMs = 60_000;
-const tokenMethods = [
+export const tokenMethods = [
 	'viewer',
 	'serverVersion',
 	'changeToken',
@@ -126,8 +126,15 @@ async function mcpVersionOrUnknown(adminApi: AdminApi): Promise<string> {
 	return serverVersion.value;
 }
 
-export async function loadAdminFrame(event: RequestEvent, adminApi: AdminApi, scope: Scope): Promise<AdminFrame> {
-	const changeToken = await valueOrFail(event, await adminApi.changeToken());
+type FailureHandler = (event: RequestEvent, failure: AdminFailure) => Promise<never>;
+
+async function valueOr<Value>(event: RequestEvent, result: AdminResult<Value>, onFailure: FailureHandler): Promise<Value> {
+	if (!result.ok) return onFailure(event, result.error);
+	return result.value;
+}
+
+export async function loadAdminFrame(event: RequestEvent, adminApi: AdminApi, scope: Scope, onFailure: FailureHandler = failPage): Promise<AdminFrame> {
+	const changeToken = await valueOr(event, await adminApi.changeToken(), onFailure);
 	const listSidebarKind = (kind: DirectoryKind) => adminApi.listConversations({ scope, kind, sort: sidebarSortFor(kind, scope) });
 	const showsPrivateChats = sidebarKindsFor(scope).includes('private');
 	const [viewer, mcpVersion, publicListing, privateListing] = await Promise.all([
@@ -136,9 +143,9 @@ export async function loadAdminFrame(event: RequestEvent, adminApi: AdminApi, sc
 		listSidebarKind('public'),
 		showsPrivateChats ? listSidebarKind('private') : undefined,
 	]);
-	const viewerValue = await valueOrFail(event, viewer);
-	const publicValue = await valueOrFail(event, publicListing);
-	const privateValue = privateListing ? await valueOrFail(event, privateListing) : undefined;
+	const viewerValue = await valueOr(event, viewer, onFailure);
+	const publicValue = await valueOr(event, publicListing, onFailure);
+	const privateValue = privateListing ? await valueOr(event, privateListing, onFailure) : undefined;
 	const nowMs = Date.now();
 	const conversationsByKind: Record<DirectoryKind, Conversation[]> = {
 		public: publicValue.conversations,
