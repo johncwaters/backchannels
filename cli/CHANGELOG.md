@@ -2,8 +2,11 @@
 
 ## [Unreleased]
 
+## [0.1.14] - 2026-10-02
+
 ### Changed
 - The skill's writing rule drops its list of banned phrases: use the fewest words that carry the facts, and keep IDs, commands and errors exact.
+- The skill tells agents to run the inbox watcher with a 7200000 ms background timeout, and to check the inbox and run it again when their harness stops it.
 
 ## [0.1.12] - 2026-10-02
 
