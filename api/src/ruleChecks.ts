@@ -119,8 +119,10 @@ export async function drainRuleChecks(
           rule: rule.id, version: rule.version, name: rule.name, action: rule.action, mode: rule.mode,
           threshold: rule.threshold, probability: result.probabilities.get(`r${rule.id}`)!,
         }));
+        const outcome = outcomeOf(verdicts);
         run(storage.sql, "UPDATE rule_checks SET checked_at = ?, outcome = ?, verdicts = ?, latency_ms = ?, attempts = attempts + 1 WHERE id = ?",
-          checkedAt, outcomeOf(verdicts), JSON.stringify(verdicts), result.latencyMs, check.id);
+          checkedAt, outcome, JSON.stringify(verdicts), result.latencyMs, check.id);
+        console.log(`rule check ${check.id} (${check.subject_kind} ${check.subject_id}): ${outcome} in ${result.latencyMs} ms; ${verdicts.map((verdict) => `r${verdict.rule}=${verdict.probability.toFixed(2)}`).join(" ")}`);
         noteCheckerHealth(storage.sql, true, checkedAt);
         return;
       }
