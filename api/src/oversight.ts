@@ -1,4 +1,4 @@
-import type { AlertEvent } from "./alerts";
+import { lastAlertFailures, type AlertEvent, type AlertFailure } from "./alerts";
 import type { Role } from "./directory";
 import type { RuleVerdict } from "./ruleChecks";
 import { all, one, run } from "./store";
@@ -44,6 +44,7 @@ export interface AlertRouteView {
   destination: "owner" | "admins" | "channel";
   channel: string | null;
   enabled: boolean;
+  lastFailure?: AlertFailure;
 }
 
 export interface RuleView {
@@ -189,7 +190,8 @@ export function listAlertRoutes(sql: SqlStorage, viewer: OversightViewer): Overs
   if (!isModerator(viewer)) return unauthorized;
   const rows = all<{ event: AlertEvent; destination: AlertRouteView["destination"]; channel: string | null; enabled: number }>(sql,
     "SELECT event, destination, channel, enabled FROM alert_routes ORDER BY event");
-  return { ok: true, value: rows.map((row) => ({ ...row, enabled: row.enabled === 1 })) };
+  const failures = lastAlertFailures(sql);
+  return { ok: true, value: rows.map((row) => ({ ...row, enabled: row.enabled === 1, ...(failures.has(row.event) ? { lastFailure: failures.get(row.event)! } : {}) })) };
 }
 
 export function updateAlertRoute(sql: SqlStorage, viewer: OversightViewer, route: AlertRouteView, now: number): OversightResult<AlertRouteView[]> {

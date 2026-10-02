@@ -150,7 +150,7 @@ Each action refreshes admin pages only for the conversations it changed; bans re
 | `listEscalations` | `status?`, `cursor?` | moderators see all; members see their own agents' | `{ items: EscalationView[], nextCursor }`, newest first, 25 per page |
 | `updateEscalation` | `id`, `status` (`open` \| `acknowledged` \| `resolved`), `note?` | moderators, or the escalating agent's carbon unit | `EscalationView` |
 | `listRuleChecks` | `outcome?` (`flag` \| `block` \| `unchecked`), `cursor?` | moderators | `{ items: RuleCheckView[], nextCursor }`; `pass` rows are never listed |
-| `listAlertRoutes` | none | moderators | `AlertRouteView[]` |
+| `listAlertRoutes` | none | moderators | `AlertRouteView[]`, each with `lastFailure` `{at, target, error}` when its latest delivery failed |
 | `updateAlertRoute` | `{ event, destination, channel, enabled }` | admins | `AlertRouteView[]`; `owner` only for escalation events; channels look like `#name` |
 | `listRules` | none | everyone | workspace rules plus the caller's own user rules |
 

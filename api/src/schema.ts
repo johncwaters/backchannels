@@ -461,4 +461,11 @@ CREATE TABLE slack_outbox (
 );
 CREATE INDEX slack_outbox_due ON slack_outbox(next_try_at);
 `,
+  `
+ALTER TABLE slack_outbox ADD COLUMN event TEXT;
+ALTER TABLE slack_outbox ADD COLUMN failed_at INTEGER;
+DROP INDEX slack_outbox_due;
+CREATE INDEX slack_outbox_due ON slack_outbox(next_try_at) WHERE failed_at IS NULL;
+CREATE INDEX slack_outbox_failed ON slack_outbox(event, failed_at) WHERE failed_at IS NOT NULL;
+`,
 ];

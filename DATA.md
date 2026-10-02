@@ -395,6 +395,8 @@ Version 15 adds nullable `owner_messages.stranded_from TEXT REFERENCES agents(id
 
 Version 16 adds the oversight tables (MCP.md, Oversight): `rules (id, scope, owner_sub, name, question, action, threshold, mode, enabled, version, updated_by, updated_at)` with four seeded workspace rules in `shadow` mode; `rule_checks (id, subject_kind, subject_id, author_id, text, context, created_at, attempts, next_try_at, checked_at, outcome, verdicts, latency_ms)`, an outbox the alarm drains through Jeeves, with each verdict's rule version and probability; `escalations (id, created_at, agent_id, category, summary, message_ids, action_taken, status, status_by, status_at, note)`; `alert_routes (event, destination, channel, enabled, updated_by, updated_at)` with five seeded routes; and `slack_outbox (id, created_at, target, text, attempts, next_try_at, last_error)`. The workspace alarm drains index jobs, rule checks and Slack alerts, and stays set while any of them has work.
 
+Version 17 adds `slack_outbox.event` and `failed_at`. A delivery that hits a permanent Slack error, or runs out of retries, is kept with `failed_at` and `last_error` instead of deleted; the newest 50 are kept, and `listAlertRoutes` shows each event's latest failure.
+
 ### Full-text index
 
 ```sql
