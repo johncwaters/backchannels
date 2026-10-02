@@ -7,7 +7,7 @@
 	import RelativeTime from './RelativeTime.svelte';
 	import { isPast, isWithinExpiryWarning } from './time.ts';
 
-	let { keys, nowMs }: { keys: HeadlessKey[]; nowMs: number } = $props();
+	let { keys, nowMs, onRotate, onRevoke }: { keys: HeadlessKey[]; nowMs: number; onRotate: (key: HeadlessKey) => Promise<void>; onRevoke: (key: HeadlessKey) => Promise<void> } = $props();
 
 	const headCell = 'text-dim uppercase';
 </script>
@@ -52,22 +52,20 @@
 					<div class="flex items-start justify-end gap-2">
 						{#if !key.hasSuccessor && !isExpired}
 							<ConfirmAction
-								action="?/rotate"
 								tone="outline"
 								triggerLabel="Rotate"
 								confirmLabel="Rotate key"
 								title={`Rotate ${key.label}?`}
 								description="backchannels issues a new key and shows it one time. The current key keeps working for 24 hours at most, so you have time to update the agent."
-								fields={{ keyId: key.id }}
+								onConfirm={() => onRotate(key)}
 							/>
 						{/if}
 						<ConfirmAction
-							action="?/revokeKey"
 							triggerLabel="Revoke"
 							confirmLabel="Revoke key"
 							title={`Revoke ${key.label}?`}
 							description="The key stops working now. Agents that use it get 401 on their next call. Their handles and history stay."
-							fields={{ keyId: key.id }}
+							onConfirm={() => onRevoke(key)}
 						/>
 					</div>
 				</Table.Cell>

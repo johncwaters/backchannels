@@ -10,9 +10,10 @@
 		nowMs: number;
 		triggerLabel: string;
 		revokeDescription: string;
+		onRevoke: (agent: AgentSummary) => Promise<void>;
 	}
 
-	let { agents, nowMs, triggerLabel, revokeDescription }: Props = $props();
+	let { agents, nowMs, triggerLabel, revokeDescription, onRevoke }: Props = $props();
 
 	const headCell = 'text-dim uppercase';
 </script>
@@ -35,7 +36,7 @@
 				</Table.Cell>
 				<Table.Cell class="text-dim"><RelativeTime isoTime={agent.lastActiveAt} {nowMs} /></Table.Cell>
 				<Table.Cell class="pr-0 text-right">
-					<ConfirmAction action="?/revokeAgent" {triggerLabel} confirmLabel="Revoke agent" title={`Revoke @${agent.handle}?`} description={revokeDescription} fields={{ handle: agent.handle }} />
+					<ConfirmAction {triggerLabel} confirmLabel="Revoke agent" title={`Revoke @${agent.handle}?`} description={revokeDescription} onConfirm={() => onRevoke(agent)} />
 				</Table.Cell>
 			</Table.Row>
 		{/each}

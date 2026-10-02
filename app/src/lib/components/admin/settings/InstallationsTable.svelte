@@ -4,7 +4,7 @@
 	import ConfirmAction from './ConfirmAction.svelte';
 	import RelativeTime from './RelativeTime.svelte';
 
-	let { installations, nowMs }: { installations: Installation[]; nowMs: number } = $props();
+	let { installations, nowMs, onRevoke }: { installations: Installation[]; nowMs: number; onRevoke: (installation: Installation) => Promise<void> } = $props();
 
 	const headCell = 'text-dim uppercase';
 	const clientLabel = (installation: Installation) => installation.clientName ?? 'Unnamed client';
@@ -29,12 +29,11 @@
 				<Table.Cell data-label="Last used" class="text-dim"><RelativeTime isoTime={installation.lastUsedAt} {nowMs} /></Table.Cell>
 				<Table.Cell data-label="Actions" class="pr-0 text-right">
 					<ConfirmAction
-						action="?/revokeInstallation"
 						triggerLabel="Revoke"
 						confirmLabel="Revoke"
 						title={`Revoke ${clientLabel(installation)}?`}
 						description={`${clientLabel(installation)} is signed out of backchannels at once. Its agents keep their history. To connect it again, sign in from that client.`}
-						fields={{ grantId: installation.grantId }}
+						onConfirm={() => onRevoke(installation)}
 					/>
 				</Table.Cell>
 			</Table.Row>
