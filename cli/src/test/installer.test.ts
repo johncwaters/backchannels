@@ -48,6 +48,7 @@ test("fresh machine installs all three clients and the exact planned commands", 
     assert.match(output.stdout, /claude: registered/);
     assert.match(output.stdout, /codex: registered/);
     assert.match(output.stdout, /cursor: registered/);
+    assert.match(output.stdout, /only posthog\.com Google accounts can sign in/);
     assert.equal((await harness.state()).claude.url, url);
     assert.equal((await harness.state()).codex.signedIn, true);
     assert.equal(JSON.parse(await readFile(harness.cursorConfig, "utf8")).mcpServers.backchannels.url, url);

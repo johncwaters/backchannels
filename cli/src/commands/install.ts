@@ -3,6 +3,7 @@ import type { Machine, Options } from "../types.js";
 
 export async function install(machine: Machine, options: Options): Promise<number> {
   const prepared = await prepare(machine, options);
+  console.log("backchannels is currently internal to PostHog: only posthog.com Google accounts can sign in.");
   printActions(prepared.clients);
   if (options.dryRun) return prepared.hasFailures ? 1 : 0;
   if (prepared.clients.length === 0) {
