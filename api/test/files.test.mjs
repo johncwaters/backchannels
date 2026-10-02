@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { describe, test } from "node:test";
 import { uploadFile, uploadText } from "../src/files.ts";
-import { LIMITS } from "../src/limits.ts";
 import { findSecret } from "../src/secrets.ts";
 import { addAgentRow as addAgent, createDatabase, scopeFor } from "./lib/sqlite.mjs";
 
@@ -51,175 +50,61 @@ function uploader() {
 
 const SECRET_ERROR = /content contains what looks like a secret/;
 
-describe("upload_file decides text from the bytes, not the mime", () => {
-  test("a dotenv file labelled application/octet-stream is still scanned and refused", async () => {
+const JPEG_HEADER = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
+const GIF_HEADER = Buffer.from("GIF89a");
+const WEBP_HEADER = Buffer.concat([Buffer.from("RIFF"), Buffer.from([0x24, 0x00, 0x00, 0x00]), Buffer.from("WEBPVP8 ")]);
+const IMAGES_ONLY = /accepts only PNG, JPEG, GIF or WebP images/;
+const image = (header, ...embedded) => Buffer.concat([header, deterministicBytes(200, 11), Buffer.alloc(64), ...embedded.map((text) => Buffer.from(text)), deterministicBytes(200, 131)]);
+
+describe("upload_file accepts only images, decided from the bytes", () => {
+  for (const [label, header, mime] of [["PNG", PNG_HEADER, "image/png"], ["JPEG", JPEG_HEADER, "image/jpeg"], ["GIF", GIF_HEADER, "image/gif"], ["WebP", WEBP_HEADER, "image/webp"]]) {
+    test(`a clean ${label} is stored with its type read from the bytes and never inlined`, async () => {
+      const { upload, stored, storedRow } = uploader();
+      const result = await upload({ name: "shot.bin", content: base64(image(header)), mime: "text/plain" });
+      assert.equal(result.mime, mime);
+      assert.equal(stored.length, 1);
+      assert.equal(storedRow(result.file_id).inline_text, null);
+    });
+  }
+
+  for (const [label, name, bytes] of [
+    ["plain text", "notes.txt", Buffer.from("PORT=8788\nLOG_LEVEL=debug\n")],
+    ["text named like an image", "shot.png", Buffer.from("not really a picture\n")],
+    ["a zip", "src.zip", zipLike()],
+    ["an executable", "ls", executableLike()],
+    ["a RIFF file that is not WebP", "clip.wav", Buffer.concat([Buffer.from("RIFF"), Buffer.alloc(4), Buffer.from("WAVEfmt ")])],
+  ]) {
+    test(`${label} is refused and nothing is stored`, async () => {
+      const { upload, stored } = uploader();
+      await assert.rejects(upload({ name, content: base64(bytes), mime: "image/png" }), IMAGES_ONLY);
+      assert.equal(stored.length, 0);
+    });
+  }
+
+  test("utf8 content is refused as not an image", async () => {
     const { upload, stored } = uploader();
-    const content = base64(Buffer.from(`AWS_ACCESS_KEY_ID=${fakeAwsKey()}\nAWS_REGION=eu-west-1\n`));
-    await assert.rejects(upload({ name: ".env", content, encoding: "base64", mime: "application/octet-stream" }), SECRET_ERROR);
+    await assert.rejects(upload({ name: "notes.txt", content: "plain text", encoding: "utf8" }), IMAGES_ONLY);
     assert.equal(stored.length, 0);
   });
 
-  test("text that is not valid UTF-8 is scanned through a lossy decode", async () => {
-    const { upload } = uploader();
-    const latin1 = Buffer.concat([Buffer.from("caf"), Buffer.from([0xe9]), Buffer.from(` token=${fakeAwsKey()}\n`)]);
-    await assert.rejects(upload({ name: "notes.txt", content: base64(latin1), encoding: "base64" }), SECRET_ERROR);
+  test("an image carrying an AWS key in its bytes is refused", async () => {
+    const { upload, stored } = uploader();
+    await assert.rejects(upload({ name: "shot.png", content: base64(image(PNG_HEADER, `AWS_ACCESS_KEY_ID=${fakeAwsKey()}`)) }), SECRET_ERROR);
+    assert.equal(stored.length, 0);
   });
 
-  test("a text-like upload with a clean body is stored and inlined whatever its mime", async () => {
-    const { upload, stored, storedRow } = uploader();
-    const text = "PORT=8788\nLOG_LEVEL=debug\n";
-    const result = await upload({ name: "app.conf", content: base64(Buffer.from(text)), encoding: "base64", mime: "application/octet-stream" });
-    assert.equal(result.mime, "application/octet-stream");
-    assert.equal(stored.length, 1);
-    assert.equal(storedRow(result.file_id).inline_text, text);
+  test("an image carrying a UTF-16 key in its bytes is refused", async () => {
+    const { upload, stored } = uploader();
+    const utf16Key = Buffer.from(`AWS_ACCESS_KEY_ID=${fakeAwsKey()}`, "utf16le");
+    await assert.rejects(upload({ name: "shot.png", content: base64(Buffer.concat([image(PNG_HEADER), utf16Key])) }), SECRET_ERROR);
+    assert.equal(stored.length, 0);
   });
 
-  test("a binary with zero-padded runs is scanned, stored and never inlined", async () => {
-    const { upload, stored, storedRow } = uploader();
-    const binary = Buffer.concat([PNG_HEADER, deterministicBytes(200, 11), Buffer.alloc(64), deterministicBytes(200, 131)]);
-    assert.doesNotMatch(new TextDecoder("utf-8").decode(binary.map((byte) => (byte === 0 ? 0x20 : byte))), LONG_ALNUM_RUN);
-    const result = await upload({ name: "shot.png", content: base64(binary), encoding: "base64" });
+  test("an image whose bytes read as a random string is stored, not refused as a high-entropy string", async () => {
+    const { upload, stored } = uploader();
+    const result = await upload({ name: "shot.png", content: base64(image(PNG_HEADER, RANDOM_SUFFIX_PATH)) });
     assert.equal(result.mime, "image/png");
     assert.equal(stored.length, 1);
-    assert.equal(storedRow(result.file_id).inline_text, null);
-  });
-
-  test("a binary of short alnum fragments separated by NULs is stored, not mistaken for a high-entropy string", async () => {
-    const { upload, stored, storedRow } = uploader();
-    const binary = nulSeparatedFragments(2048);
-    assert.ok(binary.length > 2048);
-    assert.match(new TextDecoder("utf-8").decode(binary.filter((byte) => byte !== 0)), LONG_ALNUM_RUN);
-    const result = await upload({ name: "bundle.zip", content: base64(binary), encoding: "base64" });
-    assert.equal(result.mime, "application/zip");
-    assert.equal(stored.length, 1);
-    assert.equal(storedRow(result.file_id).inline_text, null);
-  });
-
-  test("a zip whose stored path reads as random is stored, not refused as a high-entropy string", async () => {
-    const { upload, stored, storedRow } = uploader();
-    const binary = zipLike();
-    assert.equal(findSecret(lossyText(binary)), "high-entropy string");
-    const result = await upload({ name: "src.zip", content: base64(binary), encoding: "base64" });
-    assert.equal(result.mime, "application/zip");
-    assert.equal(stored.length, 1);
-    assert.equal(storedRow(result.file_id).inline_text, null);
-  });
-
-  test("an executable whose option string reads as random is stored, not refused as a high-entropy string", async () => {
-    const { upload, stored, storedRow } = uploader();
-    const binary = executableLike();
-    assert.equal(findSecret(lossyText(binary)), "high-entropy string");
-    const result = await upload({ name: "ls", content: base64(binary), encoding: "base64" });
-    assert.equal(result.mime, "application/octet-stream");
-    assert.equal(stored.length, 1);
-    assert.equal(storedRow(result.file_id).inline_text, null);
-  });
-
-  test("a zip with an embedded AWS key is refused", async () => {
-    const { upload, stored } = uploader();
-    await assert.rejects(upload({ name: "src.zip", content: base64(zipLike(`aws_access_key_id = ${fakeAwsKey()}`)), encoding: "base64" }), SECRET_ERROR);
-    assert.equal(stored.length, 0);
-  });
-
-  test("an executable with an embedded AWS key is refused", async () => {
-    const { upload, stored } = uploader();
-    await assert.rejects(upload({ name: "ls", content: base64(executableLike(`AWS_ACCESS_KEY_ID=${fakeAwsKey()}`)), encoding: "base64" }), SECRET_ERROR);
-    assert.equal(stored.length, 0);
-  });
-
-  test("valid UTF-8 text containing a high-entropy token is still refused", async () => {
-    const { upload, stored } = uploader();
-    await assert.rejects(upload({ name: "notes.txt", content: `ls accepts the flags ${OPTION_LETTERS}\n` }), /high-entropy string/);
-    assert.equal(stored.length, 0);
-  });
-
-  test("valid UTF-8 text with a stray NUL and a high-entropy token is still refused", async () => {
-    const { upload, stored } = uploader();
-    await assert.rejects(upload({ name: "notes.txt", content: `flags\u0000${OPTION_LETTERS}\n` }), /high-entropy string/);
-    assert.equal(stored.length, 0);
-  });
-
-  test("UTF-16LE text containing a high-entropy token is still refused", async () => {
-    const { upload, stored } = uploader();
-    const content = Buffer.from(`flags ${OPTION_LETTERS}\r\n`, "utf16le");
-    await assert.rejects(upload({ name: "transcript.txt", content: base64(content), encoding: "base64" }), /high-entropy string/);
-    assert.equal(stored.length, 0);
-  });
-
-  test("text with a stray embedded NUL is still scanned and refused", async () => {
-    const { upload, stored } = uploader();
-    await assert.rejects(upload({ name: "notes.txt", content: `\u0000AWS_ACCESS_KEY_ID=${fakeAwsKey()}\n` }), SECRET_ERROR);
-    assert.equal(stored.length, 0);
-  });
-
-  test("UTF-8 text padded with trailing NULs is scanned and refused", async () => {
-    const { upload, stored } = uploader();
-    const lines = Buffer.from(`AWS_ACCESS_KEY_ID=${fakeAwsKey()}\n`.repeat(5));
-    const content = Buffer.concat([lines, Buffer.alloc(400)]);
-    await assert.rejects(upload({ name: "creds.bin", content: base64(content), encoding: "base64" }), SECRET_ERROR);
-    assert.equal(stored.length, 0);
-  });
-
-  test("UTF-8 text with NUL padding below the UTF-16 lane threshold is scanned and refused", async () => {
-    const { upload, stored } = uploader();
-    const lines = Buffer.from(`AWS_ACCESS_KEY_ID=${fakeAwsKey()}\n`.repeat(5));
-    const content = Buffer.concat([lines, Buffer.alloc(60)]);
-    await assert.rejects(upload({ name: "creds.bin", content: base64(content), encoding: "base64" }), SECRET_ERROR);
-    assert.equal(stored.length, 0);
-  });
-
-  test("UTF-16LE text with a BOM is scanned and refused", async () => {
-    const { upload, stored } = uploader();
-    const content = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(`AWS_ACCESS_KEY_ID=${fakeAwsKey()}\r\n`, "utf16le")]);
-    await assert.rejects(upload({ name: "transcript.txt", content: base64(content), encoding: "base64" }), SECRET_ERROR);
-    assert.equal(stored.length, 0);
-  });
-
-  test("UTF-16LE text without a BOM is scanned and refused", async () => {
-    const { upload, stored } = uploader();
-    const content = Buffer.from(`$env:AWS_ACCESS_KEY_ID = "${fakeAwsKey()}"\r\n`, "utf16le");
-    await assert.rejects(upload({ name: "transcript.txt", content: base64(content), encoding: "base64" }), SECRET_ERROR);
-    assert.equal(stored.length, 0);
-  });
-
-  test("UTF-16BE text without a BOM is scanned and refused", async () => {
-    const { upload, stored } = uploader();
-    const content = Buffer.from(`AWS_ACCESS_KEY_ID=${fakeAwsKey()}\n`, "utf16le").swap16();
-    await assert.rejects(upload({ name: ".env", content: base64(content), encoding: "base64" }), SECRET_ERROR);
-    assert.equal(stored.length, 0);
-  });
-
-  test("BOM-less UTF-16LE text followed by a short NUL run is scanned and refused", async () => {
-    const { upload, stored } = uploader();
-    const content = Buffer.concat([Buffer.from(`aws_key=${fakeAwsKey()}\n`, "utf16le"), Buffer.alloc(16)]);
-    assert.equal(uploadText(content).fullScanTexts.length, 1);
-    await assert.rejects(upload({ name: "creds.bin", content: base64(content), encoding: "base64" }), SECRET_ERROR);
-    assert.equal(stored.length, 0);
-  });
-
-  test("BOM-less UTF-16BE text padded with NULs is scanned and refused", async () => {
-    const { upload, stored } = uploader();
-    const content = Buffer.concat([Buffer.from(`aws_key=${fakeAwsKey()}\n`, "utf16le").swap16(), Buffer.alloc(64)]);
-    assert.equal(uploadText(content).fullScanTexts.length, 1);
-    await assert.rejects(upload({ name: "creds.bin", content: base64(content), encoding: "base64" }), SECRET_ERROR);
-    assert.equal(stored.length, 0);
-  });
-
-  test("BOM-less mostly-CJK UTF-16LE text hiding a key is scanned and refused", async () => {
-    const { upload, stored } = uploader();
-    const content = Buffer.from(`${"日本語のテキスト".repeat(10)}鍵=${fakeAwsKey()}\n`, "utf16le");
-    assert.equal(uploadText(content).isText, false);
-    await assert.rejects(upload({ name: "memo.txt", content: base64(content), encoding: "base64" }), SECRET_ERROR);
-    assert.equal(stored.length, 0);
-  });
-
-  test("text above the inline limit is scanned to its last byte and not inlined", async () => {
-    const { upload, storedRow } = uploader();
-    const padding = "2026-09-30T12:00:01Z INFO request served path=/mcp status=200\n".repeat(Math.ceil((LIMITS.inlineTextMaxBytes * 1.5) / 60));
-    await assert.rejects(upload({ name: "big.log", content: `${padding}key=${fakeAwsKey()}\n` }), SECRET_ERROR);
-    const result = await upload({ name: "big.log", content: padding });
-    assert.equal(storedRow(result.file_id).inline_text, null);
-    assert.equal(result.size, Buffer.byteLength(padding));
   });
 });
 

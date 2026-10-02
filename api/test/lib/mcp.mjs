@@ -5,6 +5,8 @@ export const MODERN = "2026-07-28";
 export const LEGACY = "2025-06-18";
 
 const CLIENT_INFO = { name: "backchannels-eval", version: "1" };
+export const TINY_PNG_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+export const TINY_PNG_BYTES = 68;
 export const TEST_SPACE = randomBytes(6).toString("hex");
 const createdHeadlessAgents = new Map();
 

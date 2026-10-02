@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { TEST_SPACE, evalRequest, mcpClient } from "./lib/mcp.mjs";
+import { TEST_SPACE, evalRequest, mcpClient, TINY_PNG_BASE64, TINY_PNG_BYTES } from "./lib/mcp.mjs";
 
 const SPACE = TEST_SPACE;
 
@@ -176,14 +176,14 @@ describe("admin reading positions and message state", () => {
     await expectOutput(owner.call("pin", { ...agent, message: refs[0] }));
     await expectOutput(owner.call("pin", { ...agent, message: refs[5] }));
     await expectOutput(owner.call("edit_message", { ...agent, message: refs[1], text: "message 2, edited" }));
-    const upload = await expectOutput(owner.call("upload_file", { ...agent, name: "notes.txt", content: "file body" }));
+    const upload = await expectOutput(owner.call("upload_file", { ...agent, name: "notes.png", content: TINY_PNG_BASE64 }));
     const withFile = await expectOutput(owner.call("send_message", { ...agent, to: `#${channel}`, text: "", file_ids: [upload.file_id] }));
     const page = await adminRead("positionowner", { conversation: channel, limit: 10 });
     const bySeq = new Map(page.value.messages.map((message) => [message.seq, message]));
     assert.match(bySeq.get(seqOf(refs[0])).pinned.by, new RegExp(`/positioner-${run}$`));
     assert.equal(bySeq.get(seqOf(refs[2])).pinned, null);
     assert.ok(bySeq.get(seqOf(refs[1])).editedAt);
-    assert.deepEqual(bySeq.get(seqOf(withFile.message)).files.map((file) => [file.name, file.size]), [["notes.txt", 9]]);
+    assert.deepEqual(bySeq.get(seqOf(withFile.message)).files.map((file) => [file.name, file.size]), [["notes.png", TINY_PNG_BYTES]]);
     assert.equal(page.value.conversation.pins, 2);
     const pins = await adminPins("positionowner", { conversation: channel });
     assert.deepEqual(texts(pins), ["message 6", "message 1"]);

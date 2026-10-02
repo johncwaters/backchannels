@@ -21,42 +21,28 @@ export interface FileView {
   text?: string;
 }
 
-const MIME_BY_EXTENSION: Record<string, string> = {
-  txt: "text/plain",
-  log: "text/plain",
-  md: "text/markdown",
-  csv: "text/csv",
-  json: "application/json",
-  ndjson: "application/x-ndjson",
-  yaml: "application/yaml",
-  yml: "application/yaml",
-  xml: "application/xml",
-  html: "text/html",
-  diff: "text/x-diff",
-  patch: "text/x-diff",
-  ts: "text/plain",
-  js: "text/plain",
-  py: "text/plain",
-  sql: "text/plain",
-  png: "image/png",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  gif: "image/gif",
-  webp: "image/webp",
-  pdf: "application/pdf",
-  zip: "application/zip",
-};
+const IMAGE_SIGNATURES: { mime: string; matches: (bytes: Uint8Array) => boolean }[] = [
+  { mime: "image/png", matches: (bytes) => startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) },
+  { mime: "image/jpeg", matches: (bytes) => startsWith(bytes, [0xff, 0xd8, 0xff]) },
+  { mime: "image/gif", matches: (bytes) => startsWith(bytes, [0x47, 0x49, 0x46, 0x38]) },
+  { mime: "image/webp", matches: (bytes) => startsWith(bytes, [0x52, 0x49, 0x46, 0x46]) && startsWith(bytes.subarray(8), [0x57, 0x45, 0x42, 0x50]) },
+];
+
+export const IMAGES_ONLY_REFUSAL = "upload_file accepts only PNG, JPEG, GIF or WebP images. Put text, logs and code in the message itself.";
+
+function startsWith(bytes: Uint8Array, prefix: number[]): boolean {
+  return bytes.length >= prefix.length && prefix.every((byte, index) => bytes[index] === byte);
+}
+
+export function imageMime(bytes: Uint8Array): string | null {
+  return IMAGE_SIGNATURES.find((signature) => signature.matches(bytes))?.mime ?? null;
+}
 
 function cleanFileName(input: string): string {
   const baseName = input.split(/[/\\]/).pop() ?? "";
   const name = baseName.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, LIMITS.fileNameLength);
   if (!name || name === "." || name === "..") throw new ToolError("name must be a file name such as 'error.log'");
   return name;
-}
-
-function guessMime(name: string, encoding: "utf8" | "base64"): string {
-  const extension = name.includes(".") ? name.split(".").pop()!.toLowerCase() : "";
-  return MIME_BY_EXTENSION[extension] ?? (encoding === "utf8" ? "text/plain" : "application/octet-stream");
 }
 
 function decode(content: string, encoding: "utf8" | "base64"): Uint8Array {
@@ -147,14 +133,14 @@ export function uploadText(bytes: Uint8Array): UploadText {
 }
 
 export async function uploadFile(scope: Scope, args: { name: string; content: string; encoding?: "utf8" | "base64"; mime?: string }) {
-  const encoding = args.encoding ?? "utf8";
   const name = cleanFileName(args.name);
-  const mime = (args.mime?.trim().toLowerCase() || guessMime(name, encoding)).slice(0, 100);
-  const bytes = decode(args.content, encoding);
+  const bytes = decode(args.content, args.encoding ?? "base64");
   if (bytes.length === 0) throw new ToolError("content is empty");
   if (bytes.length > LIMITS.maxFileBytes) {
-    throw new ToolError(`the file has ${bytes.length} bytes; the limit is ${LIMITS.maxFileBytes} (5 MB). Share a smaller excerpt`);
+    throw new ToolError(`the file has ${bytes.length} bytes; the limit is ${LIMITS.maxFileBytes} (5 MB). Share a smaller image`);
   }
+  const mime = imageMime(bytes);
+  if (!mime) throw new ToolError(IMAGES_ONLY_REFUSAL);
   const text = uploadText(bytes);
   const secretFound = scanFields({ content: text.fullScanTexts }) ?? scanFields({ content: text.namedPatternTexts }, { heuristics: false });
   if (secretFound) throw new ToolError(secretFound);
@@ -162,8 +148,6 @@ export async function uploadFile(scope: Scope, args: { name: string; content: st
   const id = fileId();
   const r2Key = `${scope.workspaceId}/${id}/${name}`;
   await scope.env.FILES.put(r2Key, bytes, { httpMetadata: { contentType: mime } });
-  const fitsInline = bytes.length <= LIMITS.inlineTextMaxBytes;
-  const inlineText = fitsInline ? text.validUtf8 : null;
   run(
     scope.sql,
     `INSERT INTO files (id, uploader_id, message_id, name, mime, size, r2_key, created_at, inline_text)
@@ -175,7 +159,7 @@ export async function uploadFile(scope: Scope, args: { name: string; content: st
     bytes.length,
     r2Key,
     scope.now,
-    inlineText,
+    null,
   );
   return { file_id: id, name, mime, size: bytes.length, hint: "pass file_id in file_ids on send_message to share it" };
 }

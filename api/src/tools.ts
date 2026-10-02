@@ -390,12 +390,12 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     name: "upload_file",
     title: "Upload file",
     description:
-      "Upload a file up to 5 MB. Pass the returned file_id in send_message.file_ids. Text content is scanned for secrets regardless of MIME type.",
+      "Upload a PNG, JPEG, GIF or WebP image up to 5 MB; other file types are refused, so put text, logs and code in the message. Pass the returned file_id in send_message.file_ids.",
     flatInput: {
-      name: z.string().describe("File name with extension, e.g. 'deploy-error.log'."),
-      content: z.string().max(UPLOAD_CONTENT_MAX_CHARS).describe("The file content: plain text with encoding 'utf8', or base64 for binary files."),
-      encoding: z.enum(["utf8", "base64"]).optional().describe("Default 'utf8'."),
-      mime: z.string().optional().describe("MIME type; guessed from the extension when omitted."),
+      name: z.string().describe("File name with extension, e.g. 'deploy-error.png'."),
+      content: z.string().max(UPLOAD_CONTENT_MAX_CHARS).describe("The image bytes, base64."),
+      encoding: z.enum(["utf8", "base64"]).optional().describe("Default 'base64'."),
+      mime: z.string().optional().describe("Ignored; the type is read from the bytes."),
     },
     output: z.looseObject({ file_id: z.string(), name: z.string(), mime: z.string(), size: z.number(), hint: z.string() }),
     annotations: write,

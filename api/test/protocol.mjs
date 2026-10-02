@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import { setTimeout as delay } from "node:timers/promises";
 import { after, describe, test } from "node:test";
-import { EVAL_URL, LEGACY, MODERN, TEST_SPACE, cleanupHeadlessAgents, evalRequest, headlessClient, mcpClient } from "./lib/mcp.mjs";
+import { EVAL_URL, LEGACY, MODERN, TEST_SPACE, cleanupHeadlessAgents, evalRequest, headlessClient, mcpClient, TINY_PNG_BASE64 } from "./lib/mcp.mjs";
 import { TOOL_NAMES as EXPECTED_TOOLS } from "./lib/toolNames.mjs";
 
 const packageVersion = JSON.parse(await readFile(new URL("../../cli/package.json", import.meta.url), "utf8")).version;
@@ -264,7 +264,7 @@ for (const protocolVersion of [MODERN, LEGACY]) {
       await expectOk(owner.call("update_channel", { ...ownerAgent, channel: `#${channel}`, topic: "checking every tool" }), "update_channel");
       await expectOk(owner.call("start_chat", { ...ownerAgent, participants: [peerProfile.handle] }), "start_chat");
       const upload = await expectOk(
-        owner.call("upload_file", { ...ownerAgent, name: "protocol.txt", content: "protocol check attachment" }),
+        owner.call("upload_file", { ...ownerAgent, name: "protocol.png", content: TINY_PNG_BASE64 }),
         "upload_file",
       );
       const sent = await expectOk(
@@ -372,8 +372,7 @@ for (const protocolVersion of [MODERN, LEGACY]) {
       await expectOk(writer.call("create_channel", { ...writerAgent, name: channel, purpose: "Preview check" }), "create_channel (preview)");
       await expectOk(reader.call("join_channel", { ...readerAgent, channel: `#${channel}` }), "join_channel (preview)");
       const text = `${profile.handle} ${"Long message body. ".repeat(400)}`;
-      const fileText = "Attached report text. ".repeat(4000);
-      const file = await expectOk(writer.call("upload_file", { ...writerAgent, name: "preview.txt", content: fileText }), "upload_file (preview)");
+      const file = await expectOk(writer.call("upload_file", { ...writerAgent, name: "preview.png", content: TINY_PNG_BASE64 }), "upload_file (preview)");
       const sent = await expectOk(writer.call("send_message", { ...writerAgent, to: `#${channel}`, text, file_ids: [file.file_id] }), "send_message (preview)");
       const inbox = await expectOk(reader.call("check_inbox", readerAgent), "check_inbox (preview)");
       const item = inbox.items.find(item => item.message.id === sent.message);
@@ -384,7 +383,8 @@ for (const protocolVersion of [MODERN, LEGACY]) {
       const full = await expectOk(reader.call("read_messages", { ...readerAgent, conversation: sent.message, detail: "full" }), "read_messages (full body)");
       assert.equal(full.messages[0].text, text);
       assert.equal(full.messages[0].text_truncated, undefined);
-      assert.equal(full.messages[0].files[0].text, fileText);
+      assert.equal(full.messages[0].files[0].mime, "image/png");
+      assert.equal(full.messages[0].files[0].text, undefined);
       const unread = await expectOk(reader.call("check_inbox", readerAgent), "check_inbox (still unread)");
       assert.ok(unread.items.some(item => item.message.id === sent.message));
       const page = await expectOk(reader.call("read_messages", { ...readerAgent, conversation: `#${channel}`, detail: "full" }), "read_messages (preview page)");
@@ -537,9 +537,9 @@ for (const protocolVersion of [MODERN, LEGACY]) {
 
       const fakeKey = ["AK", "IA", "Q7MZ2R8NPX4WVT3K"].join("");
       const content = Buffer.from(`AWS_ACCESS_KEY_ID=${fakeKey}\n`).toString("base64");
-      const mislabelled = await owner.call("upload_file", { ...ownerAgent, name: ".env", content, encoding: "base64", mime: "application/octet-stream" });
-      assert.equal(mislabelled.ok, false, "upload_file stored a secret behind a binary mime");
-      assert.match(mislabelled.error, /secret/);
+      const mislabelled = await owner.call("upload_file", { ...ownerAgent, name: ".env", content, encoding: "base64", mime: "image/png" });
+      assert.equal(mislabelled.ok, false, "upload_file stored a text file labelled as an image");
+      assert.match(mislabelled.error, /accepts only PNG, JPEG, GIF or WebP images/);
     });
 
     test("lookup is rate limited per agent", async () => {

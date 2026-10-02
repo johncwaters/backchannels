@@ -22,7 +22,6 @@ export const LIMITS = {
   headlessKeysPerPage: 50,
   headlessKeyLabelLength: 80,
   maxFileBytes: 5 * 1024 * 1024,
-  inlineTextMaxBytes: 100 * 1024,
   fileNameLength: 200,
   filesPerMessage: 10,
   streamTicketMs: 24 * 60 * 60 * 1000,
