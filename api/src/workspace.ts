@@ -18,7 +18,7 @@ import { LIMITS, RATE_LIMITS, pruneRateBuckets } from "./limits";
 import { IndexDelivery } from "./indexDelivery";
 import { deleteMessage, editMessage, followThread, pin, react, readMessages, save, sendMessage } from "./messages";
 import { uploadFile } from "./files";
-import { newestOwnerMessage } from "./ownerInbox";
+import { newestOwnerMessage, sweepStrandedMessages } from "./ownerInbox";
 import { MIGRATIONS } from "./schema";
 import { trackRecords, type TrackRecord } from "./trackRecord";
 import { banNotice, moderate, type ModerationOutcome } from "./moderation";
@@ -37,6 +37,7 @@ import { adminChangeToken, bumpAdminOwnerRevision, bumpAdminPublicRevision, reco
 const UNSENDABLE_CLOSE_CODES = new Set([1005, 1006, 1015]);
 const NORMAL_CLOSURE = 1000;
 const POLICY_VIOLATION = 1008;
+const STRANDED_SWEEP_INTERVAL_MS = 60_000;
 
 interface StreamAttachment {
   openedAt?: number;
@@ -161,7 +162,7 @@ export class WorkspaceDO extends DurableObject<Env> {
   }
 
   private scopeFor(agent: AgentRow, workspaceId: string, now: number): Scope {
-    return { sql: this.sql, now, agent, workspaceId, env: this.env, indexJobs: [] };
+    return { sql: this.sql, now, agent, workspaceId, env: this.env, indexJobs: [], hasSessionEnded: (recipient) => this.hasAgentSessionEnded(recipient, now) };
   }
 
   async registerAgent(agent: NewAgent, identity: WorkspaceIdentity, grantId: string): Promise<RegisterOutcome> {
@@ -213,11 +214,16 @@ export class WorkspaceDO extends DurableObject<Env> {
   private isHeldByAnotherSession(existing: AgentRow, agent: NewAgent, now: number): boolean {
     if (!agent.sessionHash || !existing.session_hash || existing.session_hash === agent.sessionHash) return false;
     if (agent.processHash && existing.process_hash === agent.processHash) return false;
-    return now - existing.last_active_at < LIMITS.agentNameHoldMs || this.ctx.getWebSockets(existing.id).length > 0;
+    return !this.hasAgentSessionEnded(existing, now);
+  }
+
+  private hasAgentSessionEnded(agent: Pick<AgentRow, "id" | "last_active_at">, now: number): boolean {
+    if (!isNameHoldExpired(agent, now)) return false;
+    return !this.ctx.getWebSockets(agent.id).some(socket => socket.readyState === WebSocket.OPEN);
   }
 
   private freeNameBeside(heldHandle: string, ownerSub: string, now: number): string {
-    return freeSessionName(this.sql, heldHandle, ownerSub, (candidate) => isNameHoldExpired(candidate, now) && this.ctx.getWebSockets(candidate.id).length === 0);
+    return freeSessionName(this.sql, heldHandle, ownerSub, (candidate) => this.hasAgentSessionEnded(candidate, now));
   }
 
   private claimForSession(existing: AgentRow, agent: NewAgent): void {
@@ -322,6 +328,18 @@ export class WorkspaceDO extends DurableObject<Env> {
         } catch (error) {
           console.error(`post-commit index delivery failed for ${name}`, error);
         }
+      }
+      try {
+        const queuedOwnerSubs = await this.ctx.storage.transaction(async () => {
+          const lastSweep = one<{ value: string }>(this.sql, "SELECT value FROM meta WHERE key = 'stranded_sweep_at'");
+          if (lastSweep && now - Number(lastSweep.value) < STRANDED_SWEEP_INTERVAL_MS) return new Set<string>();
+          const queued = sweepStrandedMessages(this.sql, now, (recipient) => this.hasAgentSessionEnded(recipient, now));
+          run(this.sql, "INSERT OR REPLACE INTO meta (key, value) VALUES ('stranded_sweep_at', ?)", String(now));
+          return queued;
+        });
+        if (queuedOwnerSubs.size) this.flushWatchers(queuedOwnerSubs);
+      } catch (error) {
+        console.error(`post-commit stranded message sweep failed for ${name}`, error);
       }
       return { output: output as Record<string, unknown> };
     } catch (error) {

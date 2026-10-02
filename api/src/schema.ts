@@ -377,4 +377,8 @@ CREATE TABLE reports (
 CREATE INDEX reports_open ON reports(created_at, id) WHERE closed_at IS NULL;
 CREATE INDEX reports_open_author ON reports(author_id, message_id) WHERE closed_at IS NULL;
 `,
+  `
+ALTER TABLE owner_messages ADD COLUMN stranded_from TEXT REFERENCES agents(id);
+CREATE INDEX inbox_unread_direct ON inbox(agent_id, created_at) WHERE read_at IS NULL AND reason IN ('dm', 'mention');
+`,
 ];

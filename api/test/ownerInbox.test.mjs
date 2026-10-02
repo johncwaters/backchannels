@@ -16,7 +16,7 @@ registerHooks({
 const { checkInbox, markRead } = await import("../src/inbox.ts");
 const { openChat } = await import("../src/conversations.ts");
 const { deleteMessage, sendMessage } = await import("../src/messages.ts");
-const { newestOwnerMessage, ownerInboxMessages } = await import("../src/ownerInbox.ts");
+const { countUnreadOwnerMessages, newestOwnerMessage, ownerInboxMessages, sweepStrandedMessages } = await import("../src/ownerInbox.ts");
 const { WorkspaceDO } = await import("../src/workspace.ts");
 const { ToolError } = await import("../src/store.ts");
 
@@ -661,5 +661,408 @@ describe("owner pushes", () => {
     const read = adminRead(adminContext, { conversation: sent.conversation });
     assert.equal(read.ok, true);
     assert.equal(read.value.conversation.name, "@team");
+  });
+});
+
+describe("stranded messages", () => {
+  function endSession(workspace, agentId = "sleeper", lastActiveAt = workspace.now - LIMITS.agentNameHoldMs) {
+    workspace.database.prepare("UPDATE agents SET last_active_at = ? WHERE id = ?").run(lastActiveAt, agentId);
+    workspace.agents[agentId].last_active_at = lastActiveAt;
+  }
+
+  function scopeWithLiveness(workspace, agentId = "author", listeningAgentIds = new Set()) {
+    return {
+      ...workspace.scopeFor(agentId),
+      hasSessionEnded: agent => workspace.now - agent.last_active_at >= LIMITS.agentNameHoldMs && !listeningAgentIds.has(agent.id),
+    };
+  }
+
+  function sweep(workspace, hasSessionEnded = scopeWithLiveness(workspace).hasSessionEnded) {
+    return sweepStrandedMessages(workspace.sql, workspace.now, hasSessionEnded);
+  }
+
+  test("migration preserves direct owner items with NULL provenance and references agents", (context) => {
+    const migrationIndex = MIGRATIONS.findIndex(migration => migration.includes("ALTER TABLE owner_messages ADD COLUMN stranded_from"));
+    const harness = createDatabase(MIGRATIONS.slice(0, migrationIndex));
+    context.after(() => harness.database.close());
+    addAgent(harness.database, "author");
+    addAgent(harness.database, "recipient", { owner: "shared" });
+    const conversation = addConversation(harness.database, "existing", ["author"]);
+    const existingMessage = harness.database.prepare("INSERT INTO messages (conversation_id, seq, author_id, text, created_at, word_count) VALUES (?, 1, 'author', 'Direct owner item', 1, 3) RETURNING id").get(conversation.id);
+    harness.database.prepare("INSERT INTO owner_messages (message_id, owner_sub, created_at) VALUES (?, 'shared', 1)").run(existingMessage.id);
+    harness.database.exec(MIGRATIONS[migrationIndex]);
+    assert.equal(harness.database.prepare("SELECT stranded_from FROM owner_messages").get().stranded_from, null);
+    harness.database.exec("PRAGMA foreign_keys = ON");
+    assert.throws(() => harness.database.prepare("UPDATE owner_messages SET stranded_from = 'missing'").run(), /FOREIGN KEY constraint/);
+  });
+
+  test("DM to an ended session keeps the original inbox row and returns rerouted provenance", (context) => {
+    const workspace = createWorkspace(context);
+    endSession(workspace);
+    const senderScope = scopeWithLiveness(workspace);
+    const sent = sendMessage(senderScope, { to: "@team/sleeper", text: "Please help" });
+    assert.deepEqual(sent.rerouted, [{ to: "@team", recipient: "@team/sleeper", inactive_since: new Date(workspace.agents.sleeper.last_active_at).toISOString() }]);
+    assert.match(sent.hint, /sessions have ended.*carbon unit.*owner inbox/);
+    assert.deepEqual(senderScope.queuedOwnerSubs, new Set(["shared"]));
+    const queued = workspace.database.prepare("SELECT * FROM owner_messages").get();
+    assert.equal(queued.stranded_from, "sleeper");
+    assert.equal(queued.owner_sub, "shared");
+    assert.equal(queued.created_at, workspace.now);
+    assert.equal(checkInbox(workspace.scopeFor("sleeper"), {}).items[0].message.id, sent.message);
+    assert.equal(checkInbox(workspace.scopeFor("caller"), {}).owner_inbox.items[0].message.id, sent.message);
+  });
+
+  for (const state of ["active", "listening", "missing callback"]) {
+    test(`${state} recipient does not reroute`, (context) => {
+      const workspace = createWorkspace(context);
+      if (state !== "active") endSession(workspace);
+      const senderScope = state === "missing callback" ? workspace.scopeFor("author") : scopeWithLiveness(workspace, "author", new Set(state === "listening" ? ["sleeper"] : []));
+      const sent = sendMessage(senderScope, { to: "@team/sleeper", text: "Please help" });
+      assert.equal(sent.rerouted, undefined);
+      assert.equal(workspace.database.prepare("SELECT count(*) AS count FROM owner_messages").get().count, 0);
+    });
+  }
+
+  test("same-owner sender never reroutes at send or sweep", (context) => {
+    const workspace = createWorkspace(context);
+    endSession(workspace);
+    const sent = sendMessage(scopeWithLiveness(workspace, "caller"), { to: "@team/sleeper", text: "Sibling work" });
+    assert.equal(sent.rerouted, undefined);
+    assert.deepEqual(sweep(workspace), new Set());
+    assert.equal(workspace.database.prepare("SELECT count(*) AS count FROM owner_messages").get().count, 0);
+  });
+
+  test("public direct mention of an ended nonmember queues once for its owner", (context) => {
+    const workspace = createWorkspace(context);
+    endSession(workspace);
+    addConversation(workspace.database, "general", ["author"]);
+    const sent = sendMessage(scopeWithLiveness(workspace), { to: "#general", text: "@team/sleeper please help" });
+    assert.equal(sent.rerouted[0].recipient, "@team/sleeper");
+    assert.equal(checkInbox(workspace.scopeFor("sleeper"), {}).items[0].reason, "mention");
+    assert.equal(checkInbox(workspace.scopeFor("caller"), {}).owner_inbox.items[0].stranded_from, "@team/sleeper");
+    assert.deepEqual(sweep(workspace), new Set());
+    assert.equal(workspace.database.prepare("SELECT count(*) AS count FROM owner_messages").get().count, 1);
+  });
+
+  test("hidden private mentions and muted DMs do not reroute without an inbox row", (context) => {
+    const workspace = createWorkspace(context);
+    endSession(workspace);
+    addConversation(workspace.database, "private", ["author"], "private");
+    const mention = sendMessage(scopeWithLiveness(workspace), { to: "#private", text: "@team/sleeper help" });
+    assert.deepEqual(mention.not_notified, ["@team/sleeper"]);
+    assert.equal(mention.rerouted, undefined);
+    const chat = openChat(workspace.scopeFor("author"), ["sleeper"]);
+    workspace.database.prepare("INSERT INTO prefs (agent_id, conversation_id, muted) VALUES ('sleeper', ?, 1)").run(chat.id);
+    const muted = sendMessage(scopeWithLiveness(workspace), { to: chat.slug, text: "Muted question" });
+    assert.equal(muted.rerouted, undefined);
+    assert.deepEqual(sweep(workspace), new Set());
+  });
+
+  test("stranded copies have their own per-sender cap and never consume direct-owner slots", (context) => {
+    const workspace = createWorkspace(context);
+    endSession(workspace);
+    const strandedRefs = [];
+    for (let index = 0; index < LIMITS.ownerQueuePerSender + 2; index++) {
+      const sent = sendMessage(scopeWithLiveness(workspace), { to: "@team/sleeper", text: `Stranded question ${index}` });
+      assert.equal(sent.rerouted?.length, index < LIMITS.ownerQueuePerSender ? 1 : undefined);
+      strandedRefs.push(sent.message);
+    }
+    assert.deepEqual(sweep(workspace), new Set());
+    for (let index = 0; index < LIMITS.ownerQueuePerSender; index++) assert.equal(workspace.sendToOwner(`Direct question ${index}`).queued_for, "@team");
+    assert.equal(workspace.sendToOwner("Over cap").queued_for, undefined);
+    assert.equal(sendMessage(scopeWithLiveness(workspace, "stranger"), { to: "@team/sleeper", text: "Another sender" }).rerouted.length, 1);
+    deleteMessage(workspace.scopeFor("author"), { message: strandedRefs[0] });
+    assert.equal(sendMessage(scopeWithLiveness(workspace), { to: "@team/sleeper", text: "Freed slot" }).rerouted.length, 1);
+    assert.equal(workspace.database.prepare("SELECT count(*) AS count FROM owner_messages WHERE stranded_from IS NOT NULL").get().count, LIMITS.ownerQueuePerSender + 2);
+    assert.equal(workspace.queries.filter(({ query }) => query.includes("sender.owner_sub = ?3")).length, LIMITS.ownerQueuePerSender + 1);
+  });
+
+  test("stranded cap counts one sending carbon unit across every ended agent of the receiving carbon unit", (context) => {
+    const workspace = createWorkspace(context);
+    const endedAgentIds = ["sleeper", "second", "active"];
+    for (const agentId of endedAgentIds) endSession(workspace, agentId);
+    for (const agentId of endedAgentIds) {
+      assert.equal(sendMessage(scopeWithLiveness(workspace), { to: `@team/${agentId}`, text: `Question for ${agentId}` }).rerouted.length, 1);
+    }
+    for (const agentId of endedAgentIds) {
+      assert.equal(sendMessage(scopeWithLiveness(workspace), { to: `@team/${agentId}`, text: `Second question for ${agentId}` }).rerouted, undefined);
+    }
+    assert.deepEqual(sweep(workspace), new Set());
+    assert.equal(workspace.database.prepare("SELECT count(*) AS count FROM owner_messages WHERE stranded_from IS NOT NULL").get().count, LIMITS.ownerQueuePerSender);
+  });
+
+  test("sweep caps stranded copies per sending carbon unit across every ended agent of the receiving carbon unit", (context) => {
+    const workspace = createWorkspace(context);
+    const endedAgentIds = ["sleeper", "second", "active"];
+    for (const agentId of endedAgentIds) {
+      for (let index = 0; index < 2; index++) sendMessage(workspace.scopeFor("author"), { to: `@team/${agentId}`, text: `Question ${index} for ${agentId}` });
+    }
+    for (const agentId of endedAgentIds) endSession(workspace, agentId);
+    assert.deepEqual(sweep(workspace), new Set(["shared"]));
+    assert.deepEqual(sweep(workspace), new Set());
+    assert.equal(workspace.database.prepare("SELECT count(*) AS count FROM owner_messages WHERE stranded_from IS NOT NULL").get().count, LIMITS.ownerQueuePerSender);
+  });
+
+  test("a public message naming the owner and its ended agent keeps the direct owner item and reroutes nothing", (context) => {
+    const workspace = createWorkspace(context);
+    endSession(workspace);
+    addConversation(workspace.database, "general", ["author"]);
+    const sent = sendMessage(scopeWithLiveness(workspace), { to: "#general", text: "@team @team/sleeper please help" });
+    assert.deepEqual(sent.queued_for, ["@team"]);
+    assert.equal(sent.rerouted, undefined);
+    const queued = workspace.database.prepare("SELECT * FROM owner_messages").all();
+    assert.equal(queued.length, 1);
+    assert.equal(queued[0].stranded_from, null);
+    assert.equal(checkInbox(workspace.scopeFor("sleeper"), {}).owner_inbox.items[0].message.id, sent.message);
+    assert.ok(checkInbox(workspace.scopeFor("caller"), {}).owner_inbox.items[0].context);
+  });
+
+  test("a public mention of two ended agents of one carbon unit reroutes only the copy it stored", (context) => {
+    const workspace = createWorkspace(context);
+    endSession(workspace, "sleeper");
+    endSession(workspace, "second");
+    addConversation(workspace.database, "general", ["author"]);
+    const sent = sendMessage(scopeWithLiveness(workspace), { to: "#general", text: "@team/sleeper @team/second please help" });
+    assert.equal(sent.rerouted.length, 1);
+    const queued = workspace.database.prepare("SELECT stranded_from FROM owner_messages").all();
+    assert.deepEqual(queued.map(row => `@team/${row.stranded_from}`), [sent.rerouted[0].recipient]);
+  });
+
+  test("every ended agent mentioned in one stranded message is hidden from its copy and claims it by answering", (context) => {
+    const workspace = createWorkspace(context);
+    endSession(workspace, "sleeper");
+    endSession(workspace, "second");
+    const general = addConversation(workspace.database, "general", ["author"]);
+    const sent = sendMessage(scopeWithLiveness(workspace), { to: "#general", text: "@team/sleeper @team/second please help" });
+    const otherMentionedAgentId = sent.rerouted[0].recipient === "@team/sleeper" ? "second" : "sleeper";
+    const otherMentionedScope = workspace.scopeFor(otherMentionedAgentId);
+    assert.equal(ownerInboxMessages(otherMentionedScope, { limit: 20 }).items.length, 0);
+    assert.equal(countUnreadOwnerMessages(otherMentionedScope), 0);
+    assert.equal(newestOwnerMessage(workspace.sql, "shared", workspace.now, otherMentionedAgentId), undefined);
+    assert.equal(ownerInboxMessages(workspace.scopeFor("caller"), { limit: 20 }).items[0].message.id, sent.message);
+    workspace.database.prepare("INSERT INTO members VALUES (?, ?, 1)").run(general.id, otherMentionedAgentId);
+    sendMessage(otherMentionedScope, { to: "#general", text: "Back now, on it" });
+    assert.equal(ownerInboxMessages(workspace.scopeFor("caller"), { limit: 20 }).items[0].claimed_by, `@team/${otherMentionedAgentId}`);
+  });
+
+  test("sweep caps stranded copies per sending carbon unit and stops rescanning a capped sender", (context) => {
+    const workspace = createWorkspace(context);
+    const sentRefs = [];
+    for (let index = 0; index < LIMITS.ownerQueuePerSender + 2; index++) sentRefs.push(sendMessage(workspace.scopeFor("author"), { to: "@team/sleeper", text: `Question ${index}` }).message);
+    sendMessage(workspace.scopeFor("stranger"), { to: "@team/sleeper", text: "Other sender" });
+    endSession(workspace);
+    assert.deepEqual(sweep(workspace), new Set(["shared"]));
+    const strandedCount = () => workspace.database.prepare("SELECT count(*) AS count FROM owner_messages WHERE stranded_from IS NOT NULL").get().count;
+    assert.equal(strandedCount(), LIMITS.ownerQueuePerSender + 1);
+    const lookupStart = workspace.queries.length;
+    assert.deepEqual(sweep(workspace), new Set());
+    const [lookup] = workspace.queries.slice(lookupStart).filter(({ query }) => query.includes("FROM inbox INDEXED BY inbox_unread_direct"));
+    assert.equal(workspace.database.prepare(lookup.query).all(...lookup.bindings).length, 0);
+    deleteMessage(workspace.scopeFor("author"), { message: sentRefs[0] });
+    assert.deepEqual(sweep(workspace), new Set(["shared"]));
+    assert.equal(strandedCount(), LIMITS.ownerQueuePerSender + 2);
+  });
+
+  test("stranded items omit all context and leave private history inaccessible to siblings", (context) => {
+    const workspace = createWorkspace(context);
+    sendMessage(workspace.scopeFor("author"), { to: "@team/sleeper", text: "Private earlier history" });
+    endSession(workspace);
+    const sent = sendMessage(scopeWithLiveness(workspace), { to: "@team/sleeper", text: "Stranded question" });
+    const queryStart = workspace.queries.length;
+    const item = ownerInboxMessages(workspace.scopeFor("caller"), { limit: 20 }).items[0];
+    assert.equal(item.message.id, sent.message);
+    assert.equal(item.stranded_from, "@team/sleeper");
+    assert.equal(Object.hasOwn(item, "context"), false);
+    assert.ok(!workspace.queries.slice(queryStart).some(({ query }) => query.includes("seq < ?")));
+    assert.throws(() => markRead(workspace.scopeFor("caller"), { conversation: sent.conversation }), /not found/);
+  });
+
+  test("a sibling claim appears in the original recipient inbox without affecting other agents", (context) => {
+    const workspace = createWorkspace(context);
+    endSession(workspace);
+    const sent = sendMessage(scopeWithLiveness(workspace), { to: "@team/sleeper", text: "Stranded question" });
+    workspace.database.prepare("INSERT INTO claims (message_id, agent_id, claimed_at) VALUES (?, 'stranger', ?)").run(workspace.messageIdOf(sent.message), workspace.now);
+    assert.equal(checkInbox(workspace.scopeFor("sleeper"), {}).items[0].claimed_by, undefined);
+    const claimed = sendMessage(workspace.scopeFor("caller"), { to: "@author/author", reply_to: sent.message, text: "I will pick this up" });
+    assert.equal(claimed.claimed, sent.message);
+    assert.equal(checkInbox(workspace.scopeFor("sleeper"), {}).items[0].claimed_by, "@team/caller");
+    sendMessage(workspace.scopeFor("author"), { to: "@team/second", text: "Another question" });
+    assert.equal(checkInbox(workspace.scopeFor("second"), {}).items[0].claimed_by, undefined);
+    assert.equal(checkInbox(workspace.scopeFor("author"), {}).items[0].claimed_by, undefined);
+  });
+
+  test("sweep queues work after the recipient ends and seeks the unread direct index", (context) => {
+    const workspace = createWorkspace(context);
+    const sent = sendMessage(scopeWithLiveness(workspace), { to: "@team/sleeper", text: "Sent while active" });
+    assert.equal(sent.rerouted, undefined);
+    endSession(workspace);
+    assert.deepEqual(sweep(workspace), new Set(["shared"]));
+    const queued = workspace.database.prepare("SELECT * FROM owner_messages").get();
+    assert.equal(queued.message_id, workspace.messageIdOf(sent.message));
+    assert.equal(queued.stranded_from, "sleeper");
+    assert.equal(queued.created_at, workspace.now);
+    assert.deepEqual(sweep(workspace), new Set());
+    const lookups = workspace.queries.filter(({ query }) => query.includes("FROM inbox INDEXED BY inbox_unread_direct"));
+    assert.ok(lookups.length);
+    for (const lookup of lookups) assert.ok(workspace.explain(lookup).some(step => /SEARCH inbox USING INDEX inbox_unread_direct \(agent_id=\? AND created_at>\?\)/.test(step)), workspace.explain(lookup).join("\n"));
+  });
+
+  for (const exclusion of ["read", "old inbox", "revoked", "deleted", "listening", "recent activity", "channel reason", "already queued"]) {
+    test(`sweep skips ${exclusion} work`, (context) => {
+      const workspace = createWorkspace(context);
+      const sent = sendMessage(workspace.scopeFor("author"), { to: "@team/sleeper", text: "Pending question" });
+      const messageId = workspace.messageIdOf(sent.message);
+      endSession(workspace);
+      if (exclusion === "read") markRead(workspace.scopeFor("sleeper"), { messages: [sent.message] });
+      if (exclusion === "old inbox") workspace.database.prepare("UPDATE inbox SET created_at = ? WHERE message_id = ?").run(workspace.now - 24 * 60 * 60 * 1000 - 1, messageId);
+      if (exclusion === "revoked") workspace.database.prepare("UPDATE agents SET revoked_at = ? WHERE id = 'sleeper'").run(workspace.now);
+      if (exclusion === "deleted") deleteMessage(workspace.scopeFor("author"), { message: sent.message });
+      if (exclusion === "recent activity") endSession(workspace, "sleeper", workspace.now - LIMITS.agentNameHoldMs + 1);
+      if (exclusion === "channel reason") workspace.database.prepare("UPDATE inbox SET reason = 'channel' WHERE message_id = ?").run(messageId);
+      if (exclusion === "already queued") workspace.database.prepare("INSERT INTO owner_messages (message_id, owner_sub, created_at) VALUES (?, 'shared', ?)").run(messageId, workspace.now);
+      const callback = scopeWithLiveness(workspace, "author", new Set(exclusion === "listening" ? ["sleeper"] : [])).hasSessionEnded;
+      assert.deepEqual(sweep(workspace, callback), new Set());
+      assert.equal(workspace.database.prepare("SELECT count(*) AS count FROM owner_messages WHERE stranded_from IS NOT NULL").get().count, 0);
+    });
+  }
+
+  test("sweep reaches a recipient idle for over 24 hours whose recent DMs are unread", (context) => {
+    const workspace = createWorkspace(context);
+    const sent = sendMessage(workspace.scopeFor("author"), { to: "@team/sleeper", text: "Sent while the socket was open" });
+    endSession(workspace, "sleeper", workspace.now - 24 * 60 * 60 * 1000 - 1);
+    assert.deepEqual(sweep(workspace), new Set(["shared"]));
+    assert.equal(workspace.database.prepare("SELECT message_id FROM owner_messages").get().message_id, workspace.messageIdOf(sent.message));
+  });
+
+  for (const kind of ["private", "group"]) {
+    test(`${kind} conversation mentions of an ended member never reroute at send or sweep`, (context) => {
+      const workspace = createWorkspace(context);
+      addConversation(workspace.database, kind, ["author", "sleeper", "stranger"], kind);
+      const sentWhileActive = sendMessage(workspace.scopeFor("author"), { to: `#${kind}`, text: "@team/sleeper earlier secret" });
+      assert.equal(checkInbox(workspace.scopeFor("sleeper"), {}).items[0].message.id, sentWhileActive.message);
+      endSession(workspace);
+      const sentAfterEnd = sendMessage(scopeWithLiveness(workspace), { to: `#${kind}`, text: "@team/sleeper later secret" });
+      assert.equal(sentAfterEnd.rerouted, undefined);
+      assert.deepEqual(sweep(workspace), new Set());
+      assert.equal(workspace.database.prepare("SELECT count(*) AS count FROM owner_messages").get().count, 0);
+    });
+  }
+
+  test("the stranded recipient never sees its own copy and answering in the chat claims it for siblings", (context) => {
+    const workspace = createWorkspace(context);
+    endSession(workspace);
+    const sent = sendMessage(scopeWithLiveness(workspace), { to: "@team/sleeper", text: "Stranded question" });
+    const sleeperScope = workspace.scopeFor("sleeper");
+    assert.equal(ownerInboxMessages(sleeperScope, { limit: 20 }).items.length, 0);
+    assert.equal(countUnreadOwnerMessages(sleeperScope), 0);
+    assert.equal(checkInbox(sleeperScope, {}).owner_inbox, undefined);
+    assert.equal(newestOwnerMessage(workspace.sql, "shared", workspace.now, "sleeper"), undefined);
+    assert.equal(ownerInboxMessages(workspace.scopeFor("caller"), { limit: 20 }).items[0].message.id, sent.message);
+    sendMessage(sleeperScope, { to: sent.conversation, text: "Back now, on it" });
+    assert.equal(ownerInboxMessages(workspace.scopeFor("caller"), { limit: 20 }).items[0].claimed_by, "@team/sleeper");
+    assert.throws(() => sendMessage(workspace.scopeFor("caller"), { to: "@author/author", reply_to: sent.message, text: "Duplicate pickup" }), /already claimed by @team\/sleeper/);
+  });
+
+  test("a stranded recipient answering after a sibling claim keeps the sibling's claim", (context) => {
+    const workspace = createWorkspace(context);
+    endSession(workspace);
+    const sent = sendMessage(scopeWithLiveness(workspace), { to: "@team/sleeper", text: "Stranded question" });
+    sendMessage(workspace.scopeFor("caller"), { to: "@author/author", reply_to: sent.message, text: "I will pick this up" });
+    sendMessage(workspace.scopeFor("sleeper"), { to: sent.conversation, text: "Back now" });
+    assert.deepEqual(workspace.database.prepare("SELECT agent_id FROM claims").all().map(row => row.agent_id), ["caller"]);
+  });
+
+  test("sweep includes the exact 24 hour boundary and hides banned authors only at listing", (context) => {
+    const workspace = createWorkspace(context);
+    const sent = sendMessage(workspace.scopeFor("author"), { to: "@team/sleeper", text: "Boundary question" });
+    const messageId = workspace.messageIdOf(sent.message);
+    const earliestTime = workspace.now - 24 * 60 * 60 * 1000;
+    endSession(workspace, "sleeper", earliestTime);
+    workspace.database.prepare("UPDATE inbox SET created_at = ? WHERE message_id = ?").run(earliestTime, messageId);
+    workspace.database.prepare("INSERT INTO bans (kind, subject, owner_sub, label, banned_at, banned_by, reason) VALUES ('agent', 'author', 'author', 'author', ?, 'stranger', 'spam')").run(workspace.now);
+    assert.deepEqual(sweep(workspace), new Set(["shared"]));
+    assert.equal(checkInbox(workspace.scopeFor("caller"), {}).owner_inbox, undefined);
+    workspace.database.prepare("DELETE FROM bans").run();
+    assert.equal(checkInbox(workspace.scopeFor("caller"), {}).owner_inbox.items[0].message.id, sent.message);
+  });
+
+  test("sweep limits the whole batch to 100 messages across recipients and resumes next sweep", (context) => {
+    const workspace = createWorkspace(context);
+    const senders = Array.from({ length: 20 }, (_, index) => addAgent(workspace.database, `sender-${index}`, { lastActiveAt: workspace.now }));
+    for (const recipientId of ["sleeper", "stranger"]) {
+      endSession(workspace, recipientId);
+      for (const sender of senders) {
+        for (let index = 0; index < LIMITS.ownerQueuePerSender; index++) sendMessage(createScope(workspace.sql, sender, workspace.now), { to: `@${workspace.agents[recipientId].handle}`, text: `Question ${index}` });
+      }
+    }
+    assert.deepEqual(sweep(workspace), new Set(["shared", "stranger"]));
+    assert.equal(workspace.database.prepare("SELECT count(*) AS count FROM owner_messages").get().count, 100);
+    assert.deepEqual(sweep(workspace), new Set(["stranger"]));
+    assert.equal(workspace.database.prepare("SELECT count(*) AS count FROM owner_messages").get().count, 120);
+  });
+
+  for (const readyState of [WebSocket.OPEN, WebSocket.CLOSING, WebSocket.CLOSED]) {
+    test(`WorkspaceDO liveness and name holds agree for socket state ${readyState}`, (context) => {
+      const workspace = createWorkspace(context);
+      endSession(workspace);
+      workspace.agents.sleeper.session_hash = "original-session";
+      const watchers = attachWatchers(workspace, ["sleeper"]);
+      watchers.socketsByAgentId.get("sleeper").readyState = readyState;
+      const hasEnded = readyState !== WebSocket.OPEN;
+      assert.equal(watchers.durableWorkspace.hasAgentSessionEnded(workspace.agents.sleeper, workspace.now), hasEnded);
+      assert.equal(watchers.durableWorkspace.isHeldByAnotherSession(workspace.agents.sleeper, { sessionHash: "new-session" }, workspace.now), !hasEnded);
+      const senderScope = watchers.durableWorkspace.scopeFor(workspace.agents.author, "ws_test", workspace.now);
+      assert.equal(senderScope.hasSessionEnded(workspace.agents.sleeper), hasEnded);
+      const sent = sendMessage(senderScope, { to: "@team/sleeper", text: "Socket question" });
+      assert.equal(Boolean(sent.rerouted), hasEnded);
+    });
+  }
+
+  test("WorkspaceDO persists the once-per-minute sweep gate and pushes after commit", async (context) => {
+    const workspace = createWorkspace(context);
+    const sent = sendMessage(workspace.scopeFor("author"), { to: "@team/sleeper", text: "Sent while active" });
+    endSession(workspace);
+    const watchers = attachWatchers(workspace);
+    const durable = watchers.durableWorkspace;
+    durable.workspaceDomain = "example.com";
+    let currentTime = workspace.now;
+    context.mock.method(Date, "now", () => currentTime);
+    const first = await durable.tool("check_inbox", callerIdentity(workspace, "caller"), {});
+    assert.equal(first.error, undefined);
+    assert.equal(watchers.eventsByAgentId.get("caller")[0].message, sent.message);
+    assert.equal(workspace.database.prepare("SELECT value FROM meta WHERE key = 'stranded_sweep_at'").get().value, String(currentTime));
+    const sweepQueries = () => workspace.queries.filter(({ query }) => query.includes("SELECT id, owner_sub, last_active_at FROM agents")).length;
+    assert.equal(sweepQueries(), 1);
+    const second = sendMessage(workspace.scopeFor("author"), { to: "@team/sleeper", text: "Queued next minute" });
+    currentTime += 59_999;
+    assert.equal((await durable.tool("check_inbox", callerIdentity(workspace, "caller"), {})).error, undefined);
+    assert.equal(sweepQueries(), 1);
+    assert.equal(workspace.database.prepare("SELECT count(*) AS count FROM owner_messages").get().count, 1);
+    currentTime++;
+    assert.equal((await durable.tool("check_inbox", callerIdentity(workspace, "caller"), {})).error, undefined);
+    assert.equal(sweepQueries(), 2);
+    assert.equal(watchers.eventsByAgentId.get("caller").at(-1).message, second.message);
+    assert.equal(workspace.database.prepare("SELECT count(*) AS count FROM owner_messages").get().count, 2);
+  });
+
+  test("WorkspaceDO rolls back a failed sweep and preserves the successful tool result", async (context) => {
+    const workspace = createWorkspace(context);
+    const sent = sendMessage(workspace.scopeFor("author"), { to: "@team/sleeper", text: "Pending question" });
+    endSession(workspace);
+    const watchers = attachWatchers(workspace);
+    watchers.durableWorkspace.workspaceDomain = "example.com";
+    workspace.database.exec("CREATE TRIGGER reject_stranded BEFORE INSERT ON owner_messages WHEN NEW.stranded_from IS NOT NULL BEGIN SELECT RAISE(ABORT, 'sweep rejected'); END");
+    const loggedErrors = [];
+    context.mock.method(console, "error", (...entries) => loggedErrors.push(entries));
+    const outcome = await watchers.durableWorkspace.tool("check_inbox", callerIdentity(workspace, "caller"), {});
+    assert.equal(outcome.error, undefined);
+    assert.ok(outcome.output);
+    assert.match(loggedErrors[0][0], /post-commit stranded message sweep failed for check_inbox/);
+    assert.equal(workspace.database.prepare("SELECT count(*) AS count FROM owner_messages").get().count, 0);
+    assert.equal(workspace.database.prepare("SELECT value FROM meta WHERE key = 'stranded_sweep_at'").get(), undefined);
+    assert.equal(watchers.eventsByAgentId.get("caller").length, 0);
+    workspace.database.exec("DROP TRIGGER reject_stranded");
+    assert.equal((await watchers.durableWorkspace.tool("check_inbox", callerIdentity(workspace, "caller"), {})).error, undefined);
+    assert.equal(watchers.eventsByAgentId.get("caller")[0].message, sent.message);
   });
 });

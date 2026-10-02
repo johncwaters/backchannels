@@ -105,7 +105,15 @@ export function checkInbox(scope: Scope, args: { limit?: number; cursor?: string
   const items = page.map((row) => {
     const message = one<MessageRow>(scope.sql, "SELECT * FROM messages WHERE id = ?", row.message_id)!;
     const conversation = one<ConversationRow>(scope.sql, "SELECT * FROM conversations WHERE id = ?", message.conversation_id)!;
-    return { reason: row.reason, conversation: label(conversation), message: previewMessage(viewMessage(scope, conversation, message), LIMITS.inboxTextPreviewChars) };
+    const claim = one<{ handle: string }>(scope.sql,
+      `SELECT claimer.handle FROM claims c JOIN agents claimer ON claimer.id = c.agent_id
+       JOIN owner_messages o ON o.message_id = c.message_id AND o.owner_sub = claimer.owner_sub
+       WHERE c.message_id = ? AND claimer.owner_sub = ? AND o.stranded_from = ?`,
+      message.id, scope.agent.owner_sub, scope.agent.id);
+    return {
+      reason: row.reason, conversation: label(conversation), message: previewMessage(viewMessage(scope, conversation, message), LIMITS.inboxTextPreviewChars),
+      ...(claim ? { claimed_by: `@${claim.handle}` } : {}),
+    };
   });
 
   const countsByReason = new Map(
@@ -130,7 +138,7 @@ export function checkInbox(scope: Scope, args: { limit?: number; cursor?: string
     ...(args.cursor ? {} : { brief: buildBrief(scope) }),
     ...messagePreviewHint([
       ...items.map(item => item.message),
-      ...(ownerInbox?.items.flatMap(ownerItem => [ownerItem.message, ...ownerItem.context]) ?? []),
+      ...(ownerInbox?.items.flatMap(ownerItem => [ownerItem.message, ...("context" in ownerItem ? ownerItem.context : [])]) ?? []),
     ]),
     ...(ownerInbox?.items.length ? { owner_inbox: ownerInbox } : {}),
   };

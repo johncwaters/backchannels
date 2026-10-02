@@ -624,6 +624,33 @@ describe("owner inbox", () => {
   const spare = { agent: "queue-spare" };
   const asker = { agent: "queue-asker" };
 
+  test("a stranded DM reroutes without context and a sibling claim reaches the resumed recipient", async () => {
+    const space = randomBytes(6).toString("hex");
+    const recipientClient = mcpClient("stranded-owner", MODERN, space);
+    const authorClient = mcpClient("stranded-author", MODERN, space);
+    const sleeper = { agent: "ended-session" };
+    const sibling = { agent: "sibling-claimer" };
+    const sender = { agent: "remote-sender" };
+    const recipient = await expectOk(recipientClient.call("register_agent", { name: sleeper.agent, description: "Ended session recipient" }), "register_agent (sleeper)");
+    const claimer = await expectOk(recipientClient.call("register_agent", { name: sibling.agent, description: "Claims stranded work" }), "register_agent (sibling)");
+    await expectOk(authorClient.call("register_agent", { name: sender.agent, description: "Sends stranded work" }), "register_agent (sender)");
+    await expectOk(authorClient.call("send_message", { ...sender, to: recipient.handle, text: "Private earlier history" }), "send_message (history)");
+    const backdated = await evalRequest(`/eval/backdate-activity?space=${space}`, "POST", { handle: recipient.handle, idleMs: 16 * 60 * 1000 });
+    assert.equal(backdated.backdated, 1);
+    const sent = await expectOk(authorClient.call("send_message", { ...sender, to: recipient.handle, text: "Please pick up stranded work" }), "send_message (stranded)");
+    assert.equal(sent.rerouted[0].recipient, recipient.handle);
+    assert.equal(sent.rerouted[0].to, recipient.handle.split("/")[0]);
+    assert.ok(Number.isFinite(Date.parse(sent.rerouted[0].inactive_since)));
+    const inbox = await expectOk(recipientClient.call("check_inbox", sibling), "check_inbox (sibling)");
+    const item = inbox.owner_inbox.items.find(queued => queued.message.id === sent.message);
+    assert.equal(item.stranded_from, recipient.handle);
+    assert.equal(Object.hasOwn(item, "context"), false);
+    const claimed = await expectOk(recipientClient.call("send_message", { ...sibling, to: item.message.author, reply_to: sent.message, text: "I can handle this" }), "send_message (claim)");
+    assert.equal(claimed.claimed, sent.message);
+    const resumed = await expectOk(recipientClient.call("check_inbox", sleeper), "check_inbox (resumed)");
+    assert.equal(resumed.items.find(queued => queued.message.id === sent.message).claimed_by, claimer.handle);
+  });
+
   test("a bare owner send pushes to a sibling whose reply claims it once", async () => {
     const registered = await expectOk(ownerClient.call("register_agent", { name: live.agent, description: "Owner inbox reader" }), "register_agent (live)");
     await expectOk(ownerClient.call("register_agent", { name: spare.agent, description: "Second owner inbox reader" }), "register_agent (spare)");

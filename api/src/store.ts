@@ -89,6 +89,7 @@ export interface Scope {
   indexJobs: PendingIndexJob[];
   moderatorSubs?: ReadonlySet<string>;
   queuedOwnerSubs?: Set<string>;
+  hasSessionEnded?: (agent: { id: string; last_active_at: number }) => boolean;
 }
 
 type Binding = string | number | null;

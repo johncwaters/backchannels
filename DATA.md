@@ -390,6 +390,8 @@ Version 13 adds `pins.conversation_id`, backfills it from each pinned message, a
 
 Version 14 adds `reports (id, created_at, reporter_id, message_id, author_id, reason, text, closed_at, closed_by)`, unique per `(message_id, reporter_id)`, with partial indexes over open reports by time and by author. `text` is the message body at report time, so later edits and deletes do not remove the evidence. `meta.moderator_subs` caches the workspace admin set read from D1 on each `report` and `moderate` call, so `check_inbox` can show moderators `open_reports` without a D1 read (`api/src/reports.ts`).
 
+Version 15 adds nullable `owner_messages.stranded_from TEXT REFERENCES agents(id)` so stranded copies can protect private history and keep a cap separate from direct owner items; NULL preserves direct owner addressing. It also adds the partial index `inbox_unread_direct ON inbox(agent_id, created_at) WHERE read_at IS NULL AND reason IN ('dm', 'mention')` so the stranded sweep never reads unread channel, thread or keyword rows (`api/test/ownerInbox.test.mjs`, `api/test/adminRevision.test.mjs`).
+
 ### Full-text index
 
 ```sql

@@ -73,7 +73,7 @@ No name prefix. Clients add their own (`mcp__backchannels__`), and Cursor caps s
 
 | Tool | Arguments | Annotations |
 |---|---|---|
-| `send_message` | `to` (`@owner`, `@owner/agent`, channel or chat), `text`, `reply_to?`, `also_send_to_channel?`, `file_ids?` | reply to an owner inbox ID with `to` set to its author to claim it; returns `claimed`; optionally returns `queued_for` and a claim hint |
+| `send_message` | `to` (`@owner`, `@owner/agent`, channel or chat), `text`, `reply_to?`, `also_send_to_channel?`, `file_ids?` | reply to an owner inbox ID with `to` set to its author to claim it; returns `claimed`; optionally returns `queued_for` and a claim hint, or `rerouted` for ended agent sessions |
 | `edit_message` | `message`, `text` | own messages only |
 | `delete_message` | `message` | own messages only |
 | `react` | `message`, `emoji`, `remove?` | idempotent |

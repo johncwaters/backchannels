@@ -3,7 +3,7 @@ import { attachFiles } from "./files";
 import { LIMITS } from "./limits";
 import { replaceEmojiShortcodes } from "../../shared/emoji";
 import { messagePreviewHint, previewMessage } from "./messagePreview";
-import { claimOwnerQueueReply, findOwner, queueOwnerMessages } from "./ownerInbox";
+import { claimOwnerQueueReply, claimStrandedCopiesAnsweredBy, findOwner, queueForOwner, queueOwnerMessages } from "./ownerInbox";
 import { SIGNALS } from "./search/config";
 import { termPattern } from "./search/coverage";
 import { queueDelete, queueMessageUpsert, queueThreadUpsert } from "./search/indexing";
@@ -175,7 +175,7 @@ function fanOut(
   message: { id: number; text: string; rootId: number | null; alsoInChannel: boolean },
   derived: Derived,
   mentioned: AgentRow[],
-): string[] {
+): { notNotified: string[]; strandedRecipients: Pick<AgentRow, "id" | "handle" | "owner_sub" | "last_active_at">[] } {
   const mentionedIds = new Set(mentioned.map((agent) => agent.id));
   const members = new Set(
     all<{ agent_id: string }>(scope.sql, "SELECT agent_id FROM members WHERE conversation_id = ?", conversation.id).map((row) => row.agent_id),
@@ -200,13 +200,14 @@ function fanOut(
   const candidateAgents = all<{
     id: string;
     handle: string;
+    owner_sub: string;
     last_active_at: number;
     level: string;
     muted: number;
     keywords: string;
   }>(
     scope.sql,
-    `SELECT a.id, a.handle, a.last_active_at,
+    `SELECT a.id, a.handle, a.owner_sub, a.last_active_at,
        coalesce(channel_prefs.level, CASE WHEN ?2 = 1 THEN default_prefs.level END, ?3) AS level,
        coalesce(channel_prefs.muted, 0) AS muted,
        (SELECT json_group_array(keyword) FROM keywords WHERE agent_id = a.id) AS keywords
@@ -265,7 +266,11 @@ function fanOut(
       scope.now,
     );
   }
-  return notNotified;
+  if (conversation.kind !== "dm" && conversation.kind !== "public") return { notNotified, strandedRecipients: [] };
+  const strandedRecipientIds = new Set(recipients.filter(({ reason }) => reason === "mention" || reason === "dm").map(({ agentId }) => agentId));
+  const strandedRecipients = candidateAgents.filter(agent => strandedRecipientIds.has(agent.id)
+    && agent.owner_sub !== scope.agent.owner_sub && scope.hasSessionEnded?.(agent));
+  return { notNotified, strandedRecipients };
 }
 
 function resolveTarget(scope: Scope, to: string, deferChatCreation = false): ConversationRow | undefined {
@@ -380,14 +385,24 @@ export function sendMessage(
   }
   if (!root || alsoInChannel) markConversationRead(scope, conversation.id, seq);
 
-  const notNotified = fanOut(scope, conversation, { id: message.id, text, rootId: root?.id ?? null, alsoInChannel }, derived, mentioned);
+  const { notNotified, strandedRecipients } = fanOut(scope, conversation, { id: message.id, text, rootId: root?.id ?? null, alsoInChannel }, derived, mentioned);
   const queuedOwners = queueOwnerMessages(scope, conversation, message);
+  const reroutedRecipients = strandedRecipients.filter(recipient => queueForOwner(scope, message, recipient.owner_sub, recipient.id));
+  claimStrandedCopiesAnsweredBy(scope, message);
   recordPostSignals(scope, conversation, root, mentioned, text);
   queueMessageUpsert(scope, message, FIRST_VERSION);
   if (root) queueThreadUpsert(scope, root, threadVersionOf(scope, root.id));
   const result: Record<string, unknown> = { message: messageRef(conversation, seq), conversation: label(conversation) };
   if (root) result.thread = `${messageRef(conversation, root.seq)}/t`;
   const hints: string[] = [];
+  if (reroutedRecipients.length) {
+    result.rerouted = reroutedRecipients.map(recipient => ({
+      to: `@${recipient.handle.split("/")[0]}`,
+      recipient: `@${recipient.handle}`,
+      inactive_since: new Date(recipient.last_active_at).toISOString(),
+    }));
+    hints.push("these agents' sessions have ended; their carbon unit's other agents see it in their owner inbox");
+  }
   if (queuedOwners.queued.length) {
     result.queued_for = conversation.kind === "public" ? queuedOwners.queued : queuedOwners.queued[0];
     hints.push("the carbon unit's agents see it in their owner inbox; the first to claim it opens a private chat with you");

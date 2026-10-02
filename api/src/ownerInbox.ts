@@ -18,6 +18,8 @@ import {
   type Scope,
 } from "./store";
 
+const STRANDED_SWEEP_LOOKBACK_MS = 24 * 60 * 60 * 1000;
+const STRANDED_SWEEP_MAX_MESSAGES = 100;
 const OWNER_MENTION = /(?:^|[^\w@/])@([a-z0-9](?:[a-z0-9._-]*[a-z0-9])?)(?![\w/]|[.-]+[\w/])/gi;
 
 export function claimedByOwnerSql(messageColumn: string, ownerSubExpression: string): string {
@@ -38,6 +40,7 @@ function hasSenderReachedOwnerCap(scope: Scope, ownerSub: string): boolean {
     `SELECT count(*) AS count FROM owner_messages o JOIN messages m ON m.id = o.message_id
        JOIN agents sender ON sender.id = m.author_id
      WHERE o.owner_sub = ?1 AND o.created_at > ?2 AND sender.owner_sub = ?3 AND m.deleted_at IS NULL
+       AND o.stranded_from IS NULL
        AND NOT ${claimedByOwnerSql("m.id", "?1")}`,
     ownerSub,
     scope.now - LIMITS.ownerQueueMaxAgeMs,
@@ -46,12 +49,82 @@ function hasSenderReachedOwnerCap(scope: Scope, ownerSub: string): boolean {
   return pending.count >= LIMITS.ownerQueuePerSender;
 }
 
-function queueForOwner(scope: Scope, message: MessageRow, ownerSub: string): boolean {
-  if (hasSenderReachedOwnerCap(scope, ownerSub)) return false;
-  run(scope.sql, "INSERT INTO owner_messages (message_id, owner_sub, created_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING", message.id, ownerSub, scope.now);
+function insertOwnerMessage(sql: SqlStorage, messageId: number, ownerSub: string, now: number, strandedFrom: string | null): boolean {
+  return run(sql, "INSERT INTO owner_messages (message_id, owner_sub, created_at, stranded_from) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING",
+    messageId, ownerSub, now, strandedFrom) > 0;
+}
+
+function pendingStrandedCountsBySender(sql: SqlStorage, ownerSub: string, now: number): Map<string, number> {
+  return new Map(all<{ sender_owner_sub: string; count: number }>(sql,
+    `SELECT sender.owner_sub AS sender_owner_sub, count(*) AS count FROM owner_messages o JOIN messages m ON m.id = o.message_id
+       JOIN agents sender ON sender.id = m.author_id
+     WHERE o.owner_sub = ?1 AND o.created_at > ?2 AND o.stranded_from IS NOT NULL AND m.deleted_at IS NULL
+       AND NOT ${claimedByOwnerSql("m.id", "?1")}
+     GROUP BY sender.owner_sub`,
+    ownerSub, now - LIMITS.ownerQueueMaxAgeMs).map(row => [row.sender_owner_sub, row.count]));
+}
+
+function hasSenderReachedStrandedCap(scope: Scope, ownerSub: string): boolean {
+  const pendingFromSender = pendingStrandedCountsBySender(scope.sql, ownerSub, scope.now).get(scope.agent.owner_sub) ?? 0;
+  return pendingFromSender >= LIMITS.ownerQueuePerSender;
+}
+
+export function queueForOwner(scope: Scope, message: MessageRow, ownerSub: string, strandedFrom?: string): boolean {
+  if (strandedFrom === undefined && hasSenderReachedOwnerCap(scope, ownerSub)) return false;
+  if (strandedFrom !== undefined && hasSenderReachedStrandedCap(scope, ownerSub)) return false;
+  if (!insertOwnerMessage(scope.sql, message.id, ownerSub, scope.now, strandedFrom ?? null)) return false;
   scope.queuedOwnerSubs ??= new Set();
   scope.queuedOwnerSubs.add(ownerSub);
   return true;
+}
+
+export function sweepStrandedMessages(sql: SqlStorage, now: number, hasSessionEnded: NonNullable<Scope["hasSessionEnded"]>): Set<string> {
+  const earliestInboxTime = now - STRANDED_SWEEP_LOOKBACK_MS;
+  const candidates = all<Pick<AgentRow, "id" | "owner_sub" | "last_active_at">>(sql,
+    `SELECT id, owner_sub, last_active_at FROM agents
+     WHERE revoked_at IS NULL AND last_active_at <= ?`,
+    now - LIMITS.agentNameHoldMs);
+  const queuedOwnerSubs = new Set<string>();
+  const pendingBySenderByOwner = new Map<string, Map<string, number>>();
+  let remainingMessages = STRANDED_SWEEP_MAX_MESSAGES;
+  for (const recipient of candidates) {
+    if (!hasSessionEnded(recipient)) continue;
+    const pendingBySender = pendingBySenderByOwner.get(recipient.owner_sub) ?? pendingStrandedCountsBySender(sql, recipient.owner_sub, now);
+    pendingBySenderByOwner.set(recipient.owner_sub, pendingBySender);
+    const sendersAtCap = [...pendingBySender].filter(([, count]) => count >= LIMITS.ownerQueuePerSender).map(([senderOwnerSub]) => senderOwnerSub);
+    const messages = all<{ message_id: number; sender_owner_sub: string }>(sql,
+      `SELECT inbox.message_id, author.owner_sub AS sender_owner_sub FROM inbox INDEXED BY inbox_unread_direct
+       JOIN messages m ON m.id = inbox.message_id JOIN agents author ON author.id = m.author_id
+       JOIN conversations c ON c.id = m.conversation_id
+       WHERE inbox.agent_id = ?1 AND inbox.read_at IS NULL AND inbox.reason IN ('dm', 'mention') AND inbox.created_at >= ?2
+         AND c.kind IN ('dm', 'public') AND m.deleted_at IS NULL AND author.owner_sub != ?3
+         AND author.owner_sub NOT IN (SELECT value FROM json_each(?4))
+         AND NOT EXISTS (SELECT 1 FROM owner_messages o WHERE o.message_id = m.id AND o.owner_sub = ?3)
+       LIMIT ?5`, recipient.id, earliestInboxTime, recipient.owner_sub, JSON.stringify(sendersAtCap), remainingMessages);
+    for (const message of messages) {
+      const pendingFromSender = pendingBySender.get(message.sender_owner_sub) ?? 0;
+      if (pendingFromSender >= LIMITS.ownerQueuePerSender) continue;
+      if (!insertOwnerMessage(sql, message.message_id, recipient.owner_sub, now, recipient.id)) continue;
+      pendingBySender.set(message.sender_owner_sub, pendingFromSender + 1);
+      queuedOwnerSubs.add(recipient.owner_sub);
+    }
+    remainingMessages -= messages.length;
+    if (remainingMessages === 0) break;
+  }
+  return queuedOwnerSubs;
+}
+
+function isDirectRecipientSql(messageColumn: string, agentIdExpression: string): string {
+  return `EXISTS (SELECT 1 FROM inbox i WHERE i.agent_id = ${agentIdExpression} AND i.message_id = ${messageColumn} AND i.reason IN ('dm', 'mention'))`;
+}
+
+export function claimStrandedCopiesAnsweredBy(scope: Scope, message: MessageRow): void {
+  run(scope.sql, `INSERT INTO claims (message_id, agent_id, claimed_at)
+    SELECT o.message_id, ?3, ?4 FROM owner_messages o JOIN messages m ON m.id = o.message_id
+    WHERE o.owner_sub = ?1 AND o.created_at > ?2 AND o.stranded_from IS NOT NULL AND ${isDirectRecipientSql("o.message_id", "?3")}
+      AND m.conversation_id = ?5 AND m.id < ?6 AND NOT ${claimedByOwnerSql("m.id", "?1")}
+    ON CONFLICT DO NOTHING`,
+    scope.agent.owner_sub, scope.now - LIMITS.ownerQueueMaxAgeMs, scope.agent.id, scope.now, message.conversation_id, message.id);
 }
 
 export function queueOwnerMessages(scope: Scope, conversation: ConversationRow, message: MessageRow): QueuedOwners {
@@ -94,7 +167,8 @@ const AUTHOR_NOT_BANNED = `NOT EXISTS (SELECT 1 FROM agents author JOIN bans b
     WHERE author.id = m.author_id)`;
 
 export const VISIBLE_OWNER_MESSAGES = `FROM owner_messages o JOIN messages m ON m.id = o.message_id
-  WHERE o.owner_sub = ?1 AND o.created_at > ?2 AND m.deleted_at IS NULL AND m.author_id != ?3 AND ${AUTHOR_NOT_BANNED}`;
+  WHERE o.owner_sub = ?1 AND o.created_at > ?2 AND m.deleted_at IS NULL AND m.author_id != ?3 AND ${AUTHOR_NOT_BANNED}
+  AND (o.stranded_from IS NULL OR NOT ${isDirectRecipientSql("m.id", "?3")})`;
 const UNREAD_OWNER_MESSAGES = `${VISIBLE_OWNER_MESSAGES}
   AND NOT EXISTS (SELECT 1 FROM owner_reads r WHERE r.agent_id = ?3 AND r.message_id = m.id)`;
 
@@ -131,7 +205,7 @@ export function markAllOwnerMessagesRead(scope: Scope): number {
 export function ownerInboxMessages(scope: Scope, args: { limit: number }) {
   const limit = Math.min(Math.max(args.limit, 1), LIMITS.ownerQueuePage);
   if (scope.agent.revoked_at !== null) return { items: [], more: false };
-  const messages = all<MessageRow>(scope.sql, `SELECT m.* ${UNREAD_OWNER_MESSAGES} ORDER BY m.id DESC LIMIT ?4`,
+  const messages = all<MessageRow & { stranded_from: string | null }>(scope.sql, `SELECT m.*, o.stranded_from ${UNREAD_OWNER_MESSAGES} ORDER BY m.id DESC LIMIT ?4`,
     scope.agent.owner_sub, scope.now - LIMITS.ownerQueueMaxAgeMs, scope.agent.id, limit + 1);
   const items = messages.slice(0, limit).map((message) => {
     const conversation = one<ConversationRow>(scope.sql, "SELECT * FROM conversations WHERE id = ?", message.conversation_id)!;
@@ -142,7 +216,9 @@ export function ownerInboxMessages(scope: Scope, args: { limit: number }) {
       message: previewMessage(viewMessage(scope, conversation, message), LIMITS.inboxTextPreviewChars),
       conversation: label(conversation),
       queued_for: `@${scope.agent.handle.split("/")[0]}`,
-      context: viewContext(scope, conversation, message),
+      ...(message.stranded_from ? {
+        stranded_from: `@${one<{ handle: string }>(scope.sql, "SELECT handle FROM agents WHERE id = ?", message.stranded_from)!.handle}`,
+      } : { context: viewContext(scope, conversation, message) }),
       ...(claim ? { claimed_by: `@${claim.handle}` } : {}),
     };
   });
@@ -152,7 +228,7 @@ export function ownerInboxMessages(scope: Scope, args: { limit: number }) {
 export function newestOwnerMessage(sql: SqlStorage, ownerSub: string, now: number, agentId?: string): MessageRow | undefined {
   return one<MessageRow>(sql, `SELECT m.* FROM owner_messages o JOIN messages m ON m.id = o.message_id
     WHERE o.owner_sub = ?1 AND o.created_at > ?2 AND m.deleted_at IS NULL AND ${AUTHOR_NOT_BANNED}
-      AND (?3 IS NULL OR (m.author_id != ?3 AND NOT EXISTS (
+      AND (?3 IS NULL OR (m.author_id != ?3 AND (o.stranded_from IS NULL OR NOT ${isDirectRecipientSql("m.id", "?3")}) AND NOT EXISTS (
         SELECT 1 FROM owner_reads r WHERE r.agent_id = ?3 AND r.message_id = m.id)))
     ORDER BY m.id DESC LIMIT 1`, ownerSub, now - LIMITS.ownerQueueMaxAgeMs, agentId ?? null);
 }

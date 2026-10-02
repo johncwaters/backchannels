@@ -6,6 +6,7 @@ import { test } from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import { adminChangeToken } from "../src/adminRevision.ts";
 import { AdminConversationCache } from "../src/adminConversationCache.ts";
+import { LIMITS } from "../src/limits.ts";
 
 const require = createRequire(realpathSync(fileURLToPath(new URL("../node_modules/wrangler/package.json", import.meta.url))));
 const { build } = require("esbuild");
@@ -13,12 +14,14 @@ const { Miniflare, convertV4MiniflareOptions } = require("miniflare");
 const workspacePath = fileURLToPath(new URL("../src/workspace.ts", import.meta.url));
 const adminSessionPath = fileURLToPath(new URL("../src/adminSession.ts", import.meta.url));
 const authPath = fileURLToPath(new URL("../src/auth.ts", import.meta.url));
+const ownerInboxPath = fileURLToPath(new URL("../src/ownerInbox.ts", import.meta.url));
 
 async function runtime(context) {
   const source = `
     import { WorkspaceDO } from ${JSON.stringify(workspacePath)};
     import { revokeInstallation } from ${JSON.stringify(adminSessionPath)};
     import { oauthServers } from ${JSON.stringify(authPath)};
+    import { sweepStrandedMessages } from ${JSON.stringify(ownerInboxPath)};
     let now = 1800000000000;
     Date.now = () => now;
     const workspaceId = 'ws_test';
@@ -48,6 +51,72 @@ async function runtime(context) {
       }
       async perform(input) {
         if(input.action === 'advanceTime') { now += input.ms; return now; }
+        if(input.action === 'strandedSweepMeasured') {
+          const sql = this.ctx.storage.sql;
+          sql.exec(\`
+            WITH RECURSIVE agent_indices(agent_index) AS (
+              SELECT 0 UNION ALL SELECT agent_index + 1 FROM agent_indices WHERE agent_index < 199
+            )
+            INSERT INTO agents (id,handle,name,description,owner_sub,owner_email,created_at,last_active_at)
+            SELECT 'agent-' || agent_index,'owner-' || (agent_index % 20) || '/agent-' || agent_index,
+              'agent-' || agent_index,'sweep fixture','owner-' || (agent_index % 20),
+              'owner-' || (agent_index % 20) || '@example.com',?1 - 172800000,
+              coalesce(CASE WHEN agent_index < 30 THEN ?1 - 1800000 * (agent_index + 1) END,?1)
+            FROM agent_indices
+          \`, now);
+          sql.exec("INSERT INTO conversations (id,kind,name,slug,created_by,created_at) VALUES (1,'public','sweep','sweep','agent-0',?)", now);
+          sql.exec(\`
+            WITH RECURSIVE message_indices(message_index) AS (
+              SELECT 0 UNION ALL SELECT message_index + 1 FROM message_indices WHERE message_index < 19999
+            )
+            INSERT INTO messages (id,conversation_id,seq,author_id,text,created_at,word_count,deleted_at)
+            SELECT message_index + 1,1,message_index + 1,
+              'agent-' || ((message_index % 200 + coalesce(CASE WHEN message_index / 200 = 4 THEN 20 END,1)) % 200),
+              'pending sweep message',?1 - coalesce(CASE
+                WHEN message_index / 200 BETWEEN 8 AND 11 OR message_index / 200 >= 70 THEN 172800000
+              END,3600000),3,CASE WHEN message_index / 200 = 5 THEN ?1 END
+            FROM message_indices
+          \`, now);
+          sql.exec(\`
+            INSERT INTO inbox (agent_id,message_id,reason,created_at,read_at)
+            SELECT 'agent-' || ((id - 1) % 200),id,CASE
+              WHEN (id - 1) / 200 = 3 AND (id - 1) % 200 >= 10 THEN 'keyword'
+              WHEN (id - 1) / 200 = 6 OR (id - 1) / 200 BETWEEN 12 AND 39 THEN 'channel'
+              WHEN (id - 1) / 200 = 7 THEN 'thread'
+              WHEN (id - 1) / 200 % 2 = 0 THEN 'dm'
+              WHEN (id - 1) / 200 % 2 = 1 THEN 'mention'
+            END,created_at,CASE WHEN (id - 1) / 200 >= 40 THEN ?1 END FROM messages
+          \`, now);
+          const fixtureCounts = sql.exec(\`
+            SELECT (SELECT count(*) FROM agents) AS agents,
+              (SELECT count(DISTINCT owner_sub) FROM agents) AS owners,
+              (SELECT count(*) FROM inbox) AS inboxRows,
+              (SELECT count(*) FROM inbox WHERE read_at IS NOT NULL) AS readInboxRows,
+              (SELECT count(*) FROM inbox WHERE read_at IS NULL AND reason = 'channel' AND agent_id IN (SELECT id FROM agents WHERE last_active_at < ?1)) AS endedAgentUnreadChannelRows,
+              (SELECT count(*) FROM inbox WHERE created_at < ?2) AS oldInboxRows
+          \`, now, now - 86400000).one();
+          const statements = [];
+          const measuredSql = {exec:(query,...bindings)=>{
+            const cursor = sql.exec(query,...bindings);
+            statements.push({query,bindings,cursor});
+            return cursor;
+          }};
+          const endedAgentIds = [];
+          const queuedOwners = sweepStrandedMessages(measuredSql,now,recipient=>{
+            endedAgentIds.push(recipient.id);
+            return now - recipient.last_active_at >= 900000 && this.ctx.getWebSockets(recipient.id).length === 0;
+          });
+          const inboxStatements = statements.filter(({query})=>query.includes('FROM inbox INDEXED BY inbox_unread_direct'));
+          const inboxPlans = inboxStatements.map(({query,bindings})=>sql.exec('EXPLAIN QUERY PLAN ' + query,...bindings).toArray().map(step=>step.detail));
+          const queued = sql.exec("SELECT count(*) AS count FROM owner_messages WHERE stranded_from IS NOT NULL").one().count;
+          return {
+            fixtureCounts,endedAgents:endedAgentIds.length,queued,queuedOwners:queuedOwners.size,inboxQueries:inboxStatements.length,inboxPlans,
+            rowsRead:statements.reduce((sum,{cursor})=>sum+cursor.rowsRead,0),
+            rowsWritten:statements.reduce((sum,{cursor})=>sum+cursor.rowsWritten,0),
+            agentRowsRead:statements.filter(({query})=>query.includes('FROM agents')).reduce((sum,{cursor})=>sum+cursor.rowsRead,0),
+            inboxRowsRead:inboxStatements.reduce((sum,{cursor})=>sum+cursor.rowsRead,0),
+          };
+        }
         if(input.action === 'adminMeasured') {
           const prior = this.sql;
           const statements = [];
@@ -201,6 +270,29 @@ function eventsWithNumericCursors(events) {
     return event;
   });
 }
+
+test("workerd stranded sweep seeks unread direct inbox rows without reading unread channel rows", async (context) => {
+  const { call } = await runtime(context);
+  const measurement = await call({ action: "strandedSweepMeasured" });
+  context.diagnostic(`stranded sweep: ${measurement.rowsRead} rows read, ${measurement.rowsWritten} rows written, ${measurement.queued} queued`);
+  context.diagnostic(`stranded sweep agents scan: ${measurement.agentRowsRead} rows read; inbox lookups: ${measurement.inboxRowsRead} rows read across ${measurement.inboxQueries} queries`);
+  assert.deepEqual(measurement.fixtureCounts, { agents: 200, owners: 20, inboxRows: 20_000, readInboxRows: 12_000, endedAgentUnreadChannelRows: 870, oldInboxRows: 6_800 });
+  assert.equal(measurement.endedAgents, 30);
+  assert.equal(measurement.inboxQueries, 30);
+  assert.equal(measurement.agentRowsRead, 200);
+  assert.equal(measurement.queued, measurement.queuedOwners * LIMITS.ownerQueuePerSender);
+  assert.equal(measurement.queuedOwners, 20);
+  assert.equal(measurement.rowsWritten, 3 * measurement.queued);
+  const perAgentSeekBudget = Math.ceil(Math.log2(measurement.fixtureCounts.inboxRows)) + 5;
+  const maxRowsRead = measurement.agentRowsRead + perAgentSeekBudget * measurement.endedAgents + 8 * measurement.queued;
+  assert.ok(measurement.rowsRead <= maxRowsRead, `sweep exceeded ${maxRowsRead} rows: ${JSON.stringify(measurement)}`);
+  assert.ok(measurement.inboxRowsRead < measurement.fixtureCounts.endedAgentUnreadChannelRows, `inbox lookups read ${measurement.inboxRowsRead} rows`);
+  for (const steps of measurement.inboxPlans) {
+    const plan = steps.join("\n");
+    assert.match(plan, /SEARCH inbox USING INDEX inbox_unread_direct \(agent_id=\? AND created_at>\?\)/);
+    assert.doesNotMatch(plan, /SCAN inbox\b/);
+  }
+});
 
 test("conversation metadata cache separates viewers, revisions, expiry and returned copies", () => {
   const cache = new AdminConversationCache();
