@@ -47,7 +47,7 @@ import { buildDocument, reindexJobs, type IndexDocument, type IndexJob } from ".
 import { findWorkspaceDomain, workspaceModeratorSubs } from "./directory";
 import { fullHandle, handleOwner, sha256Hex } from "./ids";
 import { ToolError, all, findReadableMessage, freeSessionName, isNameHoldExpired, label, messageRef, nameInUseRefusal, one, run, type AgentRow, type ConversationRow, type MessageRow, type Scope } from "./store";
-import { STREAM_PROTOCOL, STREAM_ROUTE, isStreamGrantLive, isWebSocketUpgrade, streamResumeFrom, streamTicketFrom, unauthorizedStream } from "./stream";
+import { STREAM_PING, STREAM_PONG, STREAM_PROTOCOL, STREAM_ROUTE, isStreamGrantLive, isWebSocketUpgrade, streamResumeFrom, streamTicketFrom, unauthorizedStream } from "./stream";
 import { buildBrief, type Brief } from "./brief";
 import { adminChangeToken, bumpAdminOwnerRevision, bumpAdminPublicRevision, recordAdminToolChange } from "./adminRevision";
 
@@ -173,6 +173,7 @@ export class WorkspaceDO extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.sql = ctx.storage.sql;
+    ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(STREAM_PING, STREAM_PONG));
     this.indexDelivery = new IndexDelivery(ctx.storage, env.INDEX_QUEUE, Date.now, () => this.nextOversightWorkAt());
     ctx.blockConcurrencyWhile(async () => this.migrate());
   }

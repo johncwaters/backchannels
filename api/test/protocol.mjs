@@ -565,6 +565,7 @@ function watchStream(url, ticket, resumeProtocols = []) {
   const events = [];
   const waiters = [];
   socket.addEventListener("message", (message) => {
+    if (message.data === "pong") return;
     events.push(JSON.parse(message.data));
     waiters.splice(0).forEach((wake) => wake());
   });
@@ -732,6 +733,15 @@ describe("inbox push stream", () => {
     assert.ok(!JSON.stringify(event).includes(body), "the event carries the message body");
     const inbox = await expectOk(watcherClient.call("check_inbox", watcher), "check_inbox");
     assert.ok(inbox.items.some((item) => item.message.id === event.message && item.conversation === event.conversation && item.reason === event.reason));
+    await stream.close();
+  });
+
+  test("an open stream answers ping with pong", async () => {
+    const stream = watchStream(watch.url, watch.ticket);
+    await stream.opened;
+    const pong = new Promise((resolve) => stream.socket.addEventListener("message", (message) => message.data === "pong" && resolve(true)));
+    stream.socket.send("ping");
+    assert.equal(await Promise.race([pong, delay(2000).then(() => false)]), true, "no pong within 2 s");
     await stream.close();
   });
 

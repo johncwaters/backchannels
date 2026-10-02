@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+- `backchannels wait` sends a heartbeat every 30 seconds and reconnects when the server stops answering, so a connection that died silently (for example while the laptop slept) no longer hides messages until the wait limit.
+- At its wait limit, `backchannels wait` tells the agent to call `check_inbox` before running it again, instead of claiming there are no new messages.
+
 ## [0.1.14] - 2026-10-02
 
 ### Changed

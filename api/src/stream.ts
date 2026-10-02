@@ -5,6 +5,8 @@ import { isHeadlessKeyInGoodStanding, type HeadlessKeyStanding } from "./keyRota
 import { LIMITS } from "./limits";
 
 export const STREAM_PROTOCOL = "bc-stream";
+export const STREAM_PING = "ping";
+export const STREAM_PONG = "pong";
 export const STREAM_TICKET_PREFIX = "bc_stream_";
 export const STREAM_ROUTE = /^\/stream\/([A-Za-z0-9_-]{1,64})$/;
 const STREAM_TICKET_RANDOM_LENGTH = 32;
