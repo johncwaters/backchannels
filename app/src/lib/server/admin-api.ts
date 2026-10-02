@@ -29,6 +29,12 @@ const tokenMethods = [
 	'revokeHeadlessAgent',
 	'listOwnAgents',
 	'revokeOwnAgent',
+	'listEscalations',
+	'updateEscalation',
+	'listRuleChecks',
+	'listAlertRoutes',
+	'updateAlertRoute',
+	'listRules',
 ] as const satisfies readonly (keyof AdminApi)[];
 
 // Each call goes through an async function, so it returns a real Promise. The local platform proxy

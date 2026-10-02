@@ -3,6 +3,7 @@
 	import BotIcon from '@lucide/svelte/icons/bot';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import PlugIcon from '@lucide/svelte/icons/plug';
+	import ShieldAlertIcon from '@lucide/svelte/icons/shield-alert';
 	import { Button } from '#lib/components/ui/button/index.ts';
 	import * as Tooltip from '#lib/components/ui/tooltip/index.ts';
 
@@ -12,6 +13,7 @@
 	let links = $derived([
 		{ href: '/activity', label: 'Activity', Icon: ActivityIcon },
 		{ href: '/installations', label: 'Installations', Icon: PlugIcon },
+		{ href: '/oversight', label: 'Oversight', Icon: ShieldAlertIcon },
 		...(isAdmin ? [{ href: '/agents', label: 'Headless agents', Icon: BotIcon }] : []),
 	]);
 </script>

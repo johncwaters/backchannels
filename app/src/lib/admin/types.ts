@@ -12,11 +12,81 @@ export interface AdminSession {
 	expiresAt: number;
 }
 
+export type Role = 'admin' | 'moderator' | 'member';
+
 export interface Viewer {
 	email: string;
 	name: string | null;
 	workspaceName: string;
+	role: Role;
 	isAdmin: boolean;
+}
+
+export type EscalationStatus = 'open' | 'acknowledged' | 'resolved';
+export type RuleCheckOutcome = 'flag' | 'block' | 'unchecked';
+export type AlertEvent = 'escalation' | 'escalation_for_moderators' | 'report' | 'repeated_blocks' | 'checker_down';
+export type AlertDestination = 'owner' | 'admins' | 'channel';
+
+export interface Escalation {
+	id: string;
+	time: string;
+	agent: string;
+	owner: string;
+	category: string;
+	summary: string;
+	messages: string[];
+	actionTaken: string;
+	status: EscalationStatus;
+	statusBy: string | null;
+	statusAt: string | null;
+	note: string | null;
+}
+
+export interface RuleVerdict {
+	rule: number;
+	version: number;
+	name: string;
+	action: 'block' | 'flag';
+	mode: 'shadow' | 'enforce';
+	threshold: number;
+	probability: number;
+}
+
+export interface RuleCheck {
+	id: string;
+	time: string;
+	kind: string;
+	subject: string;
+	author: string;
+	text: string;
+	outcome: RuleCheckOutcome;
+	verdicts: RuleVerdict[];
+	latencyMs: number | null;
+}
+
+export interface AlertRoute {
+	event: AlertEvent;
+	destination: AlertDestination;
+	channel: string | null;
+	enabled: boolean;
+	lastFailure?: { at: string; target: string; error: string };
+}
+
+export interface Rule {
+	id: string;
+	scope: 'workspace' | 'user';
+	name: string;
+	question: string;
+	action: 'block' | 'flag';
+	threshold: number;
+	mode: 'shadow' | 'enforce';
+	enabled: boolean;
+	version: number;
+}
+
+export interface OversightPage<Item> {
+	items: Item[];
+	nextCursor: string | null;
 }
 
 export interface Conversation {
@@ -193,4 +263,10 @@ export interface AdminApiRpc {
 	revokeHeadlessAgent(token: string, options: { handle: string }): Promise<AdminResult<null>>;
 	listOwnAgents(token: string): Promise<AdminResult<{ agents: AgentSummary[] }>>;
 	revokeOwnAgent(token: string, options: { handle: string }): Promise<AdminResult<null>>;
+	listEscalations(token: string, options: { status?: EscalationStatus; cursor?: string }): Promise<AdminResult<OversightPage<Escalation>>>;
+	updateEscalation(token: string, options: { id: string; status: EscalationStatus; note?: string }): Promise<AdminResult<Escalation>>;
+	listRuleChecks(token: string, options: { outcome?: RuleCheckOutcome; cursor?: string }): Promise<AdminResult<OversightPage<RuleCheck>>>;
+	listAlertRoutes(token: string): Promise<AdminResult<AlertRoute[]>>;
+	updateAlertRoute(token: string, route: AlertRoute): Promise<AdminResult<AlertRoute[]>>;
+	listRules(token: string): Promise<AdminResult<Rule[]>>;
 }

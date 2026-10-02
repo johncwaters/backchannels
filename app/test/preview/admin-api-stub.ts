@@ -2,6 +2,7 @@ import { WorkerEntrypoint } from 'cloudflare:workers';
 import type {
 	AdminApiRpc,
 	AdminReadOptions,
+	AlertRoute,
 	AdminResult,
 	AdminSearchOptions,
 	AdminSearchPage,
@@ -10,17 +11,20 @@ import type {
 	ConversationPage,
 	ConversationSort,
 	DirectoryKind,
+	EscalationStatus,
 	FileDownload,
 	HeadlessKey,
 	Message,
 	NewHeadlessKey,
 	ReadPosition,
+	RuleCheckOutcome,
 	Scope,
 	SearchMatch,
 	Viewer,
 } from '../../src/lib/admin/types';
 import { DEFAULT_CHANNELS } from '../../../api/src/defaultChannels';
 import { buildPreviewWorld, VIEWER_EMAIL, type PreviewWorld, type StoredConversation, type StoredMessage } from './preview-fixtures';
+import { previewAlertRoutes, previewEscalations, previewRuleChecks, previewRules } from './preview-oversight';
 import { previewTrackRecordFor } from './preview-track-record';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -385,7 +389,7 @@ export class AdminApi extends WorkerEntrypoint implements AdminApiRpc {
 	async viewer(token: string): Promise<AdminResult<Viewer>> {
 		if (!isPreviewToken(token)) return unauthorized;
 		await simulatedLatency(this.env);
-		return ok({ email: VIEWER_EMAIL, name: 'Ian Matson', workspaceName: 'posthog', isAdmin: true });
+		return ok({ email: VIEWER_EMAIL, name: 'Ian Matson', workspaceName: 'posthog', role: 'admin', isAdmin: true });
 	}
 
 	async serverVersion(token: string): Promise<AdminResult<string>> {
@@ -530,6 +534,36 @@ export class AdminApi extends WorkerEntrypoint implements AdminApiRpc {
 		return ok({ agents: previewWorld().ownAgents });
 	}
 
+	async listEscalations(token: string, options: { status?: EscalationStatus; cursor?: string }): ReturnType<AdminApiRpc['listEscalations']> {
+		if (!isPreviewToken(token)) return unauthorized;
+		return oversightStub.listEscalations(options);
+	}
+
+	async updateEscalation(token: string, options: { id: string; status: EscalationStatus; note?: string }): ReturnType<AdminApiRpc['updateEscalation']> {
+		if (!isPreviewToken(token)) return unauthorized;
+		return oversightStub.updateEscalation(options);
+	}
+
+	async listRuleChecks(token: string, options: { outcome?: RuleCheckOutcome; cursor?: string }): ReturnType<AdminApiRpc['listRuleChecks']> {
+		if (!isPreviewToken(token)) return unauthorized;
+		return oversightStub.listRuleChecks(options);
+	}
+
+	async listAlertRoutes(token: string): ReturnType<AdminApiRpc['listAlertRoutes']> {
+		if (!isPreviewToken(token)) return unauthorized;
+		return ok(previewAlertRoutes);
+	}
+
+	async updateAlertRoute(token: string, route: AlertRoute): ReturnType<AdminApiRpc['updateAlertRoute']> {
+		if (!isPreviewToken(token)) return unauthorized;
+		return oversightStub.updateAlertRoute(route);
+	}
+
+	async listRules(token: string): ReturnType<AdminApiRpc['listRules']> {
+		if (!isPreviewToken(token)) return unauthorized;
+		return ok(previewRules);
+	}
+
 	async revokeOwnAgent(token: string, options: { handle: string }): Promise<AdminResult<null>> {
 		if (!isPreviewToken(token)) return unauthorized;
 		if (typeof options?.handle !== 'string' || !options.handle) return invalid;
@@ -540,6 +574,28 @@ export class AdminApi extends WorkerEntrypoint implements AdminApiRpc {
 		return ok(null);
 	}
 }
+
+const oversightStub = {
+	async listEscalations(options: { status?: EscalationStatus; cursor?: string }) {
+		return ok({ items: previewEscalations().filter((escalation) => !options?.status || escalation.status === options.status), nextCursor: null });
+	},
+	async updateEscalation(options: { id: string; status: EscalationStatus; note?: string }) {
+		const escalation = previewEscalations().find((candidate) => candidate.id === options?.id);
+		if (!escalation) return notFound;
+		Object.assign(escalation, { status: options.status, statusBy: VIEWER_EMAIL, statusAt: new Date().toISOString(), note: options.note?.trim() || escalation.note });
+		return ok(escalation);
+	},
+	async listRuleChecks(options: { outcome?: RuleCheckOutcome; cursor?: string }) {
+		return ok({ items: previewRuleChecks().filter((check) => !options?.outcome || check.outcome === options.outcome), nextCursor: null });
+	},
+	async updateAlertRoute(route: AlertRoute) {
+		const existing = previewAlertRoutes.find((candidate) => candidate.event === route?.event);
+		if (!existing) return invalid;
+		if (route.destination === 'channel' && !/^#[a-z0-9][a-z0-9_-]{0,79}$/.test(route.channel ?? '')) return invalid;
+		Object.assign(existing, { destination: route.destination, channel: route.destination === 'channel' ? route.channel : null, enabled: route.enabled });
+		return ok(previewAlertRoutes);
+	},
+};
 
 function isPreviewToken(token: unknown): boolean {
 	return typeof token === 'string' && token.startsWith(ACCESS_TOKEN_PREFIX);
