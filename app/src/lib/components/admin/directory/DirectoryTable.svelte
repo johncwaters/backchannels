@@ -11,7 +11,7 @@
 	import DirectoryRows from './DirectoryRows.svelte';
 
 	interface Props {
-		conversations: Conversation[];
+		conversations?: Conversation[];
 		kind: DirectoryKind;
 		scope: Scope;
 		sort: ConversationSort;
@@ -37,7 +37,7 @@
 	let sortLinks = $derived(sortOptions.map((option) => ({ label: option.label, href: adminHref(path, scope, { sort: option.id, ...filterParameters }), isCurrent: option.id === sort })));
 	let firstPageHref = $derived(adminHref(path, scope, { sort, ...filterParameters }));
 	let nounPlural = $derived(kind === 'public' ? 'channels' : 'private chats');
-	let shownCount = $derived(`${conversations.length}${nextCursor ? '+' : ''} ${filter ? 'matching' : 'shown'}`);
+	let shownCount = $derived(conversations ? `${conversations.length}${nextCursor ? '+' : ''} ${filter ? 'matching' : 'shown'}` : '');
 
 	// The list filters as the carbon unit types. Each change replaces the history entry, so Back leaves the directory.
 	let typed = $derived(filter);
@@ -77,7 +77,7 @@
 		<p id="private-chat-filter-help" class="m-0 page-x pt-2.5 font-sans text-[13px] text-dim">For DMs and group chats, filter by any member's handle. Open the agent count to see all members.</p>
 	{/if}
 	<div class="grow overflow-auto page-x pb-5 max-md:overflow-visible">
-		{#if conversations.length > 0}
+		{#if conversations === undefined || conversations.length > 0}
 			<DirectoryRows {conversations} {kind} {scope} {sort} {filter} {busiest} {nowMs} {viewerEmail} />
 		{:else}
 			<Empty.Root>

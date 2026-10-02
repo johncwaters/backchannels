@@ -1,6 +1,7 @@
 <script lang="ts">
 	import * as Table from '#lib/components/ui/table/index.ts';
 	import { Badge } from '#lib/components/ui/badge/index.ts';
+	import { Skeleton } from '#lib/components/ui/skeleton/index.ts';
 	import { adminHref, conversationHref, formatRelative } from '#lib/admin/helpers.ts';
 	import { messageCountText } from '#lib/admin/message-count.ts';
 	import type { Conversation, ConversationSort, DirectoryKind, Scope } from '#lib/admin/types.ts';
@@ -11,7 +12,7 @@
 	import { aboutTextFor, conversationLabel, messagesTodayLabel, privacyMarkerFor, sortDirections } from './conversation-labels';
 
 	interface Props {
-		conversations: Conversation[];
+		conversations?: Conversation[];
 		kind: DirectoryKind;
 		scope: Scope;
 		sort: ConversationSort;
@@ -24,6 +25,7 @@
 	let { conversations, kind, scope, sort, filter, busiest, nowMs, viewerEmail }: Props = $props();
 
 	const activityTrackPixels = 72;
+	const skeletonRowWidths = [72, 58, 80, 64, 50, 76, 60, 68];
 	const path = $derived(`/browse/${kind}`);
 	const heading = $derived(kind === 'public' ? 'All public channels' : 'Your private chats');
 	const showsMineBadge = $derived(kind === 'public');
@@ -71,7 +73,18 @@
 		</Table.Row>
 	</Table.Header>
 	<Table.Body>
-		{#each conversations as conversation (conversation.id)}
+		{#if conversations === undefined}
+			{#each skeletonRowWidths as width, index (index)}
+				<Table.Row class="border-row-border hover:bg-transparent max-md:h-11" aria-hidden="true">
+					<Table.Cell class="px-3 py-2 max-md:px-0"><Skeleton class="h-4 rounded-none bg-secondary" style={`width: ${width}%`} /></Table.Cell>
+					<Table.Cell class="px-3 py-2 max-md:px-2.5"><Skeleton class="h-4 rounded-none bg-secondary/60" style={`width: ${width - 10}%`} /></Table.Cell>
+					<Table.Cell class={cn('px-3 py-2', peopleColumnClass)}><Skeleton class="ml-auto h-4 w-6 rounded-none bg-secondary/60" /></Table.Cell>
+					<Table.Cell class={cn('px-3 py-2', todayColumnClass)}><Skeleton class="h-3 w-full rounded-none bg-secondary/50" /></Table.Cell>
+					<Table.Cell class={cn('px-3 py-2 max-md:px-0', lastColumnClass)}><Skeleton class="ml-auto h-4 w-8 rounded-none bg-secondary/50" /></Table.Cell>
+				</Table.Row>
+			{/each}
+		{/if}
+		{#each conversations ?? [] as conversation (conversation.id)}
 			{@const label = conversationLabel(conversation, viewerEmail)}
 			{@const about = aboutTextFor(conversation)}
 			<Table.Row class="group relative border-row-border hover:bg-secondary has-[:focus-visible]:bg-secondary has-data-[state=open]:bg-secondary max-md:h-11">

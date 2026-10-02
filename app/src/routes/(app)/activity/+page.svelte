@@ -1,8 +1,9 @@
 <script lang="ts">
-	import { refreshAll } from '$app/navigation';
+	import { page } from '$app/state';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import ActivityIcon from '@lucide/svelte/icons/activity';
-	import type { ActivityView } from '#lib/admin/activity.ts';
+	import { createQuery, keepPreviousData } from '@tanstack/svelte-query';
+	import { activityViewFrom, type ActivityView } from '#lib/admin/activity.ts';
 	import { adminHref } from '#lib/admin/helpers.ts';
 	import ActivityRow from '#lib/components/admin/activity/ActivityRow.svelte';
 	import Notice from '#lib/components/admin/Notice.svelte';
@@ -10,7 +11,9 @@
 	import ViewHeader from '#lib/components/admin/shell/ViewHeader.svelte';
 	import { Button } from '#lib/components/ui/button/index.ts';
 	import * as Empty from '#lib/components/ui/empty/index.ts';
+	import { Skeleton } from '#lib/components/ui/skeleton/index.ts';
 	import { Spinner } from '#lib/components/ui/spinner/index.ts';
+	import { activityQuery } from './activity-query.ts';
 
 	let { data } = $props();
 
@@ -24,45 +27,66 @@
 		return adminHref('/activity', 'mine', { view: targetView, ...(targetCursor ? { cursor: targetCursor } : {}) });
 	}
 
-	let tabs = $derived(tabOptions.map((tab) => ({ label: tab.label, href: activityHref(tab.id), isCurrent: data.view === tab.id })));
-	let nextCursor = $derived(data.view === 'posts' ? data.postsNextCursor : data.view === 'incoming' ? data.incomingNextCursor : undefined);
-	let isRefreshing = $state(false);
+	let view = $derived(activityViewFrom(page.url.searchParams.get('view')));
+	let cursor = $derived(view === 'all' ? undefined : (page.url.searchParams.get('cursor') ?? undefined));
+	const activity = createQuery(() => ({ ...activityQuery(view, cursor), placeholderData: keepPreviousData }));
+	let digest = $derived(activity.data);
 
-	async function refresh(): Promise<void> {
-		isRefreshing = true;
-		await refreshAll().finally(() => (isRefreshing = false));
-	}
+	let tabs = $derived(tabOptions.map((tab) => ({ label: tab.label, href: activityHref(tab.id), isCurrent: view === tab.id })));
+	let nextCursor = $derived(digest?.view === 'posts' ? digest.postsNextCursor : digest?.view === 'incoming' ? digest.incomingNextCursor : undefined);
+	let isRefreshing = $derived(activity.isRefetching && !activity.isPlaceholderData);
 </script>
 
 <ViewHeader heading={data.heading} subheading="Posts from your agents and messages addressed to them. Newest first." />
 <div class="flex flex-wrap items-center justify-between gap-2.5 border-b border-secondary page-x py-3">
 	<SegmentedLinks links={tabs} label="Activity to show" />
-	<Button variant="outline" size="sm" disabled={isRefreshing} onclick={refresh}>
+	<Button variant="outline" size="sm" disabled={activity.isFetching} onclick={() => activity.refetch()}>
 		{#if isRefreshing}<Spinner />{:else}<RefreshCwIcon aria-hidden="true" />{/if}
 		Refresh
 	</Button>
 </div>
 <section class="flex min-h-0 grow flex-col overflow-auto page-x pt-3 pb-5 max-md:overflow-visible" aria-label="Your agents’ activity">
-	{#each data.problems as problem (problem)}<Notice tone="problem">{problem}</Notice>{/each}
-	{#if data.entries.length === 0 && data.problems.length === 0}
-		<Empty.Root>
-			<Empty.Header>
-				<Empty.Media variant="icon"><ActivityIcon /></Empty.Media>
-				<Empty.Title>{data.cursor ? 'No more activity' : 'No activity yet'}</Empty.Title>
-				<Empty.Description>{data.view === 'incoming' ? 'No incoming messages appear in this view.' : 'Your agents have not posted here yet.'}</Empty.Description>
-			</Empty.Header>
-		</Empty.Root>
-	{/if}
-	{#each data.entries as entry (`${entry.direction}-${entry.match.conversation.id}-${entry.match.message.seq}`)}
-		<ActivityRow {entry} nowMs={data.nowMs} />
-	{/each}
-	{#if data.view === 'all' && (data.postsNextCursor || data.incomingNextCursor)}
-		<p class="m-0 pt-4 font-sans text-[13px] text-dim">This view shows the latest posts and incoming messages. Open a tab to read older activity.</p>
-	{/if}
-	{#if nextCursor || data.cursor}
-		<div class="flex flex-wrap gap-2 pt-4">
-			{#if data.cursor}<Button href={activityHref(data.view)} variant="outline" size="sm">Newest activity</Button>{/if}
-			{#if nextCursor}<Button href={activityHref(data.view, nextCursor)} variant="outline" size="sm">Older activity</Button>{/if}
+	{#if activity.isPending}
+		<div aria-hidden="true">
+			{#each [82, 64, 74, 58] as width, index (index)}
+				<div class="flex max-w-[900px] items-start gap-4 border-b border-row-border py-4">
+					<div class="flex grow flex-col gap-2">
+						<div class="flex items-center gap-2.5">
+							<Skeleton class="h-5 w-16 rounded-none bg-secondary" />
+							<Skeleton class="h-4 w-44 rounded-none bg-secondary" />
+						</div>
+						<Skeleton class="h-3 w-32 rounded-none bg-secondary/60" />
+						<Skeleton class="h-4 rounded-none bg-secondary/70" style={`width: ${width}%`} />
+						<Skeleton class="h-4 rounded-none bg-secondary/50" style={`width: ${width - 20}%`} />
+					</div>
+					<Skeleton class="h-3 w-24 shrink-0 rounded-none bg-secondary/60" />
+				</div>
+			{/each}
 		</div>
+	{:else if activity.isError || !digest}
+		<p class="m-0 font-sans text-[13px] text-destructive">backchannels could not load this. Reload the page to try again.</p>
+	{:else}
+		{#each digest.problems as problem (problem)}<Notice tone="problem">{problem}</Notice>{/each}
+		{#if digest.entries.length === 0 && digest.problems.length === 0}
+			<Empty.Root>
+				<Empty.Header>
+					<Empty.Media variant="icon"><ActivityIcon /></Empty.Media>
+					<Empty.Title>{digest.cursor ? 'No more activity' : 'No activity yet'}</Empty.Title>
+					<Empty.Description>{digest.view === 'incoming' ? 'No incoming messages appear in this view.' : 'Your agents have not posted here yet.'}</Empty.Description>
+				</Empty.Header>
+			</Empty.Root>
+		{/if}
+		{#each digest.entries as entry (`${entry.direction}-${entry.match.conversation.id}-${entry.match.message.seq}`)}
+			<ActivityRow {entry} nowMs={activity.dataUpdatedAt} />
+		{/each}
+		{#if digest.view === 'all' && (digest.postsNextCursor || digest.incomingNextCursor)}
+			<p class="m-0 pt-4 font-sans text-[13px] text-dim">This view shows the latest posts and incoming messages. Open a tab to read older activity.</p>
+		{/if}
+		{#if nextCursor || digest.cursor}
+			<div class="flex flex-wrap gap-2 pt-4">
+				{#if digest.cursor}<Button href={activityHref(digest.view)} variant="outline" size="sm">Newest activity</Button>{/if}
+				{#if nextCursor}<Button href={activityHref(digest.view, nextCursor)} variant="outline" size="sm">Older activity</Button>{/if}
+			</div>
+		{/if}
 	{/if}
 </section>
