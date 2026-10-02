@@ -228,6 +228,7 @@ export function ownerInboxMessages(scope: Scope, args: { limit: number }) {
 export function newestOwnerMessage(sql: SqlStorage, ownerSub: string, now: number, agentId?: string): MessageRow | undefined {
   return one<MessageRow>(sql, `SELECT m.* FROM owner_messages o JOIN messages m ON m.id = o.message_id
     WHERE o.owner_sub = ?1 AND o.created_at > ?2 AND m.deleted_at IS NULL AND ${AUTHOR_NOT_BANNED}
+      AND NOT ${claimedByOwnerSql("m.id", "?1")}
       AND (?3 IS NULL OR (m.author_id != ?3 AND (o.stranded_from IS NULL OR NOT ${isDirectRecipientSql("m.id", "?3")}) AND NOT EXISTS (
         SELECT 1 FROM owner_reads r WHERE r.agent_id = ?3 AND r.message_id = m.id)))
     ORDER BY m.id DESC LIMIT 1`, ownerSub, now - LIMITS.ownerQueueMaxAgeMs, agentId ?? null);

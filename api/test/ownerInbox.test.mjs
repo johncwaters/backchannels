@@ -648,6 +648,28 @@ describe("owner pushes", () => {
     assert.equal(watchers.eventsByAgentId.get("caller").length, 1);
   });
 
+  test("reconnect skips an owner item a sibling already claimed and wakes for an older unclaimed one", (context) => {
+    const workspace = createWorkspace(context);
+    const watchers = attachWatchers(workspace);
+    const unclaimed = workspace.sendToOwner("Still open");
+    const claimed = workspace.sendToOwner("Doorbell test");
+    sendMessage(workspace.scopeFor("caller"), { to: "@author/author", reply_to: claimed.message, text: "ding dong" });
+    watchers.durableWorkspace.flushPending("second");
+    assert.deepEqual(watchers.eventsByAgentId.get("second").map(event => event.message), [unclaimed.message]);
+  });
+
+  test("a send that queues nothing new never wakes siblings for a claimed owner item", async (context) => {
+    const workspace = createWorkspace(context);
+    const watchers = attachWatchers(workspace, ["second"]);
+    const durable = watchers.durableWorkspace;
+    durable.workspaceDomain = "example.com";
+    durable.env.INDEX_QUEUE = { async sendBatch() {} };
+    const claimed = workspace.sendToOwner("Doorbell test");
+    sendMessage(workspace.scopeFor("caller"), { to: "@author/author", reply_to: claimed.message, text: "ding dong" });
+    durable.flushWatchers(new Set([workspace.agents.second.owner_sub]));
+    assert.equal(watchers.eventsByAgentId.get("second").length, 0);
+  });
+
   test("admin reads an owner chat with the owner as its title and only the sender as its member", async (context) => {
     const { adminList, adminRead } = await import("../src/adminData.ts");
     const workspace = createWorkspace(context);
