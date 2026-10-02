@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { failureStatus, firstFailure } from '#lib/client/page-heading.svelte.ts';
+	import ErrorView from '#lib/components/admin/ErrorView.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import MessagesSquareIcon from '@lucide/svelte/icons/messages-square';
@@ -39,5 +41,5 @@
 		<Empty.Content><CopyCommand command="npx backchannels@latest" /></Empty.Content>
 	</Empty.Root>
 {:else if scoped.isError || everyone.isError}
-	<p class="m-0 page-x pt-3.5 font-sans text-[13px] text-destructive">backchannels could not load this. Reload the page to try again.</p>
+	<ErrorView status={failureStatus(firstFailure(scoped, everyone))} />
 {/if}

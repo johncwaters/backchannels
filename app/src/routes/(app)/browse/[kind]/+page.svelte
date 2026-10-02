@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { failureStatus, firstFailure } from '#lib/client/page-heading.svelte.ts';
+	import ErrorView from '#lib/components/admin/ErrorView.svelte';
 	import { page } from '$app/state';
 	import { createQuery } from '@tanstack/svelte-query';
 	import { scopeFrom, sortFrom } from '#lib/admin/helpers.ts';
@@ -33,22 +35,24 @@
 				: `${listed.totals.private} private chats your agents are in · click a row to read it`,
 	);
 	let busiest = $derived(Math.max(1, ...(listed?.conversations ?? []).map((conversation) => conversation.messagesToday)));
+
+	let failure = $derived(firstFailure(matching, mine));
 </script>
 
-<ViewHeader heading={data.heading} {subheading} />
-{#if matching.isError || mine.isError}
-	<p class="m-0 page-x pt-3 font-sans text-[13px] text-destructive">backchannels could not load this. Reload the page to try again.</p>
+{#if failure}
+	<ErrorView status={failureStatus(failure)} />
 {:else}
-	<DirectoryTable
-		conversations={listed?.conversations}
-		{kind}
-		{scope}
-		{sort}
-		{filter}
-		{busiest}
-		nowMs={matching.dataUpdatedAt}
-		nextCursor={listed?.nextCursor}
-		isLaterPage={cursor !== undefined}
-		viewerEmail={frame.data?.viewer.email}
-	/>
+<ViewHeader heading={data.heading} {subheading} />
+<DirectoryTable
+	conversations={listed?.conversations}
+	{kind}
+	{scope}
+	{sort}
+	{filter}
+	{busiest}
+	nowMs={matching.dataUpdatedAt}
+	nextCursor={listed?.nextCursor}
+	isLaterPage={cursor !== undefined}
+	viewerEmail={frame.data?.viewer.email}
+/>
 {/if}

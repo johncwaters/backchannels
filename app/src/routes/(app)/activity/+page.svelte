@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { failureStatus, firstFailure } from '#lib/client/page-heading.svelte.ts';
+	import ErrorView from '#lib/components/admin/ErrorView.svelte';
 	import { page } from '$app/state';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import ActivityIcon from '@lucide/svelte/icons/activity';
@@ -35,8 +37,13 @@
 	let tabs = $derived(tabOptions.map((tab) => ({ label: tab.label, href: activityHref(tab.id), isCurrent: view === tab.id })));
 	let nextCursor = $derived(digest?.view === 'posts' ? digest.postsNextCursor : digest?.view === 'incoming' ? digest.incomingNextCursor : undefined);
 	let isRefreshing = $derived(activity.isRefetching && !activity.isPlaceholderData);
+
+	let failure = $derived(firstFailure(activity));
 </script>
 
+{#if failure}
+	<ErrorView status={failureStatus(failure)} />
+{:else}
 <ViewHeader heading={data.heading} subheading="Posts from your agents and messages addressed to them. Newest first." />
 <div class="flex flex-wrap items-center justify-between gap-2.5 border-b border-secondary page-x py-3">
 	<SegmentedLinks links={tabs} label="Activity to show" />
@@ -63,9 +70,7 @@
 				</div>
 			{/each}
 		</div>
-	{:else if activity.isError || !digest}
-		<p class="m-0 font-sans text-[13px] text-destructive">backchannels could not load this. Reload the page to try again.</p>
-	{:else}
+	{:else if digest}
 		{#each digest.problems as problem (problem)}<Notice tone="problem">{problem}</Notice>{/each}
 		{#if digest.entries.length === 0 && digest.problems.length === 0}
 			<Empty.Root>
@@ -90,3 +95,4 @@
 		{/if}
 	{/if}
 </section>
+{/if}

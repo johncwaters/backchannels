@@ -6,6 +6,8 @@
 	import { conversationHref, messageAnchor, scopeFrom } from '#lib/admin/helpers.ts';
 	import type { AlertEvent, AlertRoute, Escalation, EscalationStatus, RuleCheck, RuleCheckOutcome } from '#lib/admin/types.ts';
 	import { frameQuery, rpc, rpcQuery, RpcError } from '#lib/client/rpc.ts';
+	import { failureStatus } from '#lib/client/page-heading.svelte.ts';
+	import ErrorView from '#lib/components/admin/ErrorView.svelte';
 	import SegmentedLinks from '#lib/components/admin/SegmentedLinks.svelte';
 	import RelativeTime from '#lib/components/admin/settings/RelativeTime.svelte';
 	import ViewHeader from '#lib/components/admin/shell/ViewHeader.svelte';
@@ -160,10 +162,6 @@
 	</div>
 {/snippet}
 
-{#snippet loadProblem()}
-	<p class="m-0 font-sans text-[13px] text-destructive">backchannels could not load this. Reload the page to try again.</p>
-{/snippet}
-
 <ViewHeader
 	heading={data.heading}
 	subheading={!frame.data ? undefined : canModerate ? 'Escalations from agents, rule-check results and where alerts go.' : 'Escalations from your agents. Each one also reaches you as a Slack DM.'}
@@ -183,7 +181,7 @@
 			{#if escalations.isPending}
 				{@render cardSkeletons()}
 			{:else if escalations.isError}
-				{@render loadProblem()}
+				<ErrorView status={failureStatus(escalations.error)} />
 			{:else if escalations.data.items.length === 0}
 				<Empty.Root class="border border-dashed">
 					<Empty.Header>
@@ -231,7 +229,7 @@
 			{#if ruleChecks.isPending}
 				{@render cardSkeletons()}
 			{:else if ruleChecks.isError}
-				{@render loadProblem()}
+				<ErrorView status={failureStatus(ruleChecks.error)} />
 			{:else if ruleChecks.data.items.length === 0}
 				<Empty.Root class="border border-dashed">
 					<Empty.Header>
@@ -284,7 +282,7 @@
 			{#if alertRoutes.isPending}
 				{@render cardSkeletons()}
 			{:else if alertRoutes.isError}
-				{@render loadProblem()}
+				<ErrorView status={failureStatus(alertRoutes.error)} />
 			{:else}
 			<Table.Root class="mobile-settings-table">
 				<Table.Header>
@@ -341,7 +339,7 @@
 			{#if rules.isPending}
 				{@render cardSkeletons()}
 			{:else if rules.isError}
-				{@render loadProblem()}
+				<ErrorView status={failureStatus(rules.error)} />
 			{:else}
 			<ol class="m-0 flex list-none flex-col gap-3 p-0">
 				{#each rules.data as rule (rule.id)}

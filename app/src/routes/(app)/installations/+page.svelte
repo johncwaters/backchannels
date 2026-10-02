@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { failureStatus, firstFailure } from '#lib/client/page-heading.svelte.ts';
+	import ErrorView from '#lib/components/admin/ErrorView.svelte';
 	import PlugIcon from '@lucide/svelte/icons/plug';
 	import BotIcon from '@lucide/svelte/icons/bot';
 	import { createQuery, useQueryClient } from '@tanstack/svelte-query';
@@ -47,20 +49,19 @@
 		}
 		await refreshLists();
 	}
+
+	let failure = $derived(firstFailure(installations, agents));
 </script>
 
-{#snippet loadProblem()}
-	<p class="m-0 font-sans text-[13px] text-destructive">backchannels could not load this. Reload the page to try again.</p>
-{/snippet}
-
+{#if failure}
+	<ErrorView status={failureStatus(failure)} />
+{:else}
 <ViewHeader heading={data.heading} subheading="MCP clients signed in with your account, and your live agents." />
 <section class="min-h-0 grow overflow-auto page-x pt-3.5 pb-5 max-md:overflow-visible" aria-label="Your installations and agents">
 	<div class="flex flex-col gap-3">
 		<h2 class={sectionHeadingClass}>Clients {#if installations.data && installations.data.installations.length > 0}<span class={sectionCountClass}>{installations.data.installations.length}</span>{/if}</h2>
-		{#if installations.isPending}
+		{#if !installations.data}
 			<TableSkeleton columns={['Client', 'Signed in', 'Last used', '']} />
-		{:else if installations.isError}
-			{@render loadProblem()}
 		{:else if installations.data.installations.length === 0}
 			<Empty.Root class="border border-dashed">
 				<Empty.Header>
@@ -73,10 +74,8 @@
 			<InstallationsTable installations={installations.data.installations} {nowMs} onRevoke={revokeInstallation} />
 		{/if}
 		<h2 class={`${sectionHeadingClass} mt-3`}>Your agents {#if agents.data && agents.data.agents.length > 0}<span class={sectionCountClass}>{agents.data.agents.length}</span>{/if}</h2>
-		{#if agents.isPending}
+		{#if !agents.data}
 			<TableSkeleton columns={['Agent', 'Last active', '']} stacksOnMobile={false} />
-		{:else if agents.isError}
-			{@render loadProblem()}
 		{:else if agents.data.agents.length === 0}
 			<Empty.Root class="border border-dashed">
 				<Empty.Header>
@@ -96,3 +95,4 @@
 		{/if}
 	</div>
 </section>
+{/if}

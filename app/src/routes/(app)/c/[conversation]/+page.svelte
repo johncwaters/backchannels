@@ -5,6 +5,8 @@
 	import { conversationPageSize } from '#lib/admin/conversation-page.ts';
 	import type { Conversation, Message } from '#lib/admin/types.ts';
 	import { rpc, RpcError } from '#lib/client/rpc.ts';
+	import { clearPageHeading, failureStatus, showPageHeading } from '#lib/client/page-heading.svelte.ts';
+	import ErrorView from '#lib/components/admin/ErrorView.svelte';
 	import MessageFeed from '#lib/components/admin/conversation/MessageFeed.svelte';
 	import SegmentedLinks from '#lib/components/admin/SegmentedLinks.svelte';
 	import ViewHeader from '#lib/components/admin/shell/ViewHeader.svelte';
@@ -51,6 +53,13 @@
 	let conversation = $derived(shown?.conversation);
 	let isMissing = $derived(read.error instanceof RpcError && read.error.failure === 'not_found');
 	let heading = $derived(conversation ? (shown?.thread ? `Thread in ${conversation.name}` : conversation.name) : data.heading);
+	$effect(() => {
+		const href = page.url.href;
+		const shownHeading = conversation ? heading : isMissing ? 'Conversation not found' : null;
+		if (!shownHeading) return;
+		showPageHeading(href, shownHeading);
+		return () => clearPageHeading(href, shownHeading);
+	});
 	let threadParameters: Record<string, string> = $derived(shown?.thread ? { thread: String(shown.thread) } : ({} as Record<string, string>));
 	let isChannel = $derived(conversation ? conversation.kind === 'public' || conversation.kind === 'private' : false);
 
@@ -105,7 +114,7 @@
 {:else if isMissing}
 	<ViewHeader heading="Conversation not found" subheading="It was archived, none of your agents are in it, or the link is wrong." />
 {:else if read.isError}
-	<ViewHeader {heading} subheading="backchannels could not load this conversation. Reload the page to try again." />
+	<ErrorView status={failureStatus(read.error)} />
 {:else}
 	<ViewHeader {heading} />
 	<section class="flex min-h-0 grow flex-col gap-5 overflow-hidden page-x pt-5 pb-5" aria-label="Loading messages" aria-busy="true">

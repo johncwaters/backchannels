@@ -6,9 +6,10 @@
 	import { createQuery, useQueryClient } from '@tanstack/svelte-query';
 	import { toast } from 'svelte-sonner';
 	import { adminHref, scopeFrom } from '#lib/admin/helpers.ts';
-	import { copyByStatus } from '#lib/admin/error-copy.ts';
 	import type { AgentSummary, HeadlessKey, NewHeadlessKey } from '#lib/admin/types.ts';
 	import { frameQuery, rpc, rpcQuery, RpcError } from '#lib/client/rpc.ts';
+	import { failureStatus } from '#lib/client/page-heading.svelte.ts';
+	import ErrorView from '#lib/components/admin/ErrorView.svelte';
 	import AgentsTable from '#lib/components/admin/settings/AgentsTable.svelte';
 	import HeadlessKeysTable from '#lib/components/admin/settings/HeadlessKeysTable.svelte';
 	import NewKeyReveal from '#lib/components/admin/settings/NewKeyReveal.svelte';
@@ -27,7 +28,6 @@
 	let { data } = $props();
 
 	const sectionHeadingClass = 'm-0 text-[15px] font-semibold text-amber';
-	const notFound = copyByStatus[404];
 	const nowMs = Date.now();
 
 	const queryClient = useQueryClient();
@@ -99,21 +99,10 @@
 	}
 </script>
 
-{#snippet loadProblem()}
-	<p class="m-0 font-sans text-[13px] text-destructive">backchannels could not load this. Reload the page to try again.</p>
-{/snippet}
-
 {#if isForbidden}
-	<Empty.Root class="grow">
-		<Empty.Header>
-			<Empty.Media variant="icon"><CircleAlertIcon /></Empty.Media>
-			<Empty.Title><h1 class="m-0 text-[21px] font-semibold text-amber">{notFound.title}</h1></Empty.Title>
-			<Empty.Description class="font-sans">{notFound.detail}</Empty.Description>
-		</Empty.Header>
-		<Empty.Content class="flex-row flex-wrap justify-center">
-			<Button href={adminHref('/', scope)} variant="outline" size="sm">Open conversations</Button>
-		</Empty.Content>
-	</Empty.Root>
+	<ErrorView status={404} />
+{:else if listing.isError}
+	<ErrorView status={failureStatus(listing.error)} />
 {:else}
 	<ViewHeader heading={data.heading} subheading="Keys for hosted agents that cannot sign in with a browser. Every key signs in as this workspace's owner; agents choose their own names." />
 	<section class="min-h-0 grow overflow-auto page-x pt-3.5 pb-5 max-md:overflow-visible" aria-label="Headless keys and agents">
@@ -174,8 +163,6 @@
 				<h2 class={sectionHeadingClass}>Keys {#if listing.data}<span class="font-normal text-dim">({listing.data.keys.length}{listing.data.nextCursor ? '+' : ''})</span>{/if}</h2>
 				{#if listing.isPending}
 					<TableSkeleton columns={['Key', 'Agent name', 'Expires', 'Last used', '']} />
-				{:else if listing.isError}
-					{@render loadProblem()}
 				{:else if listing.data.keys.length === 0}
 					<Empty.Root class="border border-dashed">
 						<Empty.Header>
@@ -199,8 +186,6 @@
 				<h2 class={sectionHeadingClass}>Agents {#if listing.data}<span class="font-normal text-dim">({listing.data.agents.length})</span>{/if}</h2>
 				{#if listing.isPending}
 					<TableSkeleton columns={['Agent', 'Last active', '']} stacksOnMobile={false} />
-				{:else if listing.isError}
-					{@render loadProblem()}
 				{:else if listing.data.agents.length === 0}
 					<Empty.Root class="border border-dashed">
 						<Empty.Header>

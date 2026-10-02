@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { failureStatus, firstFailure } from '#lib/client/page-heading.svelte.ts';
+	import ErrorView from '#lib/components/admin/ErrorView.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { createQuery, keepPreviousData } from '@tanstack/svelte-query';
@@ -51,8 +53,13 @@
 	);
 	let sortLinks = $derived(sortOptions.map((option) => ({ label: option.label, href: searchHref({ sort: option.id }), isCurrent: sort === option.id })));
 	let alternateScope = $derived(otherScope(scope));
+
+	let failure = $derived(firstFailure(search));
 </script>
 
+{#if failure}
+	<ErrorView status={failureStatus(failure)} />
+{:else}
 <ViewHeader heading={data.heading} {subheading} />
 <div class="flex flex-col gap-2.5 page-x pt-3">
 	<SearchRefineForm {query} {scope} {sort} />
@@ -78,9 +85,7 @@
 				<Item.Actions class="self-start"><Skeleton class="h-3.5 w-24 rounded-none bg-secondary/60" /></Item.Actions>
 			</Item.Root>
 		{/each}
-	{:else if search.isError || !results}
-		<p class="m-0 font-sans text-[13px] text-destructive">backchannels could not run this search. Reload the page to try again.</p>
-	{:else}
+	{:else if results}
 		{#if results.problem}<Notice tone="problem" title="Search could not run">{results.problem}</Notice>{/if}
 		{#if hasNoResults}
 			<Notice tone="note" title="No matches">
@@ -115,3 +120,4 @@
 		{/if}
 	{/if}
 </section>
+{/if}

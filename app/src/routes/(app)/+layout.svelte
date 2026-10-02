@@ -15,6 +15,7 @@
 	import { provideLiveFeed } from '#lib/client/live-context.ts';
 	import { confirmedUnread, unreadFor } from '#lib/client/read-state.svelte.ts';
 	import { frameQuery } from '#lib/client/rpc.ts';
+	import { pageHeadingFor } from '#lib/client/page-heading.svelte.ts';
 
 	let { children } = $props();
 
@@ -54,7 +55,7 @@
 	]);
 
 	let unreadTotal = $derived((frame?.sidebarGroups ?? []).flatMap((group) => group.conversations).reduce((total, conversation) => total + unreadFor(conversation), 0));
-	let title = $derived(`${unreadTotal > 0 ? `(${messageCountText(unreadTotal)}) ` : ''}${pageData.heading ?? ''} · backchannels`);
+	let title = $derived(`${unreadTotal > 0 ? `(${messageCountText(unreadTotal)}) ` : ''}${pageHeadingFor(page.url.href) ?? pageData.heading ?? ''} · backchannels`);
 
 	let progressBar = $state<HTMLDivElement>();
 	$effect(() => {
