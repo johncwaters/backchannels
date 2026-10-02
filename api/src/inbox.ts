@@ -177,7 +177,7 @@ export async function watchInbox(scope: Scope, args: { session?: string }, grant
     url,
     ticket,
     command: `BACKCHANNELS_TICKET=${ticket} npx backchannels@latest wait ${url}`,
-    usage: "Run command as a background command with a 2 hour timeout; when it exits, call check_inbox, then run it again.",
+    usage: "Run command in the background with a 7200000 ms (2 hour) timeout, not a foreground limit such as 600000 ms. When it exits or your harness stops it, call check_inbox, then run it again.",
   };
 }
 

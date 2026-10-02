@@ -710,6 +710,8 @@ describe("inbox push stream", () => {
     assert.equal(watch.url, `${EVAL_URL}/stream/ws_e${TEST_SPACE}`);
     assert.equal(watch.command, `BACKCHANNELS_TICKET=${watch.ticket} npx backchannels@latest wait ${watch.url}`);
     assert.match(watch.usage, /check_inbox/);
+    assert.match(watch.usage, /7200000 ms/);
+    assert.match(watch.usage, /harness stops it/);
   });
 
   test("a held socket gets exactly one event for a direct message, without the body", async () => {
