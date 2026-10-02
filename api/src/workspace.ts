@@ -18,6 +18,17 @@ import { LIMITS, RATE_LIMITS, pruneRateBuckets } from "./limits";
 import { IndexDelivery } from "./indexDelivery";
 import { drainAlerts, nextAlertAt, queueAlert } from "./alerts";
 import { escalate } from "./escalations";
+import {
+  listAlertRoutes,
+  listEscalations,
+  listRuleChecks,
+  listRules,
+  updateAlertRoute,
+  updateEscalation,
+  type AlertRouteView,
+  type EscalationStatus,
+  type OversightViewer,
+} from "./oversight";
 import { drainRuleChecks, nextRuleCheckAt, queueRuleCheck, type RuleSubjectKind } from "./ruleChecks";
 import { deleteMessage, editMessage, followThread, pin, react, readMessages, save, sendMessage } from "./messages";
 import { uploadFile } from "./files";
@@ -514,6 +525,30 @@ export class WorkspaceDO extends DurableObject<Env> {
 
   async adminMarkRead(caller: AdminCaller, options: { conversation: string; thread?: number; upToSeq: number }) {
     return this.ctx.storage.transactionSync(() => adminMarkRead(this.adminContext(caller), options));
+  }
+
+  async adminEscalations(viewer: OversightViewer, options: { status?: EscalationStatus; cursor?: string }) {
+    return listEscalations(this.sql, viewer, options);
+  }
+
+  async adminUpdateEscalation(viewer: OversightViewer, options: { id: string; status: EscalationStatus; note?: string }) {
+    return this.ctx.storage.transactionSync(() => updateEscalation(this.sql, viewer, options, Date.now()));
+  }
+
+  async adminRuleChecks(viewer: OversightViewer, options: { outcome?: "flag" | "block" | "unchecked"; cursor?: string }) {
+    return listRuleChecks(this.sql, viewer, options);
+  }
+
+  async adminAlertRoutes(viewer: OversightViewer) {
+    return listAlertRoutes(this.sql, viewer);
+  }
+
+  async adminUpdateAlertRoute(viewer: OversightViewer, route: AlertRouteView) {
+    return this.ctx.storage.transactionSync(() => updateAlertRoute(this.sql, viewer, route, Date.now()));
+  }
+
+  async adminRules(viewer: OversightViewer) {
+    return listRules(this.sql, viewer);
   }
 
   async adminPins(caller: AdminCaller, options: { conversation: string }) {

@@ -27,6 +27,7 @@ import {
   type AdminIdentity,
 } from "./adminSession";
 import { authorize, googleCallback, oauthServers } from "./auth";
+import type { AlertRouteView, EscalationStatus, OversightViewer } from "./oversight";
 import { seedPinnedClientDocuments } from "./pinnedClients";
 import { findViewer } from "./directory";
 import { headlessBearer, serveHeadless } from "./headless";
@@ -125,6 +126,42 @@ export class AdminApi extends WorkerEntrypoint<Env> implements AdminApiRpc {
     return workspaceFor(this.env, identity).adminMarkRead(caller(identity), options);
   }
 
+  async listEscalations(token: string, options: { status?: EscalationStatus; cursor?: string } = {}) {
+    const found = await oversightViewer(this.env, this.ctx, token);
+    if (!found) return unauthorized;
+    return workspaceFor(this.env, found.identity).adminEscalations(found.viewer, options);
+  }
+
+  async updateEscalation(token: string, options: { id: string; status: EscalationStatus; note?: string }) {
+    const found = await oversightViewer(this.env, this.ctx, token);
+    if (!found) return unauthorized;
+    return workspaceFor(this.env, found.identity).adminUpdateEscalation(found.viewer, options);
+  }
+
+  async listRuleChecks(token: string, options: { outcome?: "flag" | "block" | "unchecked"; cursor?: string } = {}) {
+    const found = await oversightViewer(this.env, this.ctx, token);
+    if (!found) return unauthorized;
+    return workspaceFor(this.env, found.identity).adminRuleChecks(found.viewer, options);
+  }
+
+  async listAlertRoutes(token: string) {
+    const found = await oversightViewer(this.env, this.ctx, token);
+    if (!found) return unauthorized;
+    return workspaceFor(this.env, found.identity).adminAlertRoutes(found.viewer);
+  }
+
+  async updateAlertRoute(token: string, route: AlertRouteView) {
+    const found = await oversightViewer(this.env, this.ctx, token);
+    if (!found) return unauthorized;
+    return workspaceFor(this.env, found.identity).adminUpdateAlertRoute(found.viewer, route);
+  }
+
+  async listRules(token: string) {
+    const found = await oversightViewer(this.env, this.ctx, token);
+    if (!found) return unauthorized;
+    return workspaceFor(this.env, found.identity).adminRules(found.viewer);
+  }
+
   async listPins(token: string, options: { conversation: string }) {
     const identity = await authenticateAdmin(this.env, this.ctx, token);
     if (!identity) return unauthorized;
@@ -210,6 +247,13 @@ export class AdminApi extends WorkerEntrypoint<Env> implements AdminApiRpc {
     if (!identity) return unauthorized;
     return revokeOwnAgentFor(this.env, identity, options);
   }
+}
+
+async function oversightViewer(env: Env, ctx: ExecutionContext, token: string): Promise<{ identity: AdminIdentity; viewer: OversightViewer } | null> {
+  const identity = await authenticateAdmin(env, ctx, token);
+  if (!identity) return null;
+  const row = await findViewer(env.DB, identity.sub, identity.workspaceId);
+  return row ? { identity, viewer: { sub: identity.sub, role: row.role } } : null;
 }
 
 const caller = (identity: AdminIdentity) => ({ sub: identity.sub, grantId: identity.grantId, workspaceId: identity.workspaceId });
