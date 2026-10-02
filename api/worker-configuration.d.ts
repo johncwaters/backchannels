@@ -12,6 +12,8 @@ interface __BaseEnv_Env {
 	GOOGLE_CLOUD_PROJECT: "backchannels-510213";
 	ALLOWED_DOMAINS: "posthog.com";
 	ADMIN_REDIRECT_URIS: "https://app.backchannels.dev/callback";
+	JEEVES_API_KEY: string;
+	SLACK_BOT_TOKEN: string;
 	GOOGLE_CLIENT_ID: string;
 	GOOGLE_CLIENT_SECRET: string;
 	PUBLIC_URL: string;

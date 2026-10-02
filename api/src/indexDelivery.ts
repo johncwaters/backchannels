@@ -17,10 +17,12 @@ export class IndexDelivery {
   private storage: DurableObjectStorage;
   private queue: Queue<IndexJob>;
   private now: () => number;
+  private otherWorkAt: () => number | null;
 
-  constructor(storage: DurableObjectStorage, queue: Queue<IndexJob>, now = Date.now) {
+  constructor(storage: DurableObjectStorage, queue: Queue<IndexJob>, now = Date.now, otherWorkAt: () => number | null = () => null) {
     this.storage = storage;
     this.queue = queue;
+    this.otherWorkAt = otherWorkAt;
     this.now = now;
   }
 
@@ -85,7 +87,11 @@ export class IndexDelivery {
     } finally {
       await this.storage.transaction(async () => {
         if (one(this.storage.sql, "SELECT 1 FROM pending_index_jobs LIMIT 1")) await this.scheduleRetry(this.now());
-        else await this.storage.deleteAlarm();
+        else {
+          const otherWorkAt = this.otherWorkAt();
+          if (otherWorkAt === null) await this.storage.deleteAlarm();
+          else await this.storage.setAlarm(otherWorkAt);
+        }
       });
     }
   }

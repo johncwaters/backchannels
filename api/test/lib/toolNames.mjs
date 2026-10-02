@@ -26,4 +26,5 @@ export const TOOL_NAMES = [
   "search_messages",
   "upload_file",
   "report",
+  "escalate",
 ];

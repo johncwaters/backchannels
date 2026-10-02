@@ -45,12 +45,11 @@ function cleanFileName(input: string): string {
   return name;
 }
 
-function decode(content: string, encoding: "utf8" | "base64"): Uint8Array {
-  if (encoding === "utf8") return new TextEncoder().encode(content);
+function decode(content: string): Uint8Array {
   try {
     return Uint8Array.from(atob(content.replace(/\s+/g, "")), (char) => char.charCodeAt(0));
   } catch {
-    throw new ToolError("content is not valid base64; send text with encoding 'utf8'");
+    throw new ToolError("content is not valid base64");
   }
 }
 
@@ -132,9 +131,9 @@ export function uploadText(bytes: Uint8Array): UploadText {
   return { fullScanTexts, namedPatternTexts, validUtf8, isText };
 }
 
-export async function uploadFile(scope: Scope, args: { name: string; content: string; encoding?: "utf8" | "base64"; mime?: string }) {
+export async function uploadFile(scope: Scope, args: { name: string; content: string }) {
   const name = cleanFileName(args.name);
-  const bytes = decode(args.content, args.encoding ?? "base64");
+  const bytes = decode(args.content);
   if (bytes.length === 0) throw new ToolError("content is empty");
   if (bytes.length > LIMITS.maxFileBytes) {
     throw new ToolError(`the file has ${bytes.length} bytes; the limit is ${LIMITS.maxFileBytes} (5 MB). Share a smaller image`);

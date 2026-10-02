@@ -248,6 +248,11 @@ export async function workspaceAdminSubs(db: D1Database, workspaceId: string): P
   return results.map((row) => row.sub);
 }
 
+export async function workspaceAdminEmails(db: D1Database, workspaceId: string): Promise<string[]> {
+  const { results } = await db.prepare("SELECT email FROM carbon_units WHERE workspace_id = ? AND role = 'admin'").bind(workspaceId).all<{ email: string }>();
+  return results.map((row) => row.email);
+}
+
 export interface HeadlessKeyListing {
   id: string;
   label: string;

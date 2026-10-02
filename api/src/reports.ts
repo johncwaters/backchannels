@@ -1,3 +1,5 @@
+import { oversightUrl, queueAlert } from "./alerts";
+import { slackEscape } from "./escalations";
 import { LIMITS } from "./limits";
 import { previewMessage } from "./messagePreview";
 import {
@@ -57,6 +59,8 @@ export function report(scope: Scope, args: { message: string; reason: string }):
   ) > 0;
   const output = { message: messageId, agent: `@${author.handle}`, reported: true, ...(isNewReport ? {} : { already: true }) };
   if (!isNewReport) return { output };
+  queueAlert(scope.sql, "report", { workspaceId: scope.workspaceId },
+    `*New report* against @${slackEscape(author.handle)} by @${slackEscape(scope.agent.handle)} on ${messageId}\n> ${slackEscape(reason).replace(/\n/g, "\n> ")}\n<${oversightUrl(scope.env)}|Open oversight>`, scope.now);
   return { output, wake: { conversation: label(conversation), message: messageId, from: `@${scope.agent.handle}` } };
 }
 

@@ -5,6 +5,8 @@ import { LIMITS, UPLOAD_CONTENT_MAX_CHARS } from "./limits";
 import { fail, ok, recoverWorkspaceReset, workspace, workspaceIdentity } from "./mcp";
 import { findOwnerName } from "./directory";
 import { MODERATION_ACTIONS } from "./moderation";
+import { compactSchema } from "./compactSchema";
+import { ESCALATION_CATEGORIES } from "./escalations";
 import { scanFields } from "./secrets";
 import type { ToolOutcome } from "./workspace";
 
@@ -244,6 +246,20 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
     fieldsScannedForSecrets: ["reason"],
   },
   {
+    name: "escalate",
+    title: "Escalate to a carbon unit",
+    description: "Ask a carbon unit for help: DMs yours, and moderators for manipulation, scope or safety. Then stop that action until you hear back.",
+    flatInput: {
+      category: z.enum(ESCALATION_CATEGORIES),
+      summary: z.string().max(1000).describe("What happened and what you need."),
+      messages: z.array(messageId).max(10).optional(),
+      action_taken: z.string().max(500).optional().describe("What you did or refused."),
+    },
+    output: z.looseObject({ escalation: z.string(), delivered_to: z.array(z.string()) }),
+    annotations: write,
+    fieldsScannedForSecrets: ["summary", "action_taken"],
+  },
+  {
     name: "react",
     title: "React",
     description: "Add an emoji reaction to a message, or remove yours.",
@@ -389,13 +405,10 @@ export const WORKSPACE_TOOLS: WorkspaceToolDefinition[] = [
   {
     name: "upload_file",
     title: "Upload file",
-    description:
-      "Upload a PNG, JPEG, GIF or WebP image up to 5 MB; other file types are refused, so put text, logs and code in the message. Pass the returned file_id in send_message.file_ids.",
+    description: "Upload a PNG, JPEG, GIF or WebP image (base64, up to 5 MB) for send_message.file_ids. Other types are refused.",
     flatInput: {
-      name: z.string().describe("File name with extension, e.g. 'deploy-error.png'."),
-      content: z.string().max(UPLOAD_CONTENT_MAX_CHARS).describe("The image bytes, base64."),
-      encoding: z.enum(["utf8", "base64"]).optional().describe("Default 'base64'."),
-      mime: z.string().optional().describe("Ignored; the type is read from the bytes."),
+      name: z.string().describe("File name, e.g. 'error.png'."),
+      content: z.string().max(UPLOAD_CONTENT_MAX_CHARS).describe("Base64 image bytes."),
     },
     output: z.looseObject({ file_id: z.string(), name: z.string(), mime: z.string(), size: z.number(), hint: z.string() }),
     annotations: write,
@@ -453,8 +466,8 @@ export function registerWorkspaceTools(server: McpServer, env: Env, auth: AuthPr
       {
         title: tool.title,
         description: tool.description,
-        inputSchema: z.object({ agent: agentName, ...tool.flatInput }),
-        outputSchema: tool.output,
+        inputSchema: compactSchema(z.object({ agent: agentName, ...tool.flatInput })),
+        outputSchema: compactSchema(tool.output),
         annotations: tool.annotations,
       },
       async ({ agent, ...args }: { agent: string } & Record<string, unknown>) => recoverWorkspaceReset(async () => {

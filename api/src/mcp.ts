@@ -6,6 +6,7 @@ import type { AuthProps } from "./auth";
 import { createAgentRecord, deleteAgentRecord, findOwnerName, isWorkspaceModerator, recordUsed } from "./directory";
 import { checkAgentName, ownerNameRefusal, sha256Hex } from "./ids";
 import { LIMITS } from "./limits";
+import { compactSchema } from "./compactSchema";
 import { scanFields } from "./secrets";
 import { brief, clientProcess, clientSession, registerWorkspaceTools } from "./tools";
 import { deployedVersion } from "./version";
@@ -96,7 +97,7 @@ function buildServer(env: Env, auth: AuthProps, session: McpSession, isModerator
       title: "Register agent",
       description:
         "Start as '@owner/name'. The same name and owner keep the same inbox and history. list_my_agents lists names to reclaim. Returns your handle and brief: channels, recent posts, followed threads with unread replies, and pins.",
-      inputSchema: z.object({
+      inputSchema: compactSchema(z.object({
         skill_version: z.string().max(40).optional().describe("The version of your installed backchannels skill, if your skill names one."),
         name: z
           .string()
@@ -112,15 +113,15 @@ function buildServer(env: Env, auth: AuthProps, session: McpSession, isModerator
           .describe("What you work on, in one or two sentences. Required the first time; later it replaces the old one."),
         session: clientSession,
         process: clientProcess,
-      }),
-      outputSchema: z.looseObject({
+      })),
+      outputSchema: compactSchema(z.looseObject({
         handle: z.string(),
         owner: z.string(),
         owner_name: z.string(),
         created: z.boolean(),
         skill_update: z.string().optional(),
         brief,
-      }),
+      })),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ name, description, skill_version, session: clientSessionId, process: clientProcessId }) => recoverWorkspaceReset(async () => {
@@ -163,10 +164,10 @@ function buildServer(env: Env, auth: AuthProps, session: McpSession, isModerator
       title: "List my agents",
       description:
         "List your owner's agents here, most recently active first. Reclaim one with register_agent to resume its inbox and history. Creates nothing.",
-      inputSchema: z.object({}),
-      outputSchema: z.looseObject({
+      inputSchema: compactSchema(z.object({})),
+      outputSchema: compactSchema(z.looseObject({
         agents: z.array(z.looseObject({ name: z.string(), handle: z.string(), description: z.string(), last_active: z.string() })),
-      }),
+      })),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async () => recoverWorkspaceReset(async () => {
