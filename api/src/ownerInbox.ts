@@ -181,13 +181,13 @@ export function countUnreadOwnerMessages(scope: Scope): number {
 export function findOwnerMessage(scope: Scope, ref: string) {
   if (scope.agent.revoked_at !== null) return undefined;
   const parsed = parseMessageRef(ref);
-  const message = one<MessageRow>(scope.sql,
-    `SELECT m.* ${VISIBLE_OWNER_MESSAGES}
+  const queued = one<MessageRow & { stranded_from: string | null }>(scope.sql,
+    `SELECT m.*, o.stranded_from ${VISIBLE_OWNER_MESSAGES}
      AND m.conversation_id = (SELECT id FROM conversations WHERE slug = ?4) AND m.seq = ?5`,
     scope.agent.owner_sub, scope.now - LIMITS.ownerQueueMaxAgeMs, scope.agent.id, parsed.conversation.toLowerCase(), parsed.seq);
-  if (!message) return undefined;
-  const conversation = one<ConversationRow>(scope.sql, "SELECT * FROM conversations WHERE id = ?", message.conversation_id)!;
-  return { conversation, message };
+  if (!queued) return undefined;
+  const conversation = one<ConversationRow>(scope.sql, "SELECT * FROM conversations WHERE id = ?", queued.conversation_id)!;
+  return { conversation, message: queued, strandedFrom: queued.stranded_from };
 }
 
 export function markOwnerMessageRead(scope: Scope, messageId: number): number {
@@ -209,9 +209,10 @@ export function ownerInboxMessages(scope: Scope, args: { limit: number }) {
     scope.agent.owner_sub, scope.now - LIMITS.ownerQueueMaxAgeMs, scope.agent.id, limit + 1);
   const items = messages.slice(0, limit).map((message) => {
     const conversation = one<ConversationRow>(scope.sql, "SELECT * FROM conversations WHERE id = ?", message.conversation_id)!;
-    const claim = one<{ handle: string }>(scope.sql,
-      "SELECT a.handle FROM claims c JOIN agents a ON a.id = c.agent_id WHERE c.message_id = ? AND a.owner_sub = ?",
+    const claim = one<{ handle: string; agent_id: string }>(scope.sql,
+      "SELECT a.handle, c.agent_id FROM claims c JOIN agents a ON a.id = c.agent_id WHERE c.message_id = ? AND a.owner_sub = ?",
       message.id, scope.agent.owner_sub);
+    const isAnsweredByRecipient = claim !== undefined && claim.agent_id === message.stranded_from;
     return {
       message: previewMessage(viewMessage(scope, conversation, message), LIMITS.inboxTextPreviewChars),
       conversation: label(conversation),
@@ -219,7 +220,8 @@ export function ownerInboxMessages(scope: Scope, args: { limit: number }) {
       ...(message.stranded_from ? {
         stranded_from: `@${one<{ handle: string }>(scope.sql, "SELECT handle FROM agents WHERE id = ?", message.stranded_from)!.handle}`,
       } : { context: viewContext(scope, conversation, message) }),
-      ...(claim ? { claimed_by: `@${claim.handle}` } : {}),
+      ...(isAnsweredByRecipient ? { answered_by_recipient: true } : {}),
+      ...(claim && !isAnsweredByRecipient ? { claimed_by: `@${claim.handle}` } : {}),
     };
   });
   return { items, more: messages.length > limit };
@@ -237,15 +239,21 @@ export function newestOwnerMessage(sql: SqlStorage, ownerSub: string, now: numbe
 export function claimOwnerQueueReply(scope: Scope, args: { to: string; text: string; reply_to: string; file_ids?: string[] }): Record<string, unknown> | undefined {
   const queued = findOwnerMessage(scope, args.reply_to);
   if (!queued) return undefined;
-  const { conversation, message } = queued;
+  const { conversation, message, strandedFrom } = queued;
   const ref = messageRef(conversation, message.seq);
-  const claim = one<{ handle: string; claimed_at: number }>(scope.sql,
-    "SELECT a.handle, c.claimed_at FROM claims c JOIN agents a ON a.id = c.agent_id WHERE c.message_id = ? AND a.owner_sub = ?",
+  const claim = one<{ handle: string; claimed_at: number; agent_id: string }>(scope.sql,
+    "SELECT a.handle, c.claimed_at, c.agent_id FROM claims c JOIN agents a ON a.id = c.agent_id WHERE c.message_id = ? AND a.owner_sub = ?",
     message.id, scope.agent.owner_sub);
+  if (claim && claim.agent_id === strandedFrom) {
+    throw new ToolError(`${ref} was already answered by its recipient @${claim.handle} at ${new Date(claim.claimed_at).toISOString()}; it no longer needs an answer`);
+  }
   if (claim) throw new ToolError(`${ref} was already claimed by @${claim.handle} at ${new Date(claim.claimed_at).toISOString()}; it no longer needs an answer`);
   const author = one<{ handle: string }>(scope.sql, "SELECT handle FROM agents WHERE id = ?", message.author_id)!;
   if (args.to !== `@${author.handle}`) throw new ToolError(`send to: '@${author.handle}' to claim ${ref}`);
-  const noticeText = `Picking up ${ref}, which you sent to @${scope.agent.handle.split("/")[0]}.\n\n${args.text}`;
+  const sentTo = strandedFrom
+    ? `@${one<{ handle: string }>(scope.sql, "SELECT handle FROM agents WHERE id = ?", strandedFrom)!.handle} after its session ended. Replies continue here.`
+    : `@${scope.agent.handle.split("/")[0]}.`;
+  const noticeText = `Picking up ${ref}, which you sent to ${sentTo}\n\n${args.text}`;
   if (noticeText.length > LIMITS.messageLength) {
     throw new ToolError(`text with the pickup notice has ${noticeText.length} characters; the limit is ${LIMITS.messageLength}. Split it, or upload it as a file`);
   }

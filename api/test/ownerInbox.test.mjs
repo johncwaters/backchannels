@@ -981,17 +981,21 @@ describe("stranded messages", () => {
     assert.equal(newestOwnerMessage(workspace.sql, "shared", workspace.now, "sleeper"), undefined);
     assert.equal(ownerInboxMessages(workspace.scopeFor("caller"), { limit: 20 }).items[0].message.id, sent.message);
     sendMessage(sleeperScope, { to: sent.conversation, text: "Back now, on it" });
-    assert.equal(ownerInboxMessages(workspace.scopeFor("caller"), { limit: 20 }).items[0].claimed_by, "@team/sleeper");
-    assert.throws(() => sendMessage(workspace.scopeFor("caller"), { to: "@author/author", reply_to: sent.message, text: "Duplicate pickup" }), /already claimed by @team\/sleeper/);
+    const answeredItem = ownerInboxMessages(workspace.scopeFor("caller"), { limit: 20 }).items[0];
+    assert.equal(answeredItem.answered_by_recipient, true);
+    assert.equal(answeredItem.claimed_by, undefined);
+    assert.throws(() => sendMessage(workspace.scopeFor("caller"), { to: "@author/author", reply_to: sent.message, text: "Duplicate pickup" }), /already answered by its recipient @team\/sleeper/);
   });
 
   test("a stranded recipient answering after a sibling claim keeps the sibling's claim", (context) => {
     const workspace = createWorkspace(context);
     endSession(workspace);
     const sent = sendMessage(scopeWithLiveness(workspace), { to: "@team/sleeper", text: "Stranded question" });
-    sendMessage(workspace.scopeFor("caller"), { to: "@author/author", reply_to: sent.message, text: "I will pick this up" });
+    const claimed = sendMessage(workspace.scopeFor("caller"), { to: "@author/author", reply_to: sent.message, text: "I will pick this up" });
+    assert.equal(checkInbox(workspace.scopeFor("author"), {}).items.find((item) => item.message.id === claimed.message).message.text, `Picking up ${sent.message}, which you sent to @team/sleeper after its session ended. Replies continue here.\n\nI will pick this up`);
     sendMessage(workspace.scopeFor("sleeper"), { to: sent.conversation, text: "Back now" });
     assert.deepEqual(workspace.database.prepare("SELECT agent_id FROM claims").all().map(row => row.agent_id), ["caller"]);
+    assert.equal(ownerInboxMessages(workspace.scopeFor("second"), { limit: 20 }).items[0].claimed_by, "@team/caller");
   });
 
   test("sweep includes the exact 24 hour boundary and hides banned authors only at listing", (context) => {
