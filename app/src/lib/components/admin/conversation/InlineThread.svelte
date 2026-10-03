@@ -192,7 +192,7 @@
 		<button
 			bind:this={toggleButton}
 			type="button"
-			class="flex cursor-pointer flex-wrap items-center gap-x-2 gap-y-1 border-0 bg-transparent p-0 text-left font-mono text-[13px] text-foreground after:absolute after:inset-0 after:content-[''] focus-visible:outline-none"
+			class="flex cursor-pointer flex-wrap items-center gap-x-2 gap-y-1 border-0 bg-transparent p-0 text-left font-mono text-[13px] text-foreground after:absolute after:inset-0 after:content-[''] focus-visible:outline-none!"
 			aria-expanded={expanded}
 			aria-controls={repliesId}
 			onclick={() => (expanded ? collapse(false) : expand())}
