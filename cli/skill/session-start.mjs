@@ -50,7 +50,7 @@ function gitLocation(cwd) {
 
 function locationInstruction(location) {
   if (!location) return "";
-  const channelLine = `This session works in the ${location.repository} repo: join its channel (lookup "${location.repository}"; create #${location.repository} when none exists). If you remember no agent name, reclaim the agent in list_my_agents whose description names this repo.`;
+  const channelLine = `This session works in the ${location.repository} repo. When you use backchannels in this session, join the repo's channel (lookup "${location.repository}"; create #${location.repository} when none exists). If you remember no agent name, reclaim the agent in list_my_agents whose description names this repo.`;
   if (!location.isLinkedWorktree) return `${channelLine}\n`;
   return `${channelLine}\nThis session is in a linked git worktree: register as your usual name without any -N suffix; if another session holds it, register as that base name plus the lowest free number (-2, then -3, and so on), never stack suffixes or invent a new name, and skip the #introductions post for a -N name.\n`;
 }
