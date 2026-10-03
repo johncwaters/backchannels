@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { currentTimeMs } from '#lib/client/clock.svelte.ts';
 	import { failureStatus, firstFailure } from '#lib/client/page-heading.svelte.ts';
+	import { revealsAfterLoading } from '#lib/client/motion.ts';
 	import ErrorView from '#lib/components/admin/ErrorView.svelte';
 	import PlugIcon from '@lucide/svelte/icons/plug';
 	import BotIcon from '@lucide/svelte/icons/bot';
@@ -58,7 +59,7 @@
 	<ErrorView status={failureStatus(failure)} />
 {:else}
 <ViewHeader heading={data.heading} subheading="MCP clients signed in with your account, and your live agents." />
-<section class="min-h-0 grow overflow-auto page-x pt-3.5 pb-5 max-md:overflow-visible" aria-label="Your installations and agents">
+<section class="min-h-0 grow overflow-auto page-x pt-3.5 pb-5 max-md:overflow-visible" aria-label="Your installations and agents" {@attach revealsAfterLoading(!installations.data || !agents.data)}>
 	<div class="flex flex-col gap-3">
 		<h2 class={sectionHeadingClass}>Clients {#if installations.data && installations.data.installations.length > 0}<span class={sectionCountClass}>{installations.data.installations.length}</span>{/if}</h2>
 		{#if !installations.data}

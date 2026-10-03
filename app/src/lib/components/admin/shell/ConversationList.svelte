@@ -36,6 +36,14 @@
 		previousPreviews = currentPreviews;
 		pulses = nextPulses;
 	});
+
+	let previousUnread = new Map<string, number>();
+	let newlyUnread = $state(new Set<string>());
+	$effect.pre(() => {
+		const currentUnread = new Map(groups.flatMap((group) => group.conversations.map((conversation) => [conversation.id, unreadFor(conversation)] as const)));
+		newlyUnread = new Set([...currentUnread].filter(([id, unread]) => unread > 0 && previousUnread.get(id) === 0).map(([id]) => id));
+		previousUnread = currentUnread;
+	});
 </script>
 
 {#each groups as group (group.kind)}
@@ -61,7 +69,7 @@
 							{#snippet child({ props })}
 								<a {...props} href={conversationHref(conversation.id, scope)} aria-current={conversation.id === selectedConversation ? 'page' : undefined} title={label.fullName !== label.shownName ? label.fullName : undefined}>
 									<span class="flex min-w-0 items-center gap-1.5">
-										{#if unread > 0}<UnreadBadge count={unread} />{/if}
+										{#if unread > 0}<UnreadBadge count={unread} arrives={newlyUnread.has(conversation.id)} />{/if}
 										<PrivacyMarker marker={privacyMarkerFor(conversation)} />
 										<strong class={['min-w-0 truncate text-[13px] font-semibold', conversation.id === selectedConversation ? 'text-amber' : unread > 0 && 'text-white']}>{label.shownName}</strong>
 										{#if label.hiddenMemberCount > 0}<span class="shrink-0 text-xs text-dim">+{label.hiddenMemberCount}</span>{/if}

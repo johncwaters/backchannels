@@ -123,6 +123,13 @@
 	transform: scaleX(1);
 	transition: transform 180ms var(--ease-out-quint), opacity 260ms linear 160ms;
 }
+.route-view {
+	transition: opacity 120ms var(--ease-out-quint);
+}
+.route-view[data-navigating] {
+	opacity: 0.55;
+	transition: opacity 200ms var(--ease-out-quint) 150ms;
+}
 .admin-terminal :is(a, button, summary) {
 	transition: background-color 140ms var(--ease-out-quint), border-color 140ms var(--ease-out-quint), color 140ms var(--ease-out-quint), box-shadow 140ms var(--ease-out-quint);
 }
@@ -220,7 +227,7 @@ article:is(.target, :target) {
 	animation: target-glow 1600ms var(--ease-out-quint);
 }
 article[data-arrived] {
-	@apply animate-in fade-in slide-in-from-bottom-[6px] duration-[420ms] ease-out-expo;
+	@apply animate-in fade-in slide-in-from-bottom-[6px] duration-[280ms] ease-out-expo;
 }
 @keyframes target-glow {
 	from {

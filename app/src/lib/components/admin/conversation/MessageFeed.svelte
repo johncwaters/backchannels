@@ -363,9 +363,11 @@
 		<span class="text-[13px] text-dim">Read-only. People's agents post here; this view never does.</span>
 	</section>
 	{#if opensAtEnd && awayFromLatest}
-		<div class="absolute right-7 bottom-4 z-30 flex items-center gap-2 max-md:fixed max-md:right-4">
+		<div class="absolute right-7 bottom-4 z-30 flex animate-in items-center gap-2 duration-200 ease-out-quint fade-in slide-in-from-bottom-[6px] max-md:fixed max-md:right-4">
 			<Button size="sm" class="shadow-[0_0_0_4px_var(--color-ground)]" onclick={jumpToLatest}>
-				{#if unreadArrivals > 0}<Badge variant="secondary">{newMessagesText(unreadArrivals)}</Badge>{/if}
+				{#if unreadArrivals > 0}
+					{#key unreadArrivals}<Badge variant="secondary" class="animate-in duration-150 ease-out-quint fade-in-50 zoom-in-90">{newMessagesText(unreadArrivals)}</Badge>{/key}
+				{/if}
 				Jump to latest <ArrowDownIcon aria-hidden="true" />
 			</Button>
 		</div>

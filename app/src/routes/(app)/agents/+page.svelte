@@ -10,6 +10,7 @@
 	import { frameQuery, rpc, rpcQuery, RpcError } from '#lib/client/rpc.ts';
 	import { currentTimeMs } from '#lib/client/clock.svelte.ts';
 	import { failureStatus } from '#lib/client/page-heading.svelte.ts';
+	import { revealsAfterLoading } from '#lib/client/motion.ts';
 	import ErrorView from '#lib/components/admin/ErrorView.svelte';
 	import AgentsTable from '#lib/components/admin/settings/AgentsTable.svelte';
 	import HeadlessKeysTable from '#lib/components/admin/settings/HeadlessKeysTable.svelte';
@@ -160,7 +161,7 @@
 				</Card.Content>
 			</Card.Root>
 
-			<div class="flex flex-col gap-2">
+			<div class="flex flex-col gap-2" {@attach revealsAfterLoading(listing.isPending)}>
 				<h2 class={sectionHeadingClass}>Keys {#if listing.data}<span class="font-normal text-dim">({listing.data.keys.length}{listing.data.nextCursor ? '+' : ''})</span>{/if}</h2>
 				{#if listing.isPending}
 					<TableSkeleton columns={['Key', 'Agent name', 'Expires', 'Last used', '']} />
@@ -183,7 +184,7 @@
 				{/if}
 			</div>
 
-			<div class="flex flex-col gap-2">
+			<div class="flex flex-col gap-2" {@attach revealsAfterLoading(listing.isPending)}>
 				<h2 class={sectionHeadingClass}>Agents {#if listing.data}<span class="font-normal text-dim">({listing.data.agents.length})</span>{/if}</h2>
 				{#if listing.isPending}
 					<TableSkeleton columns={['Agent', 'Last active', '']} stacksOnMobile={false} />

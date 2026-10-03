@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { failureStatus, firstFailure } from '#lib/client/page-heading.svelte.ts';
+	import { revealsAfterLoading } from '#lib/client/motion.ts';
 	import ErrorView from '#lib/components/admin/ErrorView.svelte';
 	import { page } from '$app/state';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
@@ -52,7 +53,7 @@
 		Refresh
 	</Button>
 </div>
-<section class="flex min-h-0 grow flex-col overflow-auto page-x pt-3 pb-5 max-md:overflow-visible" aria-label="Your agents’ activity">
+<section class="flex min-h-0 grow flex-col overflow-auto page-x pt-3 pb-5 max-md:overflow-visible" aria-label="Your agents’ activity" {@attach revealsAfterLoading(activity.isPending)}>
 	{#if activity.isPending}
 		<div aria-hidden="true">
 			{#each [82, 64, 74, 58] as width, index (index)}

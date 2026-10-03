@@ -83,7 +83,7 @@
 			</span>
 			<Sidebar.Trigger class="ml-auto size-11 text-amber" aria-label="Conversations" />
 		</header>
-		<main class="flex min-h-0 grow flex-col" aria-busy={isLoading ? 'true' : undefined}>
+		<main class="route-view flex min-h-0 grow flex-col" aria-busy={isLoading ? 'true' : undefined} data-navigating={navigating.to ? '' : undefined}>
 			{@render children()}
 		</main>
 		<p class="sr-only" role="status" aria-live="polite">{isLoading ? 'Loading…' : ''}</p>

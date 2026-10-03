@@ -250,7 +250,20 @@ Tabs, sorts and the scope switch are one `ButtonGroup` of link buttons. The curr
 
 Sidebar rows show unread counts before the label. Selected rows gain an amber edge. The amber footer is one row: the workspace name (desktop only) and live or manual marker on the left, and icon-only route links with labels and tooltips on the right. Keep other details out of it.
 
-Navigation responds immediately. A thin progress bar appears, the target row or tab shows as selected, and the current page dims until the next one loads. Results of actions show as toasts at the bottom left. State transitions stay short. Reduced-motion preferences disable decorative animation and shorten transitions.
+Navigation responds immediately. A thin progress bar appears, the target row or tab shows as selected, and the current page dims to 55% opacity if the next one is not ready after 150ms (200ms fade, 120ms back). Results of actions show as toasts at the bottom left. State transitions stay short. Reduced-motion preferences disable decorative animation and shorten transitions.
+
+### Motion
+
+Motion explains a state change; it never delays content or input. Durations stay between 120ms and 280ms, with `--ease-out-quint` for state changes and `--ease-out-expo` for arrivals; exits are faster than entrances, and nothing bounces. Only opacity and transform animate, except the inline thread panel's height slide.
+
+- Content that replaces skeletons fades in over 180ms (`revealsAfterLoading` in `lib/client/motion.ts`). Content restored from the cache, with no skeleton shown first, appears without motion.
+- A live message arrival rises 6px and fades in over 280ms (ease-out-expo), the same as the landing page's chat pane.
+- Jump to latest rises 6px and fades in over 200ms. Its new-messages count fades and scales in from 90% over 150ms each time it changes.
+- A sidebar unread badge that appears on a refresh fades and scales in from 75% over 150ms. Badges present at first load appear without motion.
+- The mobile conversations sheet opens over 200ms and closes over 150ms, both ease-out-quint.
+- The install command's copy button shows a check for 1.6s after a copy; the check scales in from 50% over 150ms.
+
+The global reduced-motion rule in `styles/tokens.css` covers CSS transitions and animations. Svelte transitions and `element.animate()` use the Web Animations API, which that rule does not reach: take durations from `motionMs()` in `lib/client/motion.ts`, which returns zero under reduced motion.
 
 ### Mobile Conversations Sheet
 
@@ -264,7 +277,7 @@ Message code blocks expose a labeled, focusable region and horizontal scrolling.
 
 ### Inline threads
 
-The thread bar keeps its amber left border and match fill, and holds a chevron that turns 90° when expanded. Inline replies sit 16px in from the root on a 1px border rail with 14px padding, the same as the thread view. Show more, Collapse and Open thread are plain square controls under the replies, not a card. Below the md breakpoint the bar and its controls are at least 44px tall. Opening and collapsing slide the replies panel (240ms, ease-out-quint). Each newly loaded reply rises 6px and fades in over 200ms, 30ms after the one before it within its page, with at most 240ms of stagger, so a Show more page arrives in order. A thread restored as expanded after navigation or reload appears without motion. With reduced motion, the panel and replies appear at once; Svelte transitions run through the Web Animations API, which the global reduced-motion CSS rule does not reach, so the component sets their duration to zero itself.
+The thread bar keeps its amber left border and match fill, and holds a chevron that turns 90° when expanded. Inline replies sit 16px in from the root on a 1px border rail with 14px padding, the same as the thread view. Show more, Collapse and Open thread are plain square controls under the replies, not a card. Below the md breakpoint the bar and its controls are at least 44px tall. Opening and collapsing slide the replies panel (240ms, ease-out-quint). Each newly loaded reply rises 6px and fades in over 200ms, 30ms after the one before it within its page, with at most 240ms of stagger, so a Show more page arrives in order. A thread restored as expanded after navigation or reload appears without motion. With reduced motion, the panel and replies appear at once, through `motionMs()`.
 
 ### Badges
 

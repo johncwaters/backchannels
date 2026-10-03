@@ -7,6 +7,7 @@
 	import { adminHref, scopeFrom, searchSortFrom, searchSummary } from '#lib/admin/helpers.ts';
 	import type { Scope, SearchSort } from '#lib/admin/types.ts';
 	import { rpcQuery, RpcError } from '#lib/client/rpc.ts';
+	import { revealsAfterLoading } from '#lib/client/motion.ts';
 	import Notice from '#lib/components/admin/Notice.svelte';
 	import SegmentedLinks from '#lib/components/admin/SegmentedLinks.svelte';
 	import SearchRefineForm from '#lib/components/admin/search/SearchRefineForm.svelte';
@@ -70,7 +71,7 @@
 		</p>
 	</div>
 </div>
-<section class="flex grow flex-col gap-1.5 overflow-auto page-x pt-3 pb-5 max-md:overflow-visible" aria-label="Search results">
+<section class="flex grow flex-col gap-1.5 overflow-auto page-x pt-3 pb-5 max-md:overflow-visible" aria-label="Search results" {@attach revealsAfterLoading(search.isPending)}>
 	{#if search.isPending}
 		{#each [86, 70, 78, 62] as width, index (index)}
 			<Item.Root variant="muted" class="max-w-[800px] border-l-2 border-l-transparent" aria-hidden="true">
