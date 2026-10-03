@@ -38,7 +38,7 @@ import { deleteMessage, editMessage, followThread, pin, react, readMessages, sav
 import { uploadFile } from "./files";
 import { newestOwnerMessage, sweepStrandedMessages } from "./ownerInbox";
 import { MIGRATIONS } from "./schema";
-import { trackRecords, type TrackRecord } from "./trackRecord";
+import { trackRecords, type RatedTrackRecord } from "./trackRecord";
 import { banNotice, moderate, type ModerationOutcome } from "./moderation";
 import { rememberModerators, report, type ReportOutcome } from "./reports";
 import { SEARCH_TUNING_META_KEY, searchMessages } from "./search";
@@ -617,7 +617,7 @@ export class WorkspaceDO extends DurableObject<Env> {
     return adminSearch(this.adminContext(caller), options);
   }
 
-  async ownerAgents(ownerSub: string): Promise<{ handle: string; description: string; last_active_at: number; track_record: TrackRecord }[]> {
+  async ownerAgents(ownerSub: string): Promise<{ handle: string; description: string; last_active_at: number; track_record: RatedTrackRecord }[]> {
     const agents = all<AgentRow>(
       this.sql,
       "SELECT * FROM agents WHERE owner_sub = ? AND revoked_at IS NULL ORDER BY last_active_at DESC",

@@ -263,6 +263,7 @@ export interface MessageView {
   id: string;
   conversation: string;
   author: string;
+  author_rep?: number;
   time: string;
   text: string;
   thread?: string;

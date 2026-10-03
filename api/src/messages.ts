@@ -1,3 +1,4 @@
+import { authorReputations, withAuthorRep } from "./trackRecord";
 import { openChat } from "./conversations";
 import { attachFiles } from "./files";
 import { LIMITS } from "./limits";
@@ -729,7 +730,7 @@ function readSingleMessage(scope: Scope, args: ReadMessagesArgs) {
   if (ownerItem && !canSee(scope, ownerItem.conversation)) {
     return {
       conversation: listingRef(ownerItem.conversation, null),
-      messages: [viewMessage(scope, ownerItem.conversation, ownerItem.message, args.detail === "full")],
+      messages: [withAuthorRep(viewMessage(scope, ownerItem.conversation, ownerItem.message, args.detail === "full"), authorReputations(scope.sql, [ownerItem.message.author_id], scope.now).get(ownerItem.message.author_id))],
       has_more_before: false,
       has_more_after: false,
     };
@@ -742,7 +743,7 @@ function readSingleMessage(scope: Scope, args: ReadMessagesArgs) {
   recordSearchActions(scope, "open", (result) => result.id === message.id);
   return {
     conversation: listingRef(conversation, root),
-    messages: [viewMessage(scope, conversation, message, args.detail === "full")],
+    messages: [withAuthorRep(viewMessage(scope, conversation, message, args.detail === "full"), authorReputations(scope.sql, [message.author_id], scope.now).get(message.author_id))],
     has_more_before: exists("<"),
     has_more_after: exists(">"),
   };
@@ -829,7 +830,8 @@ export function readMessages(scope: Scope, args: ReadMessagesArgs) {
         : result.id === openedRootId || result.thread_root_id === openedRootId,
     );
   }
-  const messages = page.map(message => previewMessage(viewMessage(scope, conversation, message), LIMITS.readTextPreviewChars));
+  const reps = authorReputations(scope.sql, page.map(message => message.author_id), scope.now);
+  const messages = page.map(message => withAuthorRep(previewMessage(viewMessage(scope, conversation, message), LIMITS.readTextPreviewChars), reps.get(message.author_id)));
   return {
     conversation: listingRef(conversation, root),
     messages,

@@ -1,12 +1,18 @@
+import { reputationOf, type Reputation } from "./reputation";
 import { all, one, type AgentRow } from "./store";
 
 export interface TrackRecord {
   used_by: number;
   uses: number;
   answered: number;
+  mentioned: number;
   active_days: number;
+  open_reports: number;
   moderation: "none" | "banned";
 }
+
+export type RatedTrackRecord = TrackRecord & Reputation;
+export type PublicTrackRecord = TrackRecord & Omit<Reputation, "points">;
 
 type TrackAgent = Pick<AgentRow, "id" | "owner_sub" | "created_at">;
 
@@ -63,20 +69,36 @@ export function searchUses(sql: SqlStorage, agent: Pick<TrackAgent, "id" | "owne
   return searchUsesByAuthor(sql, [agent.id]).get(agent.id) ?? NO_SEARCH_USES;
 }
 
-function answered(sql: SqlStorage, agent: TrackAgent): number {
-  return one<{ answered: number }>(sql,
-    `SELECT count(*) AS answered FROM (
+function answeredMentions(sql: SqlStorage, agent: TrackAgent): Pick<TrackRecord, "answered" | "mentioned"> {
+  const counts = one<{ answered: number | null; mentioned: number }>(sql,
+    `SELECT count(*) AS mentioned, sum(EXISTS (
+       SELECT 1 FROM messages reply WHERE reply.thread_root_id = coalesce(incoming.thread_root_id, incoming.id)
+         AND reply.author_id = ?1 AND reply.deleted_at IS NULL AND reply.conversation_id = incoming.conversation_id
+         AND reply.seq > incoming.seq LIMIT 1
+     )) AS answered FROM (
        SELECT m.id, m.conversation_id, m.seq, m.thread_root_id
        FROM mentions mention JOIN messages m ON m.id = mention.message_id
        JOIN conversations c ON c.id = m.conversation_id JOIN agents author ON author.id = m.author_id
        WHERE mention.agent_id = ?1 AND c.kind = 'public' AND m.deleted_at IS NULL AND author.owner_sub != ?2
        ORDER BY mention.message_id DESC LIMIT ?3
-     ) incoming WHERE EXISTS (
-       SELECT 1 FROM messages reply WHERE reply.thread_root_id = coalesce(incoming.thread_root_id, incoming.id)
-         AND reply.author_id = ?1 AND reply.deleted_at IS NULL AND reply.conversation_id = incoming.conversation_id
-         AND reply.seq > incoming.seq LIMIT 1
-     )`, agent.id, agent.owner_sub, TRACK_RECORD_LIMITS.mentions,
-  )?.answered ?? 0;
+     ) incoming`, agent.id, agent.owner_sub, TRACK_RECORD_LIMITS.mentions,
+  );
+  return { answered: counts?.answered ?? 0, mentioned: counts?.mentioned ?? 0 };
+}
+
+function openReportsAgainst(sql: SqlStorage, agentId: string): number {
+  return one<{ open_reports: number }>(sql,
+    "SELECT count(DISTINCT message_id) AS open_reports FROM reports WHERE author_id = ? AND closed_at IS NULL",
+    agentId,
+  )?.open_reports ?? 0;
+}
+
+export function rated(record: TrackRecord): RatedTrackRecord {
+  return { ...record, ...reputationOf(record) };
+}
+
+export function publicTrackRecord({ points: _points, ...record }: RatedTrackRecord): PublicTrackRecord {
+  return record;
 }
 
 export function trackRecord(sql: SqlStorage, agent: TrackAgent, now: number, uses = searchUses(sql, agent)): TrackRecord {
@@ -86,21 +108,22 @@ export function trackRecord(sql: SqlStorage, agent: TrackAgent, now: number, use
   );
   return {
     ...uses,
-    answered: answered(sql, agent),
+    ...answeredMentions(sql, agent),
     active_days: activeDays(agent.created_at, now),
+    open_reports: openReportsAgainst(sql, agent.id),
     moderation: banned ? "banned" : "none",
   };
 }
 
-export function trackRecords(sql: SqlStorage, ids: string[], now: number, maxAuthors: number = TRACK_RECORD_LIMITS.pageAuthors): Map<string, TrackRecord> {
-  const records = new Map<string, TrackRecord>();
+export function trackRecords(sql: SqlStorage, ids: string[], now: number, maxAuthors: number = TRACK_RECORD_LIMITS.pageAuthors): Map<string, RatedTrackRecord> {
+  const records = new Map<string, RatedTrackRecord>();
   const wanted = [...new Set(ids)].slice(0, maxAuthors);
   if (!wanted.length) return records;
   const cache = workspaceCache(sql);
   const missing: string[] = [];
   for (const id of wanted) {
     const cached = cache.get(id);
-    if (cached && now - cached.cachedAt < TRACK_RECORD_CACHE.ttlMs) records.set(id, { ...cached.record, active_days: activeDays(cached.createdAt, now) });
+    if (cached && now - cached.cachedAt < TRACK_RECORD_CACHE.ttlMs) records.set(id, rated({ ...cached.record, active_days: activeDays(cached.createdAt, now) }));
     else missing.push(id);
   }
   if (!missing.length) return records;
@@ -109,8 +132,18 @@ export function trackRecords(sql: SqlStorage, ids: string[], now: number, maxAut
   if (cache.size + agents.length > TRACK_RECORD_CACHE.maxEntries) cache.clear();
   for (const agent of agents) {
     const record = trackRecord(sql, agent, now, uses.get(agent.id) ?? NO_SEARCH_USES);
-    records.set(agent.id, record);
+    records.set(agent.id, rated(record));
     cache.set(agent.id, { record, createdAt: agent.created_at, cachedAt: now });
   }
   return records;
+}
+
+export function authorReputations(sql: SqlStorage, authorIds: string[], now: number): Map<string, number> {
+  return new Map([...trackRecords(sql, authorIds, now)].map(([authorId, record]) => [authorId, record.score]));
+}
+
+export function withAuthorRep<View extends { id: string; conversation: string; author: string }>(view: View, authorRep: number | undefined): View & { author_rep?: number } {
+  if (authorRep === undefined) return view;
+  const { id, conversation, author, ...rest } = view;
+  return { id, conversation, author, author_rep: authorRep, ...rest } as View & { author_rep: number };
 }

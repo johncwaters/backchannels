@@ -125,16 +125,25 @@ for (const protocolVersion of [MODERN, LEGACY]) {
       await expectOk(author.call("create_channel", { ...writerAgent, name: "track-proof", purpose: "Track record protocol proof" }), "create track channel");
       const posted = await expectOk(author.call("send_message", { ...writerAgent, to: "#track-proof", text: "trackrecord proof with precise useful evidence" }), "send track evidence");
       const found = await expectOk(reader.call("search_messages", { ...readerAgent, query: "in:#track-proof trackrecord proof" }), "search track evidence");
-      assert.ok(found.results.some((result) => result.id === posted.message));
-      await expectOk(reader.call("read_messages", { ...readerAgent, conversation: posted.message }), "open track evidence");
+      const foundEvidence = found.results.find((result) => result.id === posted.message);
+      assert.equal(foundEvidence?.author_rep, 13);
+      const opened = await expectOk(reader.call("read_messages", { ...readerAgent, conversation: posted.message }), "open track evidence");
+      assert.equal(opened.messages[0].author_rep, 13);
       const before = await expectOk(reader.call("lookup", { ...readerAgent, query: "evidence-writer", kind: "agent" }), "lookup before track use");
       assert.equal(before.results[0].track_record.uses, 0);
       await expectOk(reader.call("save", { ...readerAgent, message: posted.message }), "save track evidence");
       const after = await expectOk(reader.call("lookup", { ...readerAgent, query: "evidence-writer", kind: "agent" }), "lookup after track use");
-      assert.deepEqual(after.results[0].track_record, { used_by: 1, uses: 1, answered: 0, active_days: 0, moderation: "none" });
+      assert.deepEqual(after.results[0].track_record, {
+        used_by: 1, uses: 1, answered: 0, mentioned: 0, active_days: 0, open_reports: 0, moderation: "none", score: 29, level: "emerging",
+      });
+      const reread = await expectOk(reader.call("read_messages", { ...readerAgent, conversation: "#track-proof" }), "reread track evidence");
+      assert.equal(reread.messages.find((message) => message.id === posted.message)?.author_rep, 29);
       const page = await evalRequest(`/eval/admin-read?space=${space}`, "POST", { who: "trackauthor", input: { conversation: "track-proof" } });
       assert.ok(page.ok, JSON.stringify(page));
-      assert.deepEqual(page.value.messages[0].track_record, after.results[0].track_record);
+      assert.deepEqual(page.value.messages[0].track_record, {
+        ...after.results[0].track_record,
+        points: { adoption: 13, depth: 3, responsiveness: 12.5, tenure: 0, reports: 0 },
+      });
     });
 
     test("public read and mark_read clear mentions without joining the channel", async () => {

@@ -2,7 +2,7 @@ import { checkAgentName, fullHandle, ownerNameRefusal, ownerPartOfHandle } from 
 import { LIMITS } from "./limits";
 import { lookupMissNote } from "./lookupNote";
 import { SEARCH } from "./search/config";
-import { trackRecords, type TrackRecord } from "./trackRecord";
+import { publicTrackRecord, trackRecords, type PublicTrackRecord } from "./trackRecord";
 import { ToolError, all, one, run, similarity, type AgentRow, type Scope } from "./store";
 
 // Agent tools that run inside the workspace object.
@@ -43,7 +43,7 @@ interface Match {
   score: number;
   lastActivity: number;
   agent?: AgentRow;
-  track_record?: TrackRecord;
+  track_record?: PublicTrackRecord;
 }
 
 const SUBSEQUENCE_SCORE = 0.7;
@@ -125,12 +125,14 @@ export function lookup(scope: Scope, args: { query: string; kind?: "channel" | "
     .sort((a, b) => b.score - a.score || b.lastActivity - a.lastActivity)
     .slice(0, SEARCH.lookupLimit);
   const records = trackRecords(scope.sql, results.flatMap((match) => match.agent ? [match.agent.id] : []), scope.now);
-  const views = results
-    .map(({ lastActivity: _lastActivity, agent, ...match }) => ({
+  const views = results.map(({ lastActivity: _lastActivity, agent, ...match }) => {
+    const record = agent ? records.get(agent.id) : undefined;
+    return {
       ...match,
-      ...(agent ? { track_record: records.get(agent.id) } : {}),
+      ...(record ? { track_record: publicTrackRecord(record) } : {}),
       score: Math.round(match.score * 100) / 100,
-    }));
+    };
+  });
   const note = lookupMissNote(query, args.kind, views.map((result) => result.kind));
   return note ? { results: views, note } : { results: views };
 }

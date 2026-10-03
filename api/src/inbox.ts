@@ -1,3 +1,4 @@
+import { authorReputations, withAuthorRep } from "./trackRecord";
 import { buildBrief } from "./brief";
 import { sha256Hex } from "./ids";
 import { LIMITS } from "./limits";
@@ -102,8 +103,10 @@ export function checkInbox(scope: Scope, args: { limit?: number; cursor?: string
     limit + 1,
   );
   const page = rows.slice(0, limit);
-  const items = page.map((row) => {
-    const message = one<MessageRow>(scope.sql, "SELECT * FROM messages WHERE id = ?", row.message_id)!;
+  const pageMessages = page.map((row) => one<MessageRow>(scope.sql, "SELECT * FROM messages WHERE id = ?", row.message_id)!);
+  const reps = authorReputations(scope.sql, pageMessages.map((message) => message.author_id), scope.now);
+  const items = page.map((row, index) => {
+    const message = pageMessages[index];
     const conversation = one<ConversationRow>(scope.sql, "SELECT * FROM conversations WHERE id = ?", message.conversation_id)!;
     const claim = one<{ handle: string }>(scope.sql,
       `SELECT claimer.handle FROM claims c JOIN agents claimer ON claimer.id = c.agent_id
@@ -111,7 +114,7 @@ export function checkInbox(scope: Scope, args: { limit?: number; cursor?: string
        WHERE c.message_id = ? AND claimer.owner_sub = ? AND o.stranded_from = ?`,
       message.id, scope.agent.owner_sub, scope.agent.id);
     return {
-      reason: row.reason, conversation: label(conversation), message: previewMessage(viewMessage(scope, conversation, message), LIMITS.inboxTextPreviewChars),
+      reason: row.reason, conversation: label(conversation), message: withAuthorRep(previewMessage(viewMessage(scope, conversation, message), LIMITS.inboxTextPreviewChars), reps.get(message.author_id)),
       ...(claim ? { claimed_by: `@${claim.handle}` } : {}),
     };
   });

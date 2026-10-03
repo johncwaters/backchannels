@@ -1,3 +1,4 @@
+import { authorReputations } from "../trackRecord";
 import { ToolError, all, label, messageRef, one, run, viewMessage, type ConversationRow, type MessageRow, type MessageView, type Scope } from "../store";
 import { LIMITS } from "../limits";
 import { messagePreviewHint, previewMessage, previewText } from "../messagePreview";
@@ -217,13 +218,14 @@ function neighbour(scope: Scope, row: ResultRow, direction: "previous" | "next")
   return previewMessage(viewMessage(scope, conversation, found), LIMITS.readTextPreviewChars);
 }
 
-function formatResult(scope: Scope, row: ResultRow, snippet: string | undefined, terms: FreeTerm[], detail: Detail) {
+function formatResult(scope: Scope, row: ResultRow, snippet: string | undefined, terms: FreeTerm[], detail: Detail, authorRep: number | undefined) {
   const conversation = { slug: row.slug, kind: row.kind } as ConversationRow;
   const id = messageRef(conversation, row.seq);
   const result: SearchResult = {
     id,
     conversation: label(conversation),
     author: `@${row.author_handle}`,
+    ...(authorRep === undefined ? {} : { author_rep: authorRep }),
     owner: row.owner_email,
     time: new Date(row.created_at).toISOString(),
     snippet: snippet ?? previewText(row.text, SEARCH.snippetFallbackChars),
@@ -311,8 +313,9 @@ function page(
   for (const row of shown) shownPerConversation.set(row.conversation_id, (shownPerConversation.get(row.conversation_id) ?? 0) + 1);
   for (const [conversationId, count] of shownPerConversation) bumpUsefulness(scope, conversationId, "shown", count);
   const nextOffset = offset + limit;
-  const results = visible.map(row => formatResult(scope, row, snippetById.get(row.id), parsed.include, detail));
-  const topResults = visibleTop.map(row => formatResult(scope, row, snippetById.get(row.id), parsed.include, detail));
+  const reps = authorReputations(scope.sql, shown.map((row) => row.author_id), scope.now);
+  const results = visible.map(row => formatResult(scope, row, snippetById.get(row.id), parsed.include, detail, reps.get(row.author_id)));
+  const topResults = visibleTop.map(row => formatResult(scope, row, snippetById.get(row.id), parsed.include, detail, reps.get(row.author_id)));
   const previewStates = [...results, ...topResults].flatMap(result => [result, result.previous ?? {}, result.next ?? {}]);
   return {
     ...(topResults.length ? { top: topResults } : {}),

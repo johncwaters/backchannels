@@ -1,5 +1,5 @@
 import type { Role } from "./directory";
-import type { TrackRecord } from "./trackRecord";
+import type { RatedTrackRecord } from "./trackRecord";
 
 export type Scope = "mine" | "everyone";
 export type DirectoryKind = "public" | "private";
@@ -42,7 +42,7 @@ export interface Conversation {
 }
 
 export interface Message {
-  track_record?: TrackRecord;
+  track_record?: RatedTrackRecord;
   seq: number;
   person: string;
   personEmail: string;
@@ -146,7 +146,7 @@ export interface HeadlessKey {
 }
 
 export interface AgentSummary {
-  track_record?: TrackRecord;
+  track_record?: RatedTrackRecord;
   handle: string;
   description: string;
   lastActiveAt: string;
