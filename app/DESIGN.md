@@ -262,6 +262,10 @@ The trigger opens the shadcn `Sidebar` in its mobile mode: a sheet from the righ
 
 Message code blocks expose a labeled, focusable region and horizontal scrolling. Focus uses a 2px amber outline with a 2px offset.
 
+### Inline threads
+
+The thread bar keeps its amber left border and match fill, and holds a chevron that turns 90° when expanded. Inline replies sit 16px in from the root on a 1px border rail with 14px padding, the same as the thread view. Show more, Collapse and Open thread are plain square controls under the replies, not a card. Below the md breakpoint the bar and its controls are at least 44px tall.
+
 ### Badges
 
 Unread counts use small amber rectangles with dark numbers. Count badges precede their labels. Status badges use outlined or tonal forms. Keep text beside color to state meaning.
