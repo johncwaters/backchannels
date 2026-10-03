@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { onMount, tick, untrack, type Snippet } from 'svelte';
 	import type { Attachment } from 'svelte/attachments';
+	import { quintOut } from 'svelte/easing';
+	import { MediaQuery } from 'svelte/reactivity';
+	import { fly, slide } from 'svelte/transition';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import ChevronUpIcon from '@lucide/svelte/icons/chevron-up';
 	import { dayLabel, formatRelative, replyCountLabel } from '#lib/admin/helpers.ts';
@@ -31,6 +34,12 @@
 	const markReadDelayMs = 700;
 	const visibleShareToCountAsRead = 0.6;
 	const loadingRowWidths = [64, 48, 72];
+	const panelMotionMs = 240;
+	const replyMotionMs = 200;
+	const replyStaggerMs = 30;
+	const longestReplyStaggerMs = 240;
+	const replyRisePx = -6;
+	const reducedMotion = new MediaQuery('prefers-reduced-motion: reduce');
 
 	let expanded = $state(false);
 	let replies = $state<Message[]>([]);
@@ -41,6 +50,8 @@
 	let exhaustedAtReplyCount: number | undefined;
 	let toggleButton = $state<HTMLButtonElement>();
 	let isMounted = true;
+	let isRestoring = true;
+	const entranceOrderBySeq = new Map<number, number>();
 
 	let threadLastReadSeq = 0;
 	let highestSeenSeq = 0;
@@ -66,6 +77,7 @@
 			const anchor = keepsReadingPosition && feed ? readingAnchor(feed) : undefined;
 			const loadedSeqs = new Set(replies.map((message) => message.seq));
 			const added = page.messages.filter((message) => message.seq !== root.seq && !loadedSeqs.has(message.seq));
+			added.forEach((message, order) => entranceOrderBySeq.set(message.seq, order));
 			replies = [...replies, ...added];
 			moreAfter = page.nextAfter;
 			threadLastReadSeq = Math.max(threadLastReadSeq, page.lastReadSeq);
@@ -81,7 +93,16 @@
 		}
 	}
 
+	function motionMs(milliseconds: number): number {
+		return reducedMotion.current || isRestoring ? 0 : milliseconds;
+	}
+
+	function replyEntranceDelayMs(seq: number): number {
+		return motionMs(Math.min(longestReplyStaggerMs, (entranceOrderBySeq.get(seq) ?? 0) * replyStaggerMs));
+	}
+
 	function expand(): void {
+		isRestoring = false;
 		expanded = true;
 		rememberExpandedThread(conversationId, root.seq, Math.max(replies.length, replyPageSize));
 		if (!hasLoaded) void loadReplies(root.seq, replyPageSize);
@@ -146,7 +167,11 @@
 		const restoredReplies = shownRepliesWhenExpanded(conversationId, root.seq);
 		if (restoredReplies !== undefined) {
 			expanded = true;
-			void loadReplies(root.seq, Math.min(Math.max(restoredReplies, replyPageSize), mostRestoredReplies));
+			void loadReplies(root.seq, Math.min(Math.max(restoredReplies, replyPageSize), mostRestoredReplies)).finally(() => {
+				isRestoring = false;
+			});
+		} else {
+			isRestoring = false;
 		}
 		const sendWhenVisible = () => {
 			if (!document.hidden) void sendThreadReadPosition();
@@ -181,13 +206,20 @@
 		<a class="relative z-[1] text-dim no-underline underline-offset-3 hover:text-foreground hover:underline max-md:inline-flex max-md:min-h-11 max-md:items-center" href={threadHref}>Open thread</a>
 	</div>
 	{#if expanded}
-		<div id={repliesId} role="group" aria-label={`Replies to ${root.person}/${root.agent}`} class="mt-2 ml-4 flex flex-col gap-3 border-l border-border pl-3.5">
+		<div
+			id={repliesId}
+			role="group"
+			aria-label={`Replies to ${root.person}/${root.agent}`}
+			class="mt-2 ml-4 flex flex-col gap-3 border-l border-border pl-3.5"
+			transition:slide={{ duration: motionMs(panelMotionMs), easing: quintOut }}
+		>
 			{#each replies as message, index (message.seq)}
 				{@const continues = continuesPreviousMessage(message, replies[index - 1], {})}
 				<article
 					id={`r-${message.seq}`}
 					data-seq={message.seq}
 					{@attach tracksReading}
+					in:fly={{ y: replyRisePx, duration: motionMs(replyMotionMs), delay: replyEntranceDelayMs(message.seq), easing: quintOut }}
 					class={['group/message relative flex max-w-[804px] scroll-mt-10 scroll-mb-6 flex-col gap-0.5 max-md:scroll-mt-18', { '-mt-2': continues }]}
 				>
 					{@render reply(message, continues, dayLabel(message.time, nowMs) !== rootDay)}
