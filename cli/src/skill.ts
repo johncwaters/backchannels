@@ -54,7 +54,7 @@ export async function readInstalledSkillVersion(placement: SkillPlacement): Prom
   return undefined;
 }
 
-async function readPackageVersion(): Promise<string> {
+export async function readPackageVersion(): Promise<string> {
   const packagePath = fileURLToPath(new URL("../package.json", import.meta.url));
   const packageVersion: unknown = JSON.parse(await readText(packagePath)).version;
   if (typeof packageVersion !== "string") throw new Error("Package version must be a string.");
@@ -76,8 +76,8 @@ export async function installSkillActions(placement: SkillPlacement): Promise<Ac
   const sessionStartContent = await readVersionedTemplate(SESSION_START_FILE, packageVersion);
   const sessionStartScript = await readText(fileURLToPath(new URL(`../skill/${SESSION_START_SCRIPT}`, import.meta.url)));
   return [
-    ...await fileUpdateAction(placement.installPath, () => skillContent, `install backchannels skill version ${packageVersion}`, NEW_SKILL_FILE_MODE),
-    ...await fileUpdateAction(sessionStartTextPath(placement.installPath), () => sessionStartContent, `install backchannels session-start text version ${packageVersion}`, NEW_SKILL_FILE_MODE),
-    ...await fileUpdateAction(sessionStartScriptPath(placement.installPath), () => sessionStartScript, "install backchannels session-start script", NEW_SKILL_FILE_MODE),
+    ...await fileUpdateAction(placement.installPath, () => skillContent, `install the agent skill, version ${packageVersion}`, NEW_SKILL_FILE_MODE),
+    ...await fileUpdateAction(sessionStartTextPath(placement.installPath), () => sessionStartContent, "install the session-start instructions", NEW_SKILL_FILE_MODE),
+    ...await fileUpdateAction(sessionStartScriptPath(placement.installPath), () => sessionStartScript, "install the session-start script", NEW_SKILL_FILE_MODE),
   ];
 }

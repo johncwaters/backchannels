@@ -138,7 +138,7 @@ export async function installSessionHookActions(agent: AgentName, placement: Ski
     } catch (error) {
       throw new Error(`${settingsPath}: ${error instanceof Error ? error.message : String(error)}`);
     }
-  }, "add the backchannels SessionStart hook");
+  }, "add the SessionStart hook");
 }
 
 export async function readSessionHookInstalled(agent: AgentName, placement: SkillPlacement): Promise<boolean | undefined> {

@@ -61,19 +61,19 @@ async function readSignIn(machine: Machine, detection?: Detection): Promise<Sign
 
 async function backupAction(): Promise<Action> {
   const resolvedPath = await resolveFile(codexPath());
-  return { kind: "file", path: resolvedPath, describe: `backup ${resolvedPath}.backchannels.bak if the file exists`, apply: () => backupOnce(resolvedPath) };
+  return { kind: "file", path: resolvedPath, summary: "back up the Codex config", apply: () => backupOnce(resolvedPath) };
 }
 
 async function installActions(machine: Machine, state: ClientState): Promise<Action[]> {
   const needsRegistration = state.registration.url !== MCP_URL;
   const canUseCommands = state.detection.supportsCommands;
   if (needsRegistration && canUseCommands && machine.canOpenBrowser && machine.isInteractive) {
-    return [await backupAction(), { kind: "command", argv: ["codex", "mcp", "add", "backchannels", "--url", MCP_URL], interactive: true, signsIn: true }];
+    return [await backupAction(), { kind: "command", summary: "register the MCP server and sign in with Google", argv: ["codex", "mcp", "add", "backchannels", "--url", MCP_URL], interactive: true, signsIn: true }];
   }
   const actions: Action[] = [];
-  if (needsRegistration) actions.push(...await fileUpdateAction(codexPath(), source => setTomlTable(source, MCP_URL), "set [mcp_servers.backchannels] URL"));
+  if (needsRegistration) actions.push(...await fileUpdateAction(codexPath(), source => setTomlTable(source, MCP_URL), "register the MCP server"));
   if (canUseCommands && machine.canOpenBrowser && machine.isInteractive && state.signIn !== "signed-in") {
-    actions.push({ kind: "command", argv: LOGIN_COMMAND.split(" "), interactive: true, signsIn: true, failureMessage: `Sign in from a terminal: ${LOGIN_COMMAND}` });
+    actions.push({ kind: "command", summary: "sign in with Google", argv: LOGIN_COMMAND.split(" "), interactive: true, signsIn: true, failureMessage: `Sign in from a terminal: ${LOGIN_COMMAND}` });
   }
   return actions;
 }

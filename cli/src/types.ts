@@ -24,6 +24,7 @@ export interface ClientState {
 
 export interface CommandAction {
   kind: "command";
+  summary: string;
   argv: string[];
   interactive: boolean;
   signsIn?: boolean;
@@ -34,7 +35,7 @@ export interface CommandAction {
 export interface FileAction {
   kind: "file";
   path: string;
-  describe: string;
+  summary: string;
   apply: () => Promise<void>;
 }
 

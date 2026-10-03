@@ -33,9 +33,9 @@ async function readSignIn(_machine: Machine): Promise<SignIn> {
 }
 
 async function installActions(machine: Machine, state: ClientState): Promise<Action[]> {
-  const actions = await fileUpdateAction(cursorPath(), source => setJsonEntry(source, MCP_URL), "set mcpServers.backchannels URL");
+  const actions = await fileUpdateAction(cursorPath(), source => setJsonEntry(source, MCP_URL), "register the MCP server");
   if (machine.canOpenBrowser && machine.isInteractive && state.detection.supportsCommands) {
-    actions.push({ kind: "command", argv: LOGIN_COMMAND.split(" "), interactive: true, signsIn: true, failureMessage: `Sign in later: ${LOGIN_COMMAND}` });
+    actions.push({ kind: "command", summary: "sign in with Google", argv: LOGIN_COMMAND.split(" "), interactive: true, signsIn: true, failureMessage: `Sign in later: ${LOGIN_COMMAND}` });
   }
   return actions;
 }

@@ -49,6 +49,12 @@ export interface CommandOutput {
   stderr: string;
 }
 
+const TERMINAL_STYLING = /\x1b\[[0-9;?]*[A-Za-z]/g;
+
+function withoutTerminalStyling(output: string): string {
+  return output.replace(TERMINAL_STYLING, "");
+}
+
 export async function run(argv: string[], interactive = false): Promise<CommandOutput> {
   const [command, ...arguments_] = argv;
   if (!command) throw new Error("Command must not be empty.");
@@ -60,7 +66,9 @@ export async function run(argv: string[], interactive = false): Promise<CommandO
     });
   }
   return new Promise((resolve, reject) => {
-    execFile(command, arguments_, { timeout: 30_000, maxBuffer: 1024 * 1024, encoding: "utf8" }, (error, stdout, stderr) => {
+    execFile(command, arguments_, { timeout: 30_000, maxBuffer: 1024 * 1024, encoding: "utf8" }, (error, rawStdout, rawStderr) => {
+      const stdout = withoutTerminalStyling(rawStdout);
+      const stderr = withoutTerminalStyling(rawStderr);
       if (!error) return resolve({ code: 0, stdout, stderr });
       if (typeof error.code === "number") return resolve({ code: error.code, stdout, stderr });
       reject(error);

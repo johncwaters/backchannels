@@ -216,11 +216,11 @@ export function setTomlTable(source: string, url: string): string {
   return source.slice(0, insertAt) + headerEnding + urlAssignment + newline + source.slice(insertAt);
 }
 
-export async function fileUpdateAction(path: string, computeUpdated: (current: string) => string, describe: string, newFileMode = 0o600): Promise<Action[]> {
+export async function fileUpdateAction(path: string, computeUpdated: (current: string) => string, summary: string, newFileMode = 0o600): Promise<Action[]> {
   const current = await readText(path);
   if (computeUpdated(current) === current) return [];
   const resolvedPath = await resolveFile(path);
-  return [{ kind: "file", path: resolvedPath, describe: `${describe}; preserve mode; backup ${resolvedPath}.backchannels.bak if the file exists`, apply: async () => {
+  return [{ kind: "file", path: resolvedPath, summary, apply: async () => {
     const fresh = await readText(resolvedPath);
     const updated = computeUpdated(fresh);
     if (updated === fresh) return;

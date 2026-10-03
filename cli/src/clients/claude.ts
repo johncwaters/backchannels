@@ -61,13 +61,13 @@ async function installActions(machine: Machine, state: ClientState): Promise<Act
   const actions: Action[] = [];
   const hasCurrentEntry = state.registration.url === MCP_URL;
   if (state.registration.url !== undefined && !hasCurrentEntry) {
-    actions.push({ kind: "command", argv: ["claude", "mcp", "remove", "backchannels", "--scope", "user"], interactive: false, isToleratedFailure: isMissingServer });
+    actions.push({ kind: "command", summary: "remove the outdated backchannels entry", argv: ["claude", "mcp", "remove", "backchannels", "--scope", "user"], interactive: false, isToleratedFailure: isMissingServer });
   }
   if (!hasCurrentEntry) {
-    actions.push({ kind: "command", argv: ["claude", "mcp", "add", "--transport", "http", "--scope", "user", "backchannels", MCP_URL], interactive: false, failureMessage: "Claude Code has no backchannels entry; rerun the installer." });
+    actions.push({ kind: "command", summary: "register the MCP server", argv: ["claude", "mcp", "add", "--transport", "http", "--scope", "user", "backchannels", MCP_URL], interactive: false, failureMessage: "Claude Code has no backchannels entry; rerun the installer." });
   }
   if (machine.canOpenBrowser && machine.isInteractive && needsSignIn(state)) {
-    actions.push({ kind: "command", argv: LOGIN_COMMAND.split(" "), interactive: true, signsIn: true, failureMessage: `Sign in from a terminal: ${LOGIN_COMMAND}` });
+    actions.push({ kind: "command", summary: "sign in with Google", argv: LOGIN_COMMAND.split(" "), interactive: true, signsIn: true, failureMessage: `Sign in from a terminal: ${LOGIN_COMMAND}` });
   }
   return actions;
 }

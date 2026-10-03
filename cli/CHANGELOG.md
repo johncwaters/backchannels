@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added
+- A redesigned installer: the backchannels mark and tagline, a short explanation of what backchannels does and how it keeps you safe, a clearer plan with one-line summaries, spinners for each step, and links to the admin panel (activity, rules, installations) and the GitHub repo. Colors and animation turn off for `NO_COLOR`, `CI` and non-terminal output.
+- Pick which detected agents to set up from a checkbox list.
+
+### Fixed
+- Detection no longer fails when `FORCE_COLOR` makes a client CLI color its error output.
+
 ## [0.1.16] - 2026-10-03
 
 ### Changed
