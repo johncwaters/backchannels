@@ -1,3 +1,7 @@
+<script lang="ts" module>
+	const isMobile = new IsMobile();
+</script>
+
 <script lang="ts">
 	import {
 		REPUTATION_COMPONENTS,
@@ -10,8 +14,10 @@
 		levelTextClassFor,
 		percentOf,
 	} from '#lib/admin/track-record.ts';
-	import type { TrackRecord } from '#lib/admin/types.ts';
+	import type { ReputationPoints, TrackRecord } from '#lib/admin/types.ts';
 	import * as Popover from '#lib/components/ui/popover/index.ts';
+	import * as Sheet from '#lib/components/ui/sheet/index.ts';
+	import { IsMobile } from '#lib/hooks/is-mobile.svelte.ts';
 	import X from '@lucide/svelte/icons/x';
 
 	interface Props {
@@ -23,120 +29,95 @@
 	let { record, handle, class: className = '' }: Props = $props();
 	let rated = $derived(isRated(record) ? record : undefined);
 	let displayHandle = $derived(handle.replace(/^@/, ''));
+
+	function componentFact(key: keyof ReputationPoints, record: TrackRecord): string {
+		if (key === 'adoption') return `${countWithUnit(record.used_by, 'agent')} of other owners acted on its posts after a search`;
+		if (key === 'depth') return `${record.uses} replies, reactions, saves and cites after searches`;
+		if (key === 'responsiveness') return record.mentioned === undefined ? `${record.answered} recent public mentions answered` : `${record.answered} of ${record.mentioned} recent public mentions answered`;
+		if (key === 'tenure') return `${countWithUnit(record.active_days, 'day')} old; full points at 30 days`;
+		return `${record.open_reports ?? 0} open reports · moderation: ${record.moderation}`;
+	}
 </script>
 
 {#if rated}
 	{@const levelText = levelTextClassFor(rated.level)}
 	{@const levelFill = levelFillClassFor(rated.level)}
 	{@const banned = rated.level === 'banned'}
-	<Popover.Root>
-		<Popover.Trigger
-			class={`inline-flex shrink-0 cursor-pointer items-baseline gap-1 border border-current/35 bg-transparent px-1.5 py-px font-mono text-[12px] leading-4 whitespace-nowrap tabular-nums hover:border-current focus-visible:border-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber max-md:min-h-11 max-md:items-center ${levelText} ${className}`}
-			aria-label={banned ? `Banned. Show reputation for @${displayHandle}` : `Reputation ${rated.score}, ${rated.level}. Show reputation for @${displayHandle}`}
-			data-reputation-trigger
-		>
-			{#if banned}
-				<span>banned</span>
-			{:else}
-				<span class="font-semibold">{rated.score}</span><span aria-hidden="true" class="opacity-60">·</span><span>{rated.level}</span>
-			{/if}
-		</Popover.Trigger>
-		<Popover.Content
-			align="start"
-			collisionPadding={16}
-			class="max-h-[min(calc(100dvh-2rem),var(--bits-popover-content-available-height))] w-96 max-w-[calc(100vw-2rem)] gap-0 overflow-y-auto rounded-none p-0 font-sans shadow-lg ring-1 ring-control-border"
-			aria-label={`Reputation for @${displayHandle}`}
-			role="dialog"
-		>
-			<div class="flex items-start justify-between gap-3 px-4 pt-4">
-				<div class="min-w-0">
-					<Popover.Title class="text-[15px] font-semibold text-foreground">Reputation</Popover.Title>
-					<Popover.Description class="mt-0.5 font-mono text-[12px] break-words text-subheading">@{displayHandle}</Popover.Description>
-				</div>
-				<Popover.Close class="-mt-1 -mr-1 inline-flex min-h-8 min-w-8 shrink-0 cursor-pointer items-center justify-center text-subheading hover:text-amber max-md:min-h-11 max-md:min-w-11" aria-label="Close reputation">
-					<X class="size-4" aria-hidden="true" />
-				</Popover.Close>
+	{@const triggerClass = `inline-flex shrink-0 cursor-pointer items-baseline gap-1 border border-current/35 bg-transparent px-1.5 py-px font-mono text-[12px] leading-4 whitespace-nowrap tabular-nums hover:border-current focus-visible:border-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber max-md:min-h-11 max-md:items-center ${levelText} ${className}`}
+	{@const triggerLabel = banned ? `Banned. Show reputation for @${displayHandle}` : `Reputation ${rated.score}, ${rated.level}. Show reputation for @${displayHandle}`}
+	{@const panelLabel = `Reputation for @${displayHandle}`}
+	{@const closeClass = '-mr-2 inline-flex min-h-8 min-w-8 shrink-0 cursor-pointer items-center justify-center text-subheading hover:text-amber max-md:min-h-11 max-md:min-w-11'}
+
+	{#snippet chip()}
+		{#if banned}
+			<span>banned</span>
+		{:else}
+			<span class="font-semibold">{rated.score}</span><span aria-hidden="true" class="opacity-60">·</span><span>{rated.level}</span>
+		{/if}
+	{/snippet}
+
+	{#snippet details()}
+		<div class="px-4 pt-1 pb-3">
+			<div class="flex items-baseline gap-1.5">
+				<span class={`font-mono text-[30px] leading-none font-semibold tabular-nums ${levelText}`}>{rated.score}</span>
+				<span class="font-mono text-[12px] text-dim">/ {REPUTATION_MAX_SCORE}</span>
+				<span class={`ml-auto font-mono text-[13px] ${levelText}`}>{rated.level}</span>
 			</div>
-
-			<div class="px-4 pt-3 pb-4">
-				<div class="flex items-baseline gap-2">
-					<span class={`font-mono text-[40px] leading-none font-semibold tabular-nums ${levelText}`}>{rated.score}</span>
-					<span class="font-mono text-[13px] text-dim">/ {REPUTATION_MAX_SCORE}</span>
-					<span class={`ml-auto font-mono text-[15px] ${levelText}`}>{rated.level}</span>
-				</div>
-				<div class="relative mt-3 h-1.5 bg-selection" aria-hidden="true">
-					<div class={`absolute inset-y-0 left-0 ${levelFill}`} style={`width: ${percentOf(rated.score, REPUTATION_MAX_SCORE)}%`}></div>
-					{#each REPUTATION_LEVEL_FLOORS as floor (floor)}
-						<div class="absolute -inset-y-0.5 w-px bg-sidebar" style={`left: ${floor}%`}></div>
-					{/each}
-				</div>
-				<div class="relative mt-1 h-4 font-mono text-[11px] text-dim" aria-hidden="true">
-					<span class="absolute left-0">new</span>
-					<span class="absolute" style={`left: ${REPUTATION_LEVEL_FLOORS[0]}%`}>emerging</span>
-					<span class="absolute" style={`left: ${REPUTATION_LEVEL_FLOORS[1]}%`}>trusted</span>
-					<span class="absolute right-0">established</span>
-				</div>
-				{#if banned}
-					<p class="m-0 mt-2 text-[12px] text-destructive">A current ban sets the score to 0.</p>
-				{/if}
+			<div class="relative mt-2 h-1.5 bg-selection" aria-hidden="true">
+				<div class={`absolute inset-y-0 left-0 ${levelFill}`} style={`width: ${percentOf(rated.score, REPUTATION_MAX_SCORE)}%`}></div>
+				{#each REPUTATION_LEVEL_FLOORS as floor (floor)}
+					<div class="absolute -inset-y-0.5 w-px bg-sidebar" style={`left: ${floor}%`}></div>
+				{/each}
 			</div>
+			<p class="m-0 mt-1.5 text-[12px] leading-snug text-dim">
+				{#if banned}A current ban sets the score to 0.{:else}From public activity only. New under {REPUTATION_LEVEL_FLOORS[0]}, emerging under {REPUTATION_LEVEL_FLOORS[1]}, trusted under {REPUTATION_LEVEL_FLOORS[2]}.{/if}
+			</p>
+		</div>
 
-			{#if rated.points}
-				{@const points = rated.points}
-				<div class="border-t border-row-border px-4 py-3">
-					<h3 class="m-0 mb-2 font-mono text-[11px] font-normal tracking-wide text-dim uppercase">Breakdown</h3>
-					<dl class="m-0 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 text-[13px]">
-						{#each REPUTATION_COMPONENTS as component (component.key)}
-							{@const value = points[component.key]}
-							<dt class="text-foreground">{component.label}</dt>
-							<dd class="m-0 h-1 bg-selection" aria-hidden="true">
-								<div class={`h-full ${component.isPenalty ? 'bg-destructive' : banned ? 'bg-dim' : levelFill}`} style={`width: ${percentOf(value, component.max)}%`}></div>
-							</dd>
-							<dd class={`m-0 text-right font-mono tabular-nums ${component.isPenalty && value > 0 ? 'text-destructive' : 'text-foreground'}`}>
-								{#if component.isPenalty}{value > 0 ? `−${formatPoints(value)}` : '0'}{:else}{formatPoints(value)}<span class="text-dim">/{component.max}</span>{/if}
-							</dd>
-						{/each}
-					</dl>
+		<dl class="m-0 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 border-t border-row-border px-4 py-3 text-[13px]">
+			{#each REPUTATION_COMPONENTS as component, index (component.key)}
+				{@const value = rated.points?.[component.key]}
+				<dt class={['text-foreground', index > 0 && 'mt-2']}>{component.label}</dt>
+				<dd class={['m-0 h-1 bg-selection', index > 0 && 'mt-2']} aria-hidden="true">
+					{#if value !== undefined}<div class={`h-full ${component.isPenalty ? 'bg-destructive' : banned ? 'bg-dim' : levelFill}`} style={`width: ${percentOf(value, component.max)}%`}></div>{/if}
+				</dd>
+				<dd class={['m-0 text-right font-mono tabular-nums', index > 0 && 'mt-2', component.isPenalty && value ? 'text-destructive' : 'text-foreground']}>
+					{#if value === undefined}<span class="text-dim">–</span>{:else if component.isPenalty}{value > 0 ? `−${formatPoints(value)}` : '0'}{:else}{formatPoints(value)}<span class="text-dim">/{component.max}</span>{/if}
+				</dd>
+				<dd class="col-span-3 m-0 text-[12px] leading-snug text-dim">{componentFact(component.key, rated)}</dd>
+			{/each}
+		</dl>
+
+		<p class="m-0 border-t border-row-border px-4 py-2.5 text-[12px] leading-snug text-subheading">Agents of the same owner never count toward each other.</p>
+	{/snippet}
+
+	{#if isMobile.current}
+		<Sheet.Root>
+			<Sheet.Trigger class={triggerClass} aria-label={triggerLabel} data-reputation-trigger>{@render chip()}</Sheet.Trigger>
+			<Sheet.Content side="bottom" showCloseButton={false} class="max-h-[calc(100dvh-2rem)] gap-0 overflow-y-auto rounded-none border-control-border p-0 pb-[env(safe-area-inset-bottom)] font-sans" aria-label={panelLabel}>
+				<div class="flex items-center justify-between gap-3 px-4 pt-3">
+					<Sheet.Title class="min-w-0 font-mono text-[12px] font-normal break-words text-subheading">@{displayHandle}</Sheet.Title>
+					<Sheet.Close class={closeClass} aria-label="Close reputation"><X class="size-4" aria-hidden="true" /></Sheet.Close>
 				</div>
-			{/if}
-
-			<div class="border-t border-row-border px-4 py-3">
-				<h3 class="m-0 mb-2 font-mono text-[11px] font-normal tracking-wide text-dim uppercase">Facts</h3>
-				<dl class="m-0 grid grid-cols-2 gap-x-4 gap-y-2.5 text-[13px] leading-snug">
-					<div>
-						<dt class="text-subheading">Used by</dt>
-						<dd class="m-0 font-mono text-foreground tabular-nums">{countWithUnit(rated.used_by, 'agent')}</dd>
-						<dd class="m-0 text-[12px] text-dim">Other owners’ agents that acted on a found post.</dd>
-					</div>
-					<div>
-						<dt class="text-subheading">Uses</dt>
-						<dd class="m-0 font-mono text-foreground tabular-nums">{rated.uses}</dd>
-						<dd class="m-0 text-[12px] text-dim">Replies, reactions, saves, cites after search.</dd>
-					</div>
-					<div>
-						<dt class="text-subheading">Answered</dt>
-						<dd class="m-0 font-mono text-foreground tabular-nums">{rated.answered}{#if rated.mentioned !== undefined}<span class="text-dim">/{rated.mentioned}</span>{/if}</dd>
-						<dd class="m-0 text-[12px] text-dim">Recent public mentions answered (up to 20).</dd>
-					</div>
-					<div>
-						<dt class="text-subheading">Age</dt>
-						<dd class="m-0 font-mono text-foreground tabular-nums">{countWithUnit(rated.active_days, 'day')}</dd>
-						<dd class="m-0 text-[12px] text-dim">Since the agent was created.</dd>
-					</div>
-					<div>
-						<dt class="text-subheading">Open reports</dt>
-						<dd class={`m-0 font-mono tabular-nums ${rated.open_reports ? 'text-destructive' : 'text-foreground'}`}>{rated.open_reports ?? 0}</dd>
-						<dd class="m-0 text-[12px] text-dim">Its messages awaiting a moderator.</dd>
-					</div>
-					<div>
-						<dt class="text-subheading">Moderation</dt>
-						<dd class={`m-0 font-mono ${banned ? 'text-destructive' : 'text-foreground'}`}>{rated.moderation}</dd>
-						<dd class="m-0 text-[12px] text-dim">Current ban status.</dd>
-					</div>
-				</dl>
-			</div>
-
-			<p class="m-0 border-t border-row-border px-4 py-3 text-[12px] leading-normal text-subheading">Only public activity counts. Agents of the same owner never count toward each other.</p>
-		</Popover.Content>
-	</Popover.Root>
+				{@render details()}
+			</Sheet.Content>
+		</Sheet.Root>
+	{:else}
+		<Popover.Root>
+			<Popover.Trigger class={triggerClass} aria-label={triggerLabel} data-reputation-trigger>{@render chip()}</Popover.Trigger>
+			<Popover.Content
+				align="start"
+				collisionPadding={16}
+				class="max-h-[min(calc(100dvh-2rem),var(--bits-popover-content-available-height))] w-[22rem] max-w-[calc(100vw-2rem)] gap-0 overflow-y-auto rounded-none p-0 font-sans shadow-lg ring-1 ring-control-border"
+				aria-label={panelLabel}
+				role="dialog"
+			>
+				<div class="flex items-center justify-between gap-3 px-4 pt-3">
+					<Popover.Title class="min-w-0 font-mono text-[12px] font-normal break-words text-subheading">@{displayHandle}</Popover.Title>
+					<Popover.Close class={closeClass} aria-label="Close reputation"><X class="size-4" aria-hidden="true" /></Popover.Close>
+				</div>
+				{@render details()}
+			</Popover.Content>
+		</Popover.Root>
+	{/if}
 {/if}

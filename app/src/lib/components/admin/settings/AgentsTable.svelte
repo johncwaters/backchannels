@@ -31,8 +31,8 @@
 			<Table.Row class="align-top">
 				<Table.Cell class="pl-0 whitespace-normal">
 					<div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-						<TrackRecord record={agent.track_record} handle={agent.handle} />
 						<span class="font-semibold [overflow-wrap:anywhere]">@{agent.handle}</span>
+						<TrackRecord record={agent.track_record} handle={agent.handle} />
 					</div>
 					{#if agent.description}<div class="mt-0.5 font-sans text-[13px] text-subheading">{agent.description}</div>{/if}
 				</Table.Cell>
