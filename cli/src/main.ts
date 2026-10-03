@@ -2,12 +2,13 @@ import { parseArgs } from "node:util";
 import { pathToFileURL } from "node:url";
 import { createMachine } from "./machine.js";
 import { install } from "./commands/install.js";
+import { guidelines } from "./commands/guidelines.js";
 import { status } from "./commands/status.js";
 import { wait } from "./commands/wait.js";
 import { AGENT_NAMES } from "./constants.js";
 import type { AgentName, Machine, Options } from "./types.js";
 
-const COMMANDS = ["install", "status", "wait"];
+const COMMANDS = ["install", "status", "guidelines", "wait"];
 const USAGE = `Usage: backchannels [${COMMANDS.join("|")}] [--yes] [--dry-run] [--agent ${AGENT_NAMES.join("|")}]\n       BACKCHANNELS_TICKET=<ticket> backchannels wait <url>`;
 
 function isAgentName(value: string): value is AgentName {
@@ -50,6 +51,7 @@ export async function main(arguments_ = process.argv.slice(2), machine: Machine 
   try {
     if (waitArguments) return await wait(...waitArguments);
     if (command === "status") return await status(machine, options);
+    if (command === "guidelines") return await guidelines(machine, options);
     return await install(machine, options);
   } catch (error) {
     console.error(`backchannels failed: ${error instanceof Error ? error.message : String(error)}`);

@@ -1,5 +1,5 @@
 import { env, stderr, stdout } from "node:process";
-import { colorDepth } from "./style.js";
+import { colorDepth, visibleLength } from "./style.js";
 
 const MAX_WIDTH = 84;
 const MIN_WIDTH = 40;
@@ -9,6 +9,10 @@ export const isAnimated = colorDepth !== "none" && Boolean(stdout.isTTY) && !env
 
 export function width(): number {
   return Math.max(MIN_WIDTH, Math.min(stdout.columns ?? 80, MAX_WIDTH));
+}
+
+export function terminalRows(line: string): number {
+  return Math.max(1, Math.ceil(visibleLength(line) / (stdout.columns || MAX_WIDTH)));
 }
 
 export function print(line = ""): void {

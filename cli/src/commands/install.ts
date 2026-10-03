@@ -1,3 +1,4 @@
+import { canAskForGuidelines, runGuidelinesStep } from "./guidelines.js";
 import { applyClient, detectClients, planClients, reportClient, reportFailure, type ApplyOutcome, type DetectionResult, type PreparedClient } from "./shared.js";
 import { MCP_URL } from "../constants.js";
 import { readPackageVersion } from "../skill.js";
@@ -59,6 +60,7 @@ export async function install(machine: Machine, options: Options): Promise<numbe
     return 1;
   }
   let hasFailures = prepared.hasFailures;
+  if (canAskForGuidelines(machine, options) && !await runGuidelinesStep()) hasFailures = true;
   showSectionHeading(hasChanges ? "SETTING UP" : "CHECKING");
   const registeredClients: { client: PreparedClient; outcome: ApplyOutcome }[] = [];
   for (const client of prepared.clients) {

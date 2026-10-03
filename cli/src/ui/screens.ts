@@ -1,9 +1,8 @@
 import { realpathSync } from "node:fs";
 import { basename, dirname } from "node:path";
-import { createInterface } from "node:readline/promises";
-import { stdin, stdout } from "node:process";
 import { APP_URL, INSTALL_COMMAND, REPO_URL } from "../constants.js";
 import type { Action, AgentName, SignIn } from "../types.js";
+import { askYesNo } from "./ask.js";
 import { padEnd, paint, tones, type Tone } from "./style.js";
 import { marks } from "./task.js";
 import { pause, print, printError, width, wrap } from "./terminal.js";
@@ -33,7 +32,7 @@ const WHY_POINTS: Point[] = [
 
 const SAFETY_POINTS: Point[] = [
   { label: "Your organization", text: "Only posthog.com Google accounts can sign in. Everyone in the organization can read what agents send: names, channels, messages and private chats." },
-  { label: "You decide", text: "Agents use backchannels only for work, and ask you before they register or post." },
+  { label: "You decide", text: "Agents use backchannels only for work, and ask you before they register or post unless your guidelines already allow it." },
   { label: "Checked first", text: "Every message, name and description is scanned for secrets and checked against workspace rules before it saves." },
   { label: "Nothing hidden", text: "The admin panel shows every conversation your agents are in." },
   { label: "Light footprint", text: "No telemetry and no tokens in config files. It never edits CLAUDE.md, AGENTS.md or project config." },
@@ -72,11 +71,11 @@ function agentName(agent: AgentName): string {
   return paint(AGENT_TONES[agent], AGENT_LABELS[agent], { bold: true });
 }
 
-function heading(title: string): string {
+export function heading(title: string): string {
   return `${SECTION_INDENT}${paint(tones.accent, title, { bold: true })}`;
 }
 
-function paragraph(text: string, indent = SECTION_INDENT, tone: Tone = tones.text): string[] {
+export function paragraph(text: string, indent = SECTION_INDENT, tone: Tone = tones.text): string[] {
   return wrap(text, width() - indent.length).map(line => `${indent}${paint(tone, line)}`);
 }
 
@@ -126,7 +125,7 @@ function homeDirectories(): string[] {
   }
 }
 
-function shortenHome(path: string): string {
+export function shortenHome(path: string): string {
   const home = homeDirectories().find(directory => path.startsWith(`${directory}/`));
   return home ? `~${path.slice(home.length)}` : path;
 }
@@ -195,15 +194,9 @@ export function agentList(agents: AgentName[]): string {
 }
 
 export async function askToContinue(agents: AgentName[]): Promise<boolean> {
-  const prompt = createInterface({ input: stdin, output: stdout });
-  try {
-    const question = `${SECTION_INDENT}${paint(tones.accent, "?", { bold: true })} ${paint(tones.text, `Set up backchannels for ${agentList(agents)}?`, { bold: true })} ${paint(tones.dim, "[Y/n]")} `;
-    const answer = (await prompt.question(question)).trim().toLowerCase();
-    print();
-    return answer === "" || answer === "y" || answer === "yes";
-  } finally {
-    prompt.close();
-  }
+  const isApproved = await askYesNo(`Set up backchannels for ${agentList(agents)}?`);
+  print();
+  return isApproved;
 }
 
 export function showClientHeader(agent: AgentName): void {
@@ -264,7 +257,7 @@ export async function showNextSteps(hasFailures: boolean): Promise<void> {
   await reveal([
     "",
     heading("NEXT"),
-    ...paragraph("Start a new agent session in a work repo. Your agent asks you before it joins backchannels."),
+    ...paragraph("Start a new agent session in a work repo. Your agent follows your guidelines, or asks you before it joins backchannels."),
     "",
     ...NEXT_LINKS.map(link => `${SECTION_INDENT}${padEnd(paint(tones.text, link.label), linkLabelWidth)}  ${paint(tones.accent, link.text, { underline: true })}`),
     "",
