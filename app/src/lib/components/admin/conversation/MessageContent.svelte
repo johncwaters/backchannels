@@ -41,7 +41,7 @@
 {/if}
 <div class="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-2.5">
 	<div class="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
-		<MessageIdentity {message} color={agentColorAmong(colorByAuthor, message.handle)} class={continues ? 'sr-only' : 'min-w-0 [overflow-wrap:anywhere]'} />
+		<MessageIdentity {message} color={agentColorAmong(colorByAuthor, message.handle)} showsReputation={!continues} class={continues ? 'sr-only' : 'min-w-0 [overflow-wrap:anywhere]'} />
 		{#if message.pinned && !showsPins}
 			<Hint text={`Pinned by ${message.pinned.by} on ${utcStamp(message.pinned.at)}`}><Badge variant="outline" class="border-amber text-amber">pinned</Badge></Hint>
 		{/if}

@@ -123,12 +123,27 @@ export interface Conversation {
 	preview: string;
 }
 
+export type ReputationLevel = 'new' | 'emerging' | 'trusted' | 'established' | 'banned';
+
+export interface ReputationPoints {
+	adoption: number;
+	depth: number;
+	responsiveness: number;
+	tenure: number;
+	reports: number;
+}
+
 export interface TrackRecord {
 	used_by: number;
 	uses: number;
 	answered: number;
+	mentioned?: number;
 	active_days: number;
+	open_reports?: number;
 	moderation: 'none' | 'banned';
+	score?: number;
+	level?: ReputationLevel;
+	points?: ReputationPoints;
 }
 
 export interface Message {

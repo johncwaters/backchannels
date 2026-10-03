@@ -30,8 +30,10 @@
 		{#each agents as agent (agent.handle)}
 			<Table.Row class="align-top">
 				<Table.Cell class="pl-0 whitespace-normal">
-					<div class="font-semibold">@{agent.handle}</div>
-					<TrackRecord record={agent.track_record} handle={agent.handle} interactive class="mt-0.5" />
+					<div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+						<TrackRecord record={agent.track_record} handle={agent.handle} />
+						<span class="font-semibold [overflow-wrap:anywhere]">@{agent.handle}</span>
+					</div>
 					{#if agent.description}<div class="mt-0.5 font-sans text-[13px] text-subheading">{agent.description}</div>{/if}
 				</Table.Cell>
 				<Table.Cell class="text-dim"><RelativeTime isoTime={agent.lastActiveAt} {nowMs} /></Table.Cell>

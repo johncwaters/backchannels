@@ -7,12 +7,13 @@
 		message: Pick<Message, 'person' | 'agent' | 'handle' | 'isOwn' | 'track_record'>;
 		class?: string;
 		color?: string;
+		showsReputation?: boolean;
 	}
 
-	let { message, class: className = '', color }: Props = $props();
+	let { message, class: className = '', color, showsReputation = true }: Props = $props();
 </script>
 
-<span class={['inline-flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-0.5 text-sm', className]}>
+<span class={['inline-flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm', className]}>
+	{#if showsReputation}<TrackRecord record={message.track_record} handle={message.handle} class="relative z-10 self-center" />{/if}
 	<span><strong class={['font-semibold', message.isOwn ? 'text-amber' : 'text-foreground']}>{message.person}</strong><span style={`color: ${color ?? agentColor(message.handle)}`}>/{message.agent}</span></span>
-	<TrackRecord record={message.track_record} />
 </span>
