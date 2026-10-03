@@ -352,6 +352,51 @@ function chatter(authors: string[], lines: string[]): MessageEvent[] {
 	return lines.map((text, index) => ({ by: authors[index % authors.length], text }));
 }
 
+const inlineThreadReplyLines = [
+	'First pass: replies render under the root with a thin rail, collapsed by default.',
+	'Does expanding mark the channel read? It should only touch the thread marker.',
+	'Only the thread marker. Inline replies use `r-<seq>` ids, so the channel observer ignores them.',
+	'How many replies load at once?',
+	'Ten, oldest first. A Show more button pages the rest.',
+	'The toggle needs `aria-expanded` and `aria-controls`.',
+	'Added both. Focus ring is the amber outline.',
+	'On mobile the toggle is 44px tall.',
+	'What happens on a live refresh while the thread is open?',
+	'New replies append at the end when you already loaded the last page.',
+	'And if I have not reached the end?',
+	'Then the Show more count grows and nothing moves.',
+	'Reduced motion turns off the chevron rotation.',
+	'Collapsing from the bottom returns focus to the toggle.',
+	'The expanded set lives in session storage per conversation.',
+	'So it survives navigating away and back. Nice.',
+	'Smoke-tested in Safari and Firefox.',
+	'Screenshot of the expanded state on a narrow screen is in the PR.',
+	'Can we keep the Open thread link for deep links?',
+	'Kept it at the end of the toggle row and the footer.',
+	'Approved. One nit on the badge spacing.',
+	'Fixed the badge spacing.',
+	'Merging after the canary.',
+	'Canary green, merged.',
+	'Shipping it to staging now.',
+];
+
+function inlineThreadEvents(): MessageEvent[] {
+	const authors = [li, designer, ian, john, sara];
+	return [
+		{ by: designer, key: 'inline-threads', text: 'Design review: **inline thread replies** in the channel feed. Expand a thread without leaving the channel.', reactions: { eyes: [li, john] } },
+		...inlineThreadReplyLines.map(
+			(text, index): MessageEvent => ({
+				by: authors[index % authors.length],
+				replyTo: 'inline-threads',
+				text,
+				...(index === 9 ? { alsoInChannel: true } : {}),
+				...(index === 20 ? { reactions: { '+1': [designer, ian] } } : {}),
+				...(index === 21 ? { editedAfterMinutes: 2 } : {}),
+			}),
+		),
+	];
+}
+
 function conversationSpecs(random: () => number): ConversationSpec[] {
 	const public_ = (slug: string, topic: string, memberHandles: string[], events: MessageEvent[], spanDays: number, newestAgoMinutes: number): ConversationSpec => ({
 		slug,
@@ -405,7 +450,7 @@ function conversationSpecs(random: () => number): ConversationSpec[] {
 			'Looks good. The reaction tooltip clips on narrow screens.',
 			'Fixed the tooltip, deploying the web worker now.',
 			'Search snippets now open at the matching message.',
-		]), 5, 60),
+		]).concat(inlineThreadEvents()), 5, 60),
 		public_('announcements', 'Company-wide announcements, low traffic', [ian, john, sara, li, maya, tom], chatter([ian, maya], [
 			'backchannels 0.1.4 is out. Install with `curl -fsSL https://backchannels.dev/install | sh`.',
 			'The admin UI is now live at https://backchannels.dev/admin.',

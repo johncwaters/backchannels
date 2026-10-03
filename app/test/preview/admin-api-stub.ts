@@ -25,7 +25,7 @@ import type {
 	Viewer,
 } from '../../src/lib/admin/types';
 import { DEFAULT_CHANNELS } from '../../../api/src/defaultChannels';
-import { buildPreviewWorld, VIEWER_EMAIL, type PreviewWorld, type StoredConversation, type StoredMessage } from './preview-fixtures';
+import { buildPreviewWorld, VIEWER_EMAIL, type AgentFixture, type PreviewWorld, type StoredConversation, type StoredMessage } from './preview-fixtures';
 import { previewAlertRoutes, previewEscalations, previewMembers, previewRuleChecks, previewRules } from './preview-oversight';
 import { previewTrackRecordFor } from './preview-track-record';
 
@@ -353,8 +353,9 @@ function simulatedLatency(environment: unknown): Promise<void> {
 
 let previewRevision = 0;
 let lastArrivalAt = Date.now();
+let arrivalCount = 0;
 
-// With PREVIEW_ARRIVAL_MS set, a teammate's agent posts to #deploys at that interval, so live refresh has something to show.
+// With PREVIEW_ARRIVAL_MS set, a teammate's agent posts at that interval, alternating between #deploys and the long #frontend thread, so live refresh has something to show.
 function simulateArrivals(environment: unknown): void {
 	const intervalMs = Number((environment as { PREVIEW_ARRIVAL_MS?: string }).PREVIEW_ARRIVAL_MS ?? 0);
 	if (intervalMs <= 0 || Date.now() - lastArrivalAt < intervalMs) return;
@@ -362,9 +363,21 @@ function simulateArrivals(environment: unknown): void {
 	const author = previewWorld().agents.find((agent) => agent.handle === 'sara.k/deploy-agent');
 	if (!deploys || !author) return;
 	lastArrivalAt = Date.now();
+	arrivalCount += 1;
+	if (arrivalCount % 2 === 0 && postInlineThreadReply(author)) return;
 	const seq = (deploys.messages.at(-1)?.seq ?? 0) + 1;
 	deploys.messages.push({ seq, author, createdAt: lastArrivalAt, text: `Canary ${seq} healthy. Promoting to 10% of traffic.`, threadRootSeq: null, alsoInChannel: false, editedAt: null, deletedAt: null, pinned: null, reactions: [], files: [] });
 	previewRevision += 1;
+}
+
+function postInlineThreadReply(author: AgentFixture): boolean {
+	const frontend = previewWorld().conversations.find((conversation) => conversation.slug === 'frontend');
+	const rootSeq = frontend?.messages.findLast((message) => message.threadRootSeq !== null)?.threadRootSeq;
+	if (!frontend || !rootSeq) return false;
+	const seq = (frontend.messages.at(-1)?.seq ?? 0) + 1;
+	frontend.messages.push({ seq, author, createdAt: lastArrivalAt, text: `Follow-up ${seq}: staging still healthy.`, threadRootSeq: rootSeq, alsoInChannel: false, editedAt: null, deletedAt: null, pinned: null, reactions: [], files: [] });
+	previewRevision += 1;
+	return true;
 }
 
 export class AdminApi extends WorkerEntrypoint implements AdminApiRpc {

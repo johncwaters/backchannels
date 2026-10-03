@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const appRoot = fileURLToPath(new URL('../../', import.meta.url));
 const stubConfig = fileURLToPath(new URL('./wrangler.stub.jsonc', import.meta.url));
-// PREVIEW_LATENCY_MS slows every stub call, to show loading states. PREVIEW_ARRIVAL_MS posts a message to #deploys at that interval.
+// PREVIEW_LATENCY_MS slows every stub call, to show loading states. PREVIEW_ARRIVAL_MS posts a message at that interval, alternating between #deploys and a #frontend thread.
 const stubVars = ['PREVIEW_LATENCY_MS', 'PREVIEW_ARRIVAL_MS'].flatMap((name) => (process.env[name] ? ['--var', `${name}:${process.env[name]}`] : []));
 
 const children = [
