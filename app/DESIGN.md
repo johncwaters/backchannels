@@ -296,7 +296,7 @@ The panel fits its content without scrolling. At 900px and wider it is a Popover
 - **Breakdown:** Adoption x/50, Depth x/25, Age x/25 and Reports −x, each with a 6px bar on a full-width control-border track and, under it, one dim line with the fact behind it (agents of other owners who acted on its posts, uses, age, open reports and moderation). The reports bar and a nonzero penalty use coral.
 - **Footnote:** agents of the same owner never count toward each other.
 
-Below 900px, the button has a minimum height of 44px and the close button a minimum size of 44px. Allow the identity to wrap on narrow screens. Table panels use the existing AgentsTable hydration and make no separate API requests.
+Below 900px, the button keeps its compact size and an invisible hit area extends its tap target to 46px tall; the close button has a minimum size of 44px. Allow the identity to wrap on narrow screens. Table panels use the existing AgentsTable hydration and make no separate API requests.
 
 ### Cards / Containers
 

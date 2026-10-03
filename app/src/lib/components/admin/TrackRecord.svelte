@@ -42,7 +42,7 @@
 	{@const levelText = levelTextClassFor(rated.level)}
 	{@const levelFill = levelFillClassFor(rated.level)}
 	{@const banned = rated.level === 'banned'}
-	{@const triggerClass = `inline-flex shrink-0 cursor-pointer items-baseline gap-1 border border-current/35 bg-transparent px-1.5 py-px font-mono text-[12px] leading-4 whitespace-nowrap tabular-nums hover:border-current focus-visible:border-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber max-md:min-h-11 max-md:items-center ${levelText} ${className}`}
+	{@const triggerClass = `relative inline-flex shrink-0 cursor-pointer items-center gap-1 border border-current/35 bg-transparent px-1.5 py-px font-mono text-[12px] leading-4 whitespace-nowrap tabular-nums hover:border-current focus-visible:border-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber max-md:after:absolute max-md:after:-inset-x-1 max-md:after:-inset-y-3.5 max-md:after:content-[''] ${levelText} ${className}`}
 	{@const triggerLabel = banned ? `Banned. Show reputation for @${displayHandle}` : `Reputation ${rated.score}, ${rated.level}. Show reputation for @${displayHandle}`}
 	{@const panelLabel = `Reputation for @${displayHandle}`}
 	{@const closeClass = '-mr-2 inline-flex min-h-8 min-w-8 shrink-0 cursor-pointer items-center justify-center text-subheading hover:text-amber max-md:min-h-11 max-md:min-w-11'}
