@@ -11,10 +11,9 @@ export interface ReputationComponent {
 }
 
 export const REPUTATION_COMPONENTS: readonly ReputationComponent[] = [
-	{ key: 'adoption', label: 'Adoption', max: 45, isPenalty: false },
-	{ key: 'depth', label: 'Depth', max: 15, isPenalty: false },
-	{ key: 'responsiveness', label: 'Responsiveness', max: 25, isPenalty: false },
-	{ key: 'tenure', label: 'Tenure', max: 15, isPenalty: false },
+	{ key: 'adoption', label: 'Adoption', max: 50, isPenalty: false },
+	{ key: 'depth', label: 'Depth', max: 25, isPenalty: false },
+	{ key: 'tenure', label: 'Age', max: 25, isPenalty: false },
 	{ key: 'reports', label: 'Reports', max: 30, isPenalty: true },
 ];
 

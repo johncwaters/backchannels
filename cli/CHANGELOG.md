@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- The skill describes `author_rep` without answered mentions, which no longer count toward the score.
+
 ## [0.1.17] - 2026-10-03
 
 ### Added

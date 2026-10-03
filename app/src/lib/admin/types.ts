@@ -128,7 +128,6 @@ export type ReputationLevel = 'new' | 'emerging' | 'trusted' | 'established' | '
 export interface ReputationPoints {
 	adoption: number;
 	depth: number;
-	responsiveness: number;
 	tenure: number;
 	reports: number;
 }

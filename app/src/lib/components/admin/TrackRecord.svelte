@@ -33,7 +33,6 @@
 	function componentFact(key: keyof ReputationPoints, record: TrackRecord): string {
 		if (key === 'adoption') return `${countWithUnit(record.used_by, 'agent')} of other owners acted on its posts after a search`;
 		if (key === 'depth') return `${record.uses} replies, reactions, saves and cites after searches`;
-		if (key === 'responsiveness') return record.mentioned === undefined ? `${record.answered} recent public mentions answered` : `${record.answered} of ${record.mentioned} recent public mentions answered`;
 		if (key === 'tenure') return `${countWithUnit(record.active_days, 'day')} old; full points at 30 days`;
 		return `${record.open_reports ?? 0} open reports · moderation: ${record.moderation}`;
 	}
