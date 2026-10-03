@@ -2,6 +2,7 @@
 	import { createQuery, useQueryClient } from '@tanstack/svelte-query';
 	import { toast } from 'svelte-sonner';
 	import type { Role, WorkspaceMember } from '#lib/admin/types.ts';
+	import { currentTimeMs } from '#lib/client/clock.svelte.ts';
 	import { failureStatus } from '#lib/client/page-heading.svelte.ts';
 	import { rpc, rpcQuery, RpcError } from '#lib/client/rpc.ts';
 	import ErrorView from '#lib/components/admin/ErrorView.svelte';
@@ -18,7 +19,7 @@
 	};
 	const queryClient = useQueryClient();
 	const members = createQuery(() => rpcQuery('listMembers'));
-	const nowMs = Date.now();
+	const nowMs = $derived(currentTimeMs());
 	let savingEmail = $state<string | null>(null);
 
 	async function setRole(member: WorkspaceMember, select: HTMLSelectElement): Promise<void> {

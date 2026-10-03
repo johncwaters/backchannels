@@ -13,7 +13,7 @@ export function relativeTimeLabel(isoTime: string, nowMs: number): string {
 	const offsetMs = Date.parse(isoTime) - nowMs;
 	const isFuture = offsetMs > 0;
 	const distanceMs = Math.abs(offsetMs);
-	if (distanceMs < minuteMs) return isFuture ? 'in under 1m' : 'just now';
+	if (distanceMs < minuteMs) return 'just now';
 	const duration = compactDuration(distanceMs);
 	return isFuture ? `in ${duration}` : `${duration} ago`;
 }

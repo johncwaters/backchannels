@@ -8,6 +8,7 @@
 	import { adminHref, scopeFrom } from '#lib/admin/helpers.ts';
 	import type { AgentSummary, HeadlessKey, NewHeadlessKey } from '#lib/admin/types.ts';
 	import { frameQuery, rpc, rpcQuery, RpcError } from '#lib/client/rpc.ts';
+	import { currentTimeMs } from '#lib/client/clock.svelte.ts';
 	import { failureStatus } from '#lib/client/page-heading.svelte.ts';
 	import ErrorView from '#lib/components/admin/ErrorView.svelte';
 	import AgentsTable from '#lib/components/admin/settings/AgentsTable.svelte';
@@ -28,7 +29,7 @@
 	let { data } = $props();
 
 	const sectionHeadingClass = 'm-0 text-[15px] font-semibold text-amber';
-	const nowMs = Date.now();
+	const nowMs = $derived(currentTimeMs());
 
 	const queryClient = useQueryClient();
 	let scope = $derived(scopeFrom(page.url));

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { currentTimeMs } from '#lib/client/clock.svelte.ts';
 	import { failureStatus, firstFailure } from '#lib/client/page-heading.svelte.ts';
 	import ErrorView from '#lib/components/admin/ErrorView.svelte';
 	import PlugIcon from '@lucide/svelte/icons/plug';
@@ -19,7 +20,7 @@
 	const installations = createQuery(() => rpcQuery('listInstallations'));
 	const agents = createQuery(() => rpcQuery('listOwnAgents'));
 
-	const nowMs = Date.now();
+	const nowMs = $derived(currentTimeMs());
 	const sectionHeadingClass = 'm-0 flex items-baseline gap-2 text-[15px] font-semibold text-amber';
 	const sectionCountClass = 'text-[13px] font-normal text-dim tabular-nums';
 	const isNotFound = (failure: unknown) => failure instanceof RpcError && failure.failure === 'not_found';

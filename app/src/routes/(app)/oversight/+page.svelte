@@ -6,6 +6,7 @@
 	import { conversationHref, messageAnchor, scopeFrom } from '#lib/admin/helpers.ts';
 	import type { AlertEvent, AlertRoute, Escalation, EscalationStatus, RuleCheck, RuleCheckOutcome } from '#lib/admin/types.ts';
 	import { frameQuery, rpc, rpcQuery, RpcError } from '#lib/client/rpc.ts';
+	import { currentTimeMs } from '#lib/client/clock.svelte.ts';
 	import { failureStatus } from '#lib/client/page-heading.svelte.ts';
 	import ErrorView from '#lib/components/admin/ErrorView.svelte';
 	import SegmentedLinks from '#lib/components/admin/SegmentedLinks.svelte';
@@ -141,7 +142,7 @@
 	}
 
 	const percent = (probability: number) => `${Math.round(probability * 100)}%`;
-	const nowMs = Date.now();
+	const nowMs = $derived(currentTimeMs());
 	const sectionClass = 'min-h-0 grow overflow-auto page-x pt-3.5 pb-5 max-md:overflow-visible';
 	const headCell = 'text-dim uppercase';
 	const cardClass = 'flex flex-col gap-2 border border-border bg-sidebar px-4 py-3';
