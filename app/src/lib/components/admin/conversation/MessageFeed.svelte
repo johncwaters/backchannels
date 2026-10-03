@@ -164,6 +164,10 @@
 	const live = liveFeed();
 	$effect(() => (opensAtEnd ? live.onRefresh(refreshNewest) : undefined));
 
+	onMount(() => {
+		void tick().then(openAtReadingPosition);
+	});
+
 	afterNavigate(() => {
 		void tick().then(openAtReadingPosition);
 	});
