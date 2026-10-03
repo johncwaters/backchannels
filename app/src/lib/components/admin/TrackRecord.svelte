@@ -63,10 +63,10 @@
 				<span class="font-mono text-[12px] text-dim">/ {REPUTATION_MAX_SCORE}</span>
 				<span class={`ml-auto font-mono text-[13px] ${levelText}`}>{rated.level}</span>
 			</div>
-			<div class="relative mt-2 h-1.5 bg-selection" aria-hidden="true">
+			<div class="relative mt-2.5 mb-1 h-1.5 bg-border" aria-hidden="true">
 				<div class={`absolute inset-y-0 left-0 ${levelFill}`} style={`width: ${percentOf(rated.score, REPUTATION_MAX_SCORE)}%`}></div>
 				{#each REPUTATION_LEVEL_FLOORS as floor (floor)}
-					<div class="absolute -inset-y-0.5 w-px bg-sidebar" style={`left: ${floor}%`}></div>
+					<div class="absolute -inset-y-1 w-px bg-dim" style={`left: ${floor}%`}></div>
 				{/each}
 			</div>
 			<p class="m-0 mt-1.5 text-[12px] leading-snug text-dim">
@@ -78,7 +78,7 @@
 			{#each REPUTATION_COMPONENTS as component, index (component.key)}
 				{@const value = rated.points?.[component.key]}
 				<dt class={['text-foreground', index > 0 && 'mt-2']}>{component.label}</dt>
-				<dd class={['m-0 h-1 bg-selection', index > 0 && 'mt-2']} aria-hidden="true">
+				<dd class={['m-0 h-1.5 bg-border', index > 0 && 'mt-2']} aria-hidden="true">
 					{#if value !== undefined}<div class={`h-full ${component.isPenalty ? 'bg-destructive' : banned ? 'bg-dim' : levelFill}`} style={`width: ${percentOf(value, component.max)}%`}></div>{/if}
 				</dd>
 				<dd class={['m-0 text-right font-mono tabular-nums', index > 0 && 'mt-2', component.isPenalty && value ? 'text-destructive' : 'text-foreground']}>
@@ -94,7 +94,7 @@
 	{#if isMobile.current}
 		<Sheet.Root>
 			<Sheet.Trigger class={triggerClass} aria-label={triggerLabel} data-reputation-trigger>{@render chip()}</Sheet.Trigger>
-			<Sheet.Content side="bottom" showCloseButton={false} class="max-h-[calc(100dvh-2rem)] gap-0 overflow-y-auto rounded-none border-control-border p-0 pb-[env(safe-area-inset-bottom)] font-sans" aria-label={panelLabel}>
+			<Sheet.Content side="bottom" showCloseButton={false} class="max-h-[calc(100dvh-2rem)] gap-0 overflow-y-auto rounded-none border-border p-0 pb-[env(safe-area-inset-bottom)] font-sans" aria-label={panelLabel}>
 				<div class="flex items-center justify-between gap-3 px-4 pt-3">
 					<Sheet.Title class="min-w-0 font-mono text-[12px] font-normal break-words text-subheading">@{displayHandle}</Sheet.Title>
 					<Sheet.Close class={closeClass} aria-label="Close reputation"><X class="size-4" aria-hidden="true" /></Sheet.Close>
@@ -108,7 +108,7 @@
 			<Popover.Content
 				align="start"
 				collisionPadding={16}
-				class="max-h-[min(calc(100dvh-2rem),var(--bits-popover-content-available-height))] w-[22rem] max-w-[calc(100vw-2rem)] gap-0 overflow-y-auto rounded-none p-0 font-sans shadow-lg ring-1 ring-control-border"
+				class="max-h-[min(calc(100dvh-2rem),var(--bits-popover-content-available-height))] w-[22rem] max-w-[calc(100vw-2rem)] gap-0 overflow-y-auto rounded-none p-0 font-sans shadow-lg ring-1 ring-border"
 				aria-label={panelLabel}
 				role="dialog"
 			>
