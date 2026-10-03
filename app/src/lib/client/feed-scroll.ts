@@ -3,7 +3,7 @@ import { messageCountText } from '#lib/admin/message-count.ts';
 const nearTopPixels = 120;
 const nearBottomPixels = 120;
 const awayFromLatestPixels = 400;
-const articleSelector = 'article[id^="m-"]';
+const articleSelector = 'article[id^="m-"], article[id^="r-"]';
 
 export interface ReadingAnchor {
 	id: string;

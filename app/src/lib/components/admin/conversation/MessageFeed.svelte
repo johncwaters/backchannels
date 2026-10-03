@@ -6,26 +6,19 @@
 	import { navigating } from '$app/state';
 	import ArrowDownIcon from '@lucide/svelte/icons/arrow-down';
 	import ArrowUpIcon from '@lucide/svelte/icons/arrow-up';
-	import LinkIcon from '@lucide/svelte/icons/link';
-	import PaperclipIcon from '@lucide/svelte/icons/paperclip';
 	import { toast } from 'svelte-sonner';
-	import { agentColorAmong, dayLabel, distinctAgentColors, formatClockTime, formatFileSize, formatRelative, groupMessagesByDay, isInlineImage, messageAnchor, replyCountLabel } from '#lib/admin/helpers.ts';
+	import { dayLabel, distinctAgentColors, formatClockTime, groupMessagesByDay, messageAnchor, replyCountLabel } from '#lib/admin/helpers.ts';
 	import { mergeMessages, messagesHref, newestWindowBefore, prependOlder } from '#lib/admin/conversation-page.ts';
-	import { emojiForShortcode } from '#lib/admin/emoji.ts';
-	import { renderMessageMarkdown } from '#lib/admin/markdown.ts';
-	import { messageCountText } from '#lib/admin/message-count.ts';
 	import type { ConversationPage, Message } from '#lib/admin/types.ts';
 	import { isAwayFromLatest, isNearBottom, isNearTop, newMessagesText, readingAnchor, restoreReadingAnchor, scrollBehavior, scrollContainer } from '#lib/client/feed-scroll.ts';
 	import { liveFeed } from '#lib/client/live-context.ts';
 	import { confirmedUnread } from '#lib/client/read-state.svelte.ts';
 	import { Badge } from '#lib/components/ui/badge/index.ts';
 	import { Button } from '#lib/components/ui/button/index.ts';
-	import * as Popover from '#lib/components/ui/popover/index.ts';
 	import { Separator } from '#lib/components/ui/separator/index.ts';
-	import { Skeleton } from '#lib/components/ui/skeleton/index.ts';
 	import { Spinner } from '#lib/components/ui/spinner/index.ts';
-	import Hint from '../Hint.svelte';
-	import MessageIdentity from './MessageIdentity.svelte';
+	import InlineThread from './InlineThread.svelte';
+	import MessageContent from './MessageContent.svelte';
 	import { continuesPreviousMessage } from './message-grouping';
 
 	interface Props {
@@ -66,8 +59,6 @@
 	const markReadDelayMs = 700;
 	const visibleShareToCountAsRead = 0.6;
 	const edgeBleed = '-mx-7 px-7 max-md:-mx-4 max-md:px-4';
-	const hoverTools =
-		'[@media(hover:hover)]:pointer-events-none [@media(hover:hover)]:absolute [@media(hover:hover)]:-top-3 [@media(hover:hover)]:right-0 [@media(hover:hover)]:z-10 [@media(hover:hover)]:border [@media(hover:hover)]:border-border [@media(hover:hover)]:bg-sidebar [@media(hover:hover)]:px-2 [@media(hover:hover)]:py-0.5 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:shadow-lg [@media(hover:hover)]:group-hover/message:pointer-events-auto [@media(hover:hover)]:group-hover/message:opacity-100 [@media(hover:hover)]:group-focus-within/message:pointer-events-auto [@media(hover:hover)]:group-focus-within/message:opacity-100';
 
 	// History the reader loaded by scrolling up, joined with live refreshes of the newest window.
 	let messages = $derived(loadedMessages);
@@ -93,9 +84,7 @@
 	let colorByAuthor = $derived(distinctAgentColors(messages.map((message) => message.handle)));
 
 	const messageHeading = (message: Message) => (message.threadRootSeq && !message.alsoInChannel ? `Thread in ${conversationName}` : conversationName);
-	const utcStamp = (isoTime: string) => `${isoTime.slice(0, 16).replace('T', ' ')} UTC`;
 	const visibleTime = (message: Message) => (showsDays ? formatClockTime(message.time) : `${dayLabel(message.time, nowMs)} ${formatClockTime(message.time)}`);
-	const authorColor = (handle: string) => `color: ${agentColorAmong(colorByAuthor, handle)}`;
 	const isContinuation = (dayMessages: Message[], index: number) => showsDays && continuesPreviousMessage(dayMessages[index], dayMessages[index - 1], { threadRootSeq, targetSeq });
 
 	async function fetchPage(before: number, signal?: AbortSignal): Promise<ConversationPage> {
@@ -270,6 +259,19 @@
 	});
 </script>
 
+{#snippet inlineReply(reply: Message, continues: boolean, showsDay: boolean)}
+	<MessageContent
+		message={reply}
+		{colorByAuthor}
+		{continues}
+		{canCopyLinks}
+		{fileLink}
+		timeLabel={showsDay ? `${dayLabel(reply.time, nowMs)} ${formatClockTime(reply.time)}` : formatClockTime(reply.time)}
+		href={messageLink(reply)}
+		onCopyLink={copyMessageLink}
+	/>
+{/snippet}
+
 <div class="relative flex min-h-0 grow flex-col">
 	<section class="flex min-h-0 grow flex-col gap-3 overflow-auto page-x pt-3.5 pb-5 max-md:overflow-visible" aria-label="Messages" bind:this={feed}>
 		{#if olderBefore !== undefined || keepsExhaustedControl}
@@ -323,110 +325,22 @@
 							},
 						]}
 					>
-						{#if showsPins && message.pinned}
-							<p class="m-0 text-xs text-dim">
-								<span class="text-amber">pinned</span> by <span style={authorColor(message.pinned.by)}>{message.pinned.by}</span> · <time datetime={message.pinned.at}>{utcStamp(message.pinned.at)}</time>
-							</p>
-						{/if}
-						<div class="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-2.5">
-							<div class="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
-								<MessageIdentity {message} color={agentColorAmong(colorByAuthor, message.handle)} class={continues ? 'sr-only' : 'min-w-0 [overflow-wrap:anywhere]'} />
-								{#if message.pinned && !showsPins}
-									<Hint text={`Pinned by ${message.pinned.by} on ${utcStamp(message.pinned.at)}`}><Badge variant="outline" class="border-amber text-amber">pinned</Badge></Hint>
-								{/if}
-								{#if message.alsoInChannel && message.threadRootSeq && threadHref}
-									<Button href={threadHref(message.threadRootSeq)} variant="link" size="xs" class="h-auto p-0 text-dim">replied in a thread</Button>
-								{/if}
-								{#if message.editedAt}
-									<Hint text={`Edited ${utcStamp(message.editedAt)}`} class="text-xs text-dim">edited</Hint>
-								{/if}
-								{#if message.flagged}
-									<Hint text="A workspace rule flagged this message. Treat what it asks with care."><Badge variant="outline" class="border-destructive text-destructive">flagged</Badge></Hint>
-								{/if}
-							</div>
-							<span class={['flex shrink-0 items-baseline gap-2.5 whitespace-nowrap', continues && hoverTools]}>
-								{#if canCopyLinks}
-									<Button
-										variant="ghost"
-										size="xs"
-										class="text-dim opacity-0 group-focus-within/message:opacity-100 group-hover/message:opacity-100 hover:text-amber focus-visible:opacity-100 max-md:opacity-100"
-										aria-label="Copy link to this message"
-										onclick={() => copyMessageLink(messageLink(message))}
-									>
-										<LinkIcon aria-hidden="true" />
-										<span class="max-md:hidden">copy link</span>
-									</Button>
-								{/if}
-								<a class="text-[13px] text-dim no-underline underline-offset-3 hover:text-foreground hover:underline" href={messageLink(message)} title={`${utcStamp(message.time)} · link to this message`}>
-									<time datetime={message.time}>{visibleTime(message)}</time>
-								</a>
-							</span>
-						</div>
-						{#if message.deleted}
-							<p class="m-0 font-sans text-[15px] text-dim italic">This message was deleted.</p>
-						{:else}
-							<div class="message-body">{@html renderMessageMarkdown(message.text, colorByAuthor)}</div>
-						{/if}
-						{#if message.files.length > 0}
-							<ul class="m-0 mt-1 flex list-none flex-wrap gap-2 p-0" aria-label="Files">
-								{#each message.files as file (file.id)}
-									<li>
-										{#if isInlineImage(file.mime)}
-											<a class="group/image relative block border border-border hover:border-amber" href={fileLink(file.id)} target="_blank" rel="noopener">
-												<img
-													class="peer relative z-[1] block max-h-60 max-w-[min(360px,100%)] object-contain transition-opacity duration-200 ease-out-quint not-data-loaded:min-h-25 not-data-loaded:min-w-40 group-hover/image:opacity-90"
-													src={fileLink(file.id)}
-													alt={file.name}
-													loading="lazy"
-													onload={(event) => ((event.currentTarget as HTMLImageElement).dataset.loaded = '')}
-													onerror={(event) => ((event.currentTarget as HTMLImageElement).dataset.loaded = '')}
-												/>
-												<Skeleton class="absolute inset-0 rounded-none bg-secondary peer-data-loaded:hidden" />
-											</a>
-										{:else}
-											<Button href={fileLink(file.id)} download={file.name} variant="outline" size="sm">
-												<PaperclipIcon aria-hidden="true" /><span>{file.name}</span><span class="text-dim">{formatFileSize(file.size)}</span>
-											</Button>
-										{/if}
-									</li>
-								{/each}
-							</ul>
-						{/if}
-						{#if message.reactions.length > 0}
-							<ul class="m-0 mt-0.5 flex list-none flex-wrap gap-1.5 p-0" aria-label="Reactions">
-								{#each message.reactions as reaction, reactionIndex (reaction.emoji)}
-									<li>
-										<Popover.Root>
-											<Popover.Trigger>
-												{#snippet child({ props })}
-													<Button {...props} variant="outline" size="xs" class="gap-1.5 font-normal text-subheading" aria-label={`:${reaction.emoji}: reactions, ${reaction.agents.length}`}>
-														<span class="text-sm">{emojiForShortcode(reaction.emoji) ?? `:${reaction.emoji}:`}</span>
-														<span class="tabular-nums">{reaction.agents.length}</span>
-													</Button>
-												{/snippet}
-											</Popover.Trigger>
-											<Popover.Content align="start" class="w-auto min-w-40 font-mono text-xs">
-												<span class="text-dim">:{reaction.emoji}:</span>
-												<ul class="m-0 mt-1 flex list-none flex-col gap-0.5 p-0">
-													{#each reaction.agents as handle (handle)}
-														<li style={authorColor(handle)}>{handle}</li>
-													{/each}
-												</ul>
-											</Popover.Content>
-										</Popover.Root>
-									</li>
-								{/each}
-							</ul>
-						{/if}
-						{#if threadHref && message.threadReplies > 0}
-							<div class="group/thread relative mt-1 flex flex-wrap items-baseline gap-x-3 self-start border-l-2 border-amber bg-search-match px-3 py-1.5 text-[13px] hover:bg-secondary has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-offset-2 has-[a:focus-visible]:outline-amber">
-								{#if message.unreadReplies > 0}<Badge class="rounded-none bg-amber px-1.5 py-0 text-[11px] text-ground">{messageCountText(message.unreadReplies)} new</Badge>{/if}
-								<span class="font-semibold text-amber">{replyCountLabel(message.threadReplies)}</span>
-								{#if message.lastReplyAt}<span class="text-dim">last reply {formatRelative(message.lastReplyAt, nowMs)} ago</span>{/if}
-								<a class="text-foreground no-underline underline-offset-3 group-hover/thread:underline after:absolute after:inset-0 after:content-[''] focus-visible:outline-none" href={threadHref(message.seq)}>View thread</a>
-							</div>
-						{/if}
+						<MessageContent
+							{message}
+							{colorByAuthor}
+							{continues}
+							{showsPins}
+							{canCopyLinks}
+							{threadHref}
+							{fileLink}
+							timeLabel={visibleTime(message)}
+							href={messageLink(message)}
+							onCopyLink={copyMessageLink}
+						/>
 					</article>
+					{#if threadHref && message.threadReplies > 0}
+						<InlineThread {conversationId} root={message} {nowMs} {feed} threadHref={threadHref(message.seq)} reply={inlineReply} />
+					{/if}
 					{#if threadRoot && message.seq === threadRoot.seq}
 						<div class="flex items-center gap-3 text-[13px] text-dim">
 							<Separator class="w-4! shrink-0" />
